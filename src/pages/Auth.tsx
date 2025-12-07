@@ -118,14 +118,22 @@ export default function Auth() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-md space-y-8">
         {/* Logo */}
-        <div className="flex flex-col items-center space-y-2 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary">
-            <TrendingUp className="h-7 w-7 text-primary-foreground" />
+        <div className="flex flex-col items-center space-y-4 text-center">
+          <div className="flex items-center gap-2">
+            <span className="text-4xl font-bold text-primary tracking-tight">azentio</span>
+            <div className="flex h-8 w-8 items-center justify-center">
+              <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none">
+                <path d="M12 2C8 2 6 6 6 10C6 14 8 18 12 22" stroke="hsl(166 76% 47%)" strokeWidth="3" strokeLinecap="round"/>
+                <path d="M12 2C16 2 18 6 18 10" stroke="hsl(166 76% 47%)" strokeWidth="3" strokeLinecap="round"/>
+              </svg>
+            </div>
           </div>
-          <h1 className="text-2xl font-semibold text-foreground">GTM Variable Comp</h1>
-          <p className="text-muted-foreground">Azentio Variable Pay Management System</p>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Variable Pay Management</h1>
+            <p className="text-muted-foreground text-sm mt-1">Sales Compensation Portal</p>
+          </div>
         </div>
 
         {/* Auth Card */}
