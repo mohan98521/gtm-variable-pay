@@ -11,10 +11,41 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { UserPlus, Users, CheckCircle, Clock, Loader2, Search, RefreshCw } from "lucide-react";
+import { 
+  UserPlus, 
+  Users, 
+  CheckCircle, 
+  Clock, 
+  Loader2, 
+  Search, 
+  MoreHorizontal,
+  Pencil,
+  UserX,
+  UserCheck,
+  Plus
+} from "lucide-react";
+import { EmployeeFormDialog, EmployeeFormData } from "./EmployeeFormDialog";
 
 interface Employee {
   id: string;
@@ -22,6 +53,15 @@ interface Employee {
   email: string;
   full_name: string;
   designation: string | null;
+  country: string | null;
+  city: string | null;
+  date_of_hire: string | null;
+  group_name: string | null;
+  business_unit: string | null;
+  function_area: string | null;
+  sales_function: string | null;
+  local_currency: string;
+  manager_employee_id: string | null;
   auth_user_id: string | null;
   is_active: boolean;
 }
@@ -30,22 +70,29 @@ export function EmployeeAccounts() {
   const [searchQuery, setSearchQuery] = useState("");
   const [creatingId, setCreatingId] = useState<string | null>(null);
   const [isCreatingAll, setIsCreatingAll] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [deactivatingEmployee, setDeactivatingEmployee] = useState<Employee | null>(null);
+  const [activeTab, setActiveTab] = useState("active");
   const queryClient = useQueryClient();
 
-  // Fetch all employees
-  const { data: employees, isLoading } = useQuery({
-    queryKey: ['employees-accounts'],
+  // Fetch all employees (both active and inactive)
+  const { data: allEmployees, isLoading } = useQuery({
+    queryKey: ['employees-accounts-all'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('employees')
-        .select('id, employee_id, email, full_name, designation, auth_user_id, is_active')
-        .eq('is_active', true)
+        .select('*')
         .order('full_name');
       
       if (error) throw error;
       return data as Employee[];
     }
   });
+
+  const activeEmployees = allEmployees?.filter(e => e.is_active) || [];
+  const inactiveEmployees = allEmployees?.filter(e => !e.is_active) || [];
+  const employees = activeTab === "active" ? activeEmployees : inactiveEmployees;
 
   // Create single account mutation
   const createAccountMutation = useMutation({
@@ -75,7 +122,7 @@ export function EmployeeAccounts() {
       toast.success(`Account created for ${employee.full_name}`, {
         description: `Temp password: Welcome@123`
       });
-      queryClient.invalidateQueries({ queryKey: ['employees-accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-accounts-all'] });
     },
     onError: (error: Error, employee) => {
       toast.error(`Failed to create account for ${employee.full_name}`, {
@@ -125,7 +172,94 @@ export function EmployeeAccounts() {
         toast.error(`Failed to create ${failCount} accounts`);
       }
       
-      queryClient.invalidateQueries({ queryKey: ['employees-accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-accounts-all'] });
+    }
+  });
+
+  // Add employee mutation
+  const addEmployeeMutation = useMutation({
+    mutationFn: async (data: EmployeeFormData) => {
+      const { error } = await supabase
+        .from('employees')
+        .insert({
+          employee_id: data.employee_id,
+          full_name: data.full_name,
+          email: data.email,
+          designation: data.designation || null,
+          country: data.country || null,
+          city: data.city || null,
+          date_of_hire: data.date_of_hire || null,
+          group_name: data.group_name || null,
+          business_unit: data.business_unit || null,
+          function_area: data.function_area || null,
+          sales_function: data.sales_function || null,
+          local_currency: data.local_currency || 'USD',
+          manager_employee_id: data.manager_employee_id || null,
+          is_active: true,
+        });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Employee added successfully");
+      setShowAddDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['employees-accounts-all'] });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to add employee", { description: error.message });
+    }
+  });
+
+  // Update employee mutation
+  const updateEmployeeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: EmployeeFormData }) => {
+      const { error } = await supabase
+        .from('employees')
+        .update({
+          full_name: data.full_name,
+          email: data.email,
+          designation: data.designation || null,
+          country: data.country || null,
+          city: data.city || null,
+          date_of_hire: data.date_of_hire || null,
+          group_name: data.group_name || null,
+          business_unit: data.business_unit || null,
+          function_area: data.function_area || null,
+          sales_function: data.sales_function || null,
+          local_currency: data.local_currency || 'USD',
+          manager_employee_id: data.manager_employee_id || null,
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Employee updated successfully");
+      setEditingEmployee(null);
+      queryClient.invalidateQueries({ queryKey: ['employees-accounts-all'] });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to update employee", { description: error.message });
+    }
+  });
+
+  // Toggle active status mutation
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
+        .from('employees')
+        .update({ is_active })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      toast.success(variables.is_active ? "Employee reactivated" : "Employee deactivated");
+      setDeactivatingEmployee(null);
+      queryClient.invalidateQueries({ queryKey: ['employees-accounts-all'] });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to update employee status", { description: error.message });
     }
   });
 
@@ -136,7 +270,7 @@ export function EmployeeAccounts() {
   };
 
   const handleCreateAllAccounts = async () => {
-    const employeesWithoutAccounts = employees?.filter(e => !e.auth_user_id) || [];
+    const employeesWithoutAccounts = activeEmployees?.filter(e => !e.auth_user_id) || [];
     if (employeesWithoutAccounts.length === 0) {
       toast.info("All employees already have accounts");
       return;
@@ -147,22 +281,41 @@ export function EmployeeAccounts() {
     setIsCreatingAll(false);
   };
 
+  const handleAddEmployee = async (data: EmployeeFormData) => {
+    await addEmployeeMutation.mutateAsync(data);
+  };
+
+  const handleUpdateEmployee = async (data: EmployeeFormData) => {
+    if (!editingEmployee) return;
+    await updateEmployeeMutation.mutateAsync({ id: editingEmployee.id, data });
+  };
+
+  const handleDeactivate = async () => {
+    if (!deactivatingEmployee) return;
+    await toggleActiveMutation.mutateAsync({ 
+      id: deactivatingEmployee.id, 
+      is_active: !deactivatingEmployee.is_active 
+    });
+  };
+
   // Filter employees based on search
   const filteredEmployees = employees?.filter(emp => 
     emp.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase())
+    emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (emp.sales_function?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
   );
 
   // Stats
-  const totalEmployees = employees?.length || 0;
-  const withAccounts = employees?.filter(e => e.auth_user_id).length || 0;
-  const withoutAccounts = totalEmployees - withAccounts;
+  const totalActive = activeEmployees?.length || 0;
+  const totalInactive = inactiveEmployees?.length || 0;
+  const withAccounts = activeEmployees?.filter(e => e.auth_user_id).length || 0;
+  const withoutAccounts = totalActive - withAccounts;
 
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
@@ -170,8 +323,8 @@ export function EmployeeAccounts() {
                 <Users className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Employees</p>
-                <p className="text-2xl font-semibold text-foreground">{totalEmployees}</p>
+                <p className="text-sm text-muted-foreground">Active Employees</p>
+                <p className="text-2xl font-semibold text-foreground">{totalActive}</p>
               </div>
             </div>
           </CardContent>
@@ -196,8 +349,21 @@ export function EmployeeAccounts() {
                 <Clock className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Pending</p>
+                <p className="text-sm text-muted-foreground">Pending Accounts</p>
                 <p className="text-2xl font-semibold text-foreground">{withoutAccounts}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <UserX className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Inactive</p>
+                <p className="text-2xl font-semibold text-foreground">{totalInactive}</p>
               </div>
             </div>
           </CardContent>
@@ -209,34 +375,48 @@ export function EmployeeAccounts() {
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-lg">Employee Accounts</CardTitle>
-              <CardDescription>Manage authentication accounts for employees</CardDescription>
+              <CardTitle className="text-lg">Employee Management</CardTitle>
+              <CardDescription>Add, edit, and manage employee records and authentication accounts</CardDescription>
             </div>
-            <Button 
-              variant="accent" 
-              onClick={handleCreateAllAccounts}
-              disabled={isCreatingAll || withoutAccounts === 0}
-            >
-              {isCreatingAll ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4 mr-1.5" />
-                  Create All Accounts ({withoutAccounts})
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowAddDialog(true)}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Add Employee
+              </Button>
+              <Button 
+                variant="accent" 
+                onClick={handleCreateAllAccounts}
+                disabled={isCreatingAll || withoutAccounts === 0}
+              >
+                {isCreatingAll ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4 mr-1.5" />
+                    Create All Accounts ({withoutAccounts})
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
+          {/* Tabs for Active/Inactive */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
+            <TabsList>
+              <TabsTrigger value="active">Active ({totalActive})</TabsTrigger>
+              <TabsTrigger value="inactive">Inactive ({totalInactive})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
           {/* Search */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, email, or employee ID..."
+              placeholder="Search by name, email, employee ID, or sales function..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -255,8 +435,8 @@ export function EmployeeAccounts() {
                     <TableHead>Employee ID</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Designation</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Sales Function</TableHead>
+                    <TableHead>Account Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -266,7 +446,13 @@ export function EmployeeAccounts() {
                       <TableCell className="font-mono text-sm">{employee.employee_id}</TableCell>
                       <TableCell className="font-medium">{employee.full_name}</TableCell>
                       <TableCell className="text-muted-foreground">{employee.email}</TableCell>
-                      <TableCell className="text-muted-foreground">{employee.designation || '-'}</TableCell>
+                      <TableCell>
+                        {employee.sales_function ? (
+                          <Badge variant="outline">{employee.sales_function}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {employee.auth_user_id ? (
                           <Badge className="bg-success/10 text-success hover:bg-success/20">
@@ -281,30 +467,45 @@ export function EmployeeAccounts() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {employee.auth_user_id ? (
-                          <Button variant="ghost" size="sm" disabled>
-                            Account Exists
-                          </Button>
-                        ) : (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleCreateAccount(employee)}
-                            disabled={creatingId === employee.id}
-                          >
-                            {creatingId === employee.id ? (
-                              <>
-                                <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                                Creating...
-                              </>
-                            ) : (
-                              <>
-                                <UserPlus className="h-3 w-3 mr-1.5" />
-                                Create Account
-                              </>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditingEmployee(employee)}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Edit Details
+                            </DropdownMenuItem>
+                            {activeTab === "active" && !employee.auth_user_id && (
+                              <DropdownMenuItem 
+                                onClick={() => handleCreateAccount(employee)}
+                                disabled={creatingId === employee.id}
+                              >
+                                <UserPlus className="h-4 w-4 mr-2" />
+                                {creatingId === employee.id ? "Creating..." : "Create Account"}
+                              </DropdownMenuItem>
                             )}
-                          </Button>
-                        )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => setDeactivatingEmployee(employee)}
+                              className={employee.is_active ? "text-destructive" : "text-success"}
+                            >
+                              {employee.is_active ? (
+                                <>
+                                  <UserX className="h-4 w-4 mr-2" />
+                                  Deactivate
+                                </>
+                              ) : (
+                                <>
+                                  <UserCheck className="h-4 w-4 mr-2" />
+                                  Reactivate
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -327,6 +528,55 @@ export function EmployeeAccounts() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Add Employee Dialog */}
+      <EmployeeFormDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        onSubmit={handleAddEmployee}
+        isSubmitting={addEmployeeMutation.isPending}
+      />
+
+      {/* Edit Employee Dialog */}
+      <EmployeeFormDialog
+        open={!!editingEmployee}
+        onOpenChange={(open) => !open && setEditingEmployee(null)}
+        employee={editingEmployee}
+        onSubmit={handleUpdateEmployee}
+        isSubmitting={updateEmployeeMutation.isPending}
+      />
+
+      {/* Deactivate Confirmation Dialog */}
+      <AlertDialog open={!!deactivatingEmployee} onOpenChange={(open) => !open && setDeactivatingEmployee(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deactivatingEmployee?.is_active ? "Deactivate Employee" : "Reactivate Employee"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deactivatingEmployee?.is_active 
+                ? `Are you sure you want to deactivate ${deactivatingEmployee?.full_name}? They will no longer appear in active employee lists and won't be able to access the system.`
+                : `Are you sure you want to reactivate ${deactivatingEmployee?.full_name}? They will be restored to the active employee list.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeactivate}
+              className={deactivatingEmployee?.is_active ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+            >
+              {toggleActiveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : deactivatingEmployee?.is_active ? (
+                "Deactivate"
+              ) : (
+                "Reactivate"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
