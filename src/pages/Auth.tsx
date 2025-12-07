@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrendingUp, Mail, Lock, User, AlertCircle } from "lucide-react";
+import { Mail, Lock, User, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AzentioLogo } from "@/components/AzentioLogo";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -121,15 +122,7 @@ export default function Auth() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center space-y-4 text-center">
-          <div className="flex items-center gap-2">
-            <span className="text-4xl font-bold text-primary tracking-tight">azentio</span>
-            <div className="flex h-8 w-8 items-center justify-center">
-              <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none">
-                <path d="M12 2C8 2 6 6 6 10C6 14 8 18 12 22" stroke="hsl(166 76% 47%)" strokeWidth="3" strokeLinecap="round"/>
-                <path d="M12 2C16 2 18 6 18 10" stroke="hsl(166 76% 47%)" strokeWidth="3" strokeLinecap="round"/>
-              </svg>
-            </div>
-          </div>
+          <AzentioLogo variant="dark" size="lg" />
           <div>
             <h1 className="text-xl font-semibold text-foreground">Variable Pay Management</h1>
             <p className="text-muted-foreground text-sm mt-1">Sales Compensation Portal</p>

@@ -1,8 +1,9 @@
-import { LayoutDashboard, Users, Settings, FileSpreadsheet, LogOut, TrendingUp } from "lucide-react";
+import { LayoutDashboard, Users, Settings, FileSpreadsheet, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { AzentioLogo } from "@/components/AzentioLogo";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -27,14 +28,8 @@ export function AppSidebar() {
   return (
     <aside className="flex h-screen w-64 flex-col bg-sidebar border-r border-sidebar-border">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-2 px-6 border-b border-sidebar-border">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-sidebar-primary">
-          <TrendingUp className="h-5 w-5 text-sidebar-primary-foreground" />
-        </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-sidebar-foreground">GTM Variable Comp</span>
-          <span className="text-xs text-sidebar-muted">Azentio</span>
-        </div>
+      <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
+        <AzentioLogo variant="light" size="sm" />
       </div>
 
       {/* Navigation */}
