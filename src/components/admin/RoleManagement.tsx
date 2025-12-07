@@ -133,10 +133,11 @@ export function RoleManagement() {
   };
 
   const toggleRole = (role: AppRole) => {
+    // Single-role selection: selecting a role unchecks all others
     setSelectedRoles(prev => 
       prev.includes(role) 
-        ? prev.filter(r => r !== role)
-        : [...prev, role]
+        ? [] // Allow unchecking to have no role
+        : [role] // Only allow one role at a time
     );
   };
 
