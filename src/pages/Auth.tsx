@@ -12,13 +12,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Mail, Lock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AzentioLogo } from "@/components/AzentioLogo";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
+const newPasswordSchema = z.string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+  .regex(/[0-9]/, "Password must contain at least one number");
+
+const DEFAULT_PASSWORD = "Welcome@123";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -27,13 +34,25 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showVerificationDialog, setShowVerificationDialog] = useState(false);
+  
+  // Password change state
+  const [showPasswordChangeDialog, setShowPasswordChangeDialog] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordChangeErrors, setPasswordChangeErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) {
-        // Check if email is confirmed
         if (session.user.email_confirmed_at) {
-          navigate("/dashboard");
+          // Check if this is a first-time login (password is still default)
+          // We'll check user_metadata.password_changed flag
+          const passwordChanged = session.user.user_metadata?.password_changed;
+          if (!passwordChanged) {
+            setShowPasswordChangeDialog(true);
+          } else {
+            navigate("/dashboard");
+          }
         } else {
           setShowVerificationDialog(true);
         }
@@ -43,7 +62,12 @@ export default function Auth() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         if (session.user.email_confirmed_at) {
-          navigate("/dashboard");
+          const passwordChanged = session.user.user_metadata?.password_changed;
+          if (!passwordChanged) {
+            setShowPasswordChangeDialog(true);
+          } else {
+            navigate("/dashboard");
+          }
         } else {
           setShowVerificationDialog(true);
         }
@@ -76,6 +100,29 @@ export default function Auth() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validatePasswordChange = () => {
+    const newErrors: typeof passwordChangeErrors = {};
+
+    try {
+      newPasswordSchema.parse(newPassword);
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        newErrors.newPassword = e.errors[0].message;
+      }
+    }
+
+    if (newPassword !== confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
+
+    if (newPassword === DEFAULT_PASSWORD) {
+      newErrors.newPassword = "Please choose a different password";
+    }
+
+    setPasswordChangeErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -98,8 +145,33 @@ export default function Auth() {
       if (!data.user.email_confirmed_at) {
         setShowVerificationDialog(true);
       } else {
-        toast.success("Signed in successfully");
+        // Check if password needs to be changed
+        const passwordChanged = data.user.user_metadata?.password_changed;
+        if (!passwordChanged) {
+          setShowPasswordChangeDialog(true);
+        } else {
+          toast.success("Signed in successfully");
+        }
       }
+    }
+    setIsLoading(false);
+  };
+
+  const handlePasswordChange = async () => {
+    if (!validatePasswordChange()) return;
+
+    setIsLoading(true);
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+      data: { password_changed: true }
+    });
+
+    if (error) {
+      toast.error("Failed to update password: " + error.message);
+    } else {
+      toast.success("Password updated successfully!");
+      setShowPasswordChangeDialog(false);
+      navigate("/dashboard");
     }
     setIsLoading(false);
   };
@@ -227,6 +299,80 @@ export default function Auth() {
             <p className="text-xs text-center text-muted-foreground">
               After verifying your email, you can sign in to access your account.
             </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Change Dialog for First-Time Login */}
+      <Dialog open={showPasswordChangeDialog} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
+              <KeyRound className="h-6 w-6 text-accent" />
+            </div>
+            <DialogTitle>Set Your Password</DialogTitle>
+            <DialogDescription className="text-center">
+              Welcome! For security, please create a new password to replace the temporary one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="new-password"
+                  type="password"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              {passwordChangeErrors.newPassword && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {passwordChangeErrors.newPassword}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              {passwordChangeErrors.confirmPassword && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {passwordChangeErrors.confirmPassword}
+                </p>
+              )}
+            </div>
+            <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+              <p className="font-medium mb-1">Password requirements:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>At least 8 characters</li>
+                <li>One uppercase letter</li>
+                <li>One lowercase letter</li>
+                <li>One number</li>
+              </ul>
+            </div>
+            <Button 
+              variant="accent" 
+              className="w-full" 
+              onClick={handlePasswordChange}
+              disabled={isLoading}
+            >
+              {isLoading ? "Updating..." : "Set New Password"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
