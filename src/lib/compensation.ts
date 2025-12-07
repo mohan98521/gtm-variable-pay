@@ -13,6 +13,7 @@ export const BONUS_SPLITS: Record<string, MetricSplit> = {
   "IMAL Product SE": { newSoftwareBookingARR: 100, closingARR: 0 },
   "Sales Engineering - Head": { newSoftwareBookingARR: 100, closingARR: 0 },
   "Sales head - Farmer": { newSoftwareBookingARR: 60, closingARR: 40 },
+  "Sales Head - Hunter": { newSoftwareBookingARR: 100, closingARR: 0 },
   "APAC Regional SE": { newSoftwareBookingARR: 100, closingARR: 0 },
   "Channel Sales": { newSoftwareBookingARR: 100, closingARR: 0 },
   "Farmer - Retain": { newSoftwareBookingARR: 0, closingARR: 100 },
