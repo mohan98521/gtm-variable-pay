@@ -54,33 +54,81 @@ export function calculateAchievementPercent(
   return (actualValue / targetValue) * 100;
 }
 
-// Placeholder for multiplier logic - will be expanded based on user input
-export interface MultiplierConfig {
-  salesFunction: string;
-  metricType: string;
-  gateThresholdPercent?: number; // Below this = 0 payout (for Farmers)
-  acceleratorTiers?: Array<{
-    minPercent: number;
-    maxPercent: number;
-    multiplier: number;
-  }>;
+// ============= MULTIPLIER CONFIGURATIONS =============
+
+// Role groups for New Software Booking ARR multipliers
+const STANDARD_ACCELERATOR_ROLES = ["Farmer", "Hunter"];
+const SALES_HEAD_ACCELERATOR_ROLES = ["Sales head - Farmer", "Sales Head - Hunter"];
+
+// New Software Booking ARR Multipliers
+export function getNewSoftwareBookingMultiplier(
+  achievementPercent: number,
+  salesFunction: string
+): number {
+  // Sales Head roles: 1.0 / 1.6 / 2.0
+  if (SALES_HEAD_ACCELERATOR_ROLES.includes(salesFunction)) {
+    if (achievementPercent > 120) return 2.0;
+    if (achievementPercent > 100) return 1.6;
+    return 1.0;
+  }
+  
+  // Farmer and Hunter: 1.0 / 1.4 / 1.6
+  if (STANDARD_ACCELERATOR_ROLES.includes(salesFunction)) {
+    if (achievementPercent > 120) return 1.6;
+    if (achievementPercent > 100) return 1.4;
+    return 1.0;
+  }
+  
+  // All other roles: flat 1.0 multiplier
+  return 1.0;
 }
 
-// Will be populated after user provides multiplier/threshold data
-export const MULTIPLIER_CONFIGS: MultiplierConfig[] = [];
+// Closing ARR Multipliers (applies to roles with Closing ARR allocation)
+// Gate threshold at 85% - below this = NO PAYOUT
+export function getClosingARRMultiplier(achievementPercent: number): number {
+  if (achievementPercent <= 85) return 0; // Gate - no payout
+  if (achievementPercent <= 95) return 0.8;
+  if (achievementPercent <= 100) return 1.0;
+  return 1.2; // >100%
+}
 
-// Calculate payout multiplier based on achievement (placeholder - to be expanded)
+// Get the appropriate multiplier based on metric type
 export function getPayoutMultiplier(
   achievementPercent: number,
   salesFunction: string,
-  metricType: string
+  metricType: "New Software Booking ARR" | "Closing ARR"
 ): number {
-  // Default linear calculation (1:1 payout ratio)
-  // This will be enhanced with gate thresholds and accelerators
-  return achievementPercent / 100;
+  if (metricType === "New Software Booking ARR") {
+    return getNewSoftwareBookingMultiplier(achievementPercent, salesFunction);
+  }
+  
+  if (metricType === "Closing ARR") {
+    return getClosingARRMultiplier(achievementPercent);
+  }
+  
+  return 1.0; // Default fallback
 }
 
-// Calculate total variable pay for an employee
+// Calculate payout for a single metric
+export function calculateMetricPayout(
+  achievementPercent: number,
+  bonusAllocation: number,
+  salesFunction: string,
+  metricType: "New Software Booking ARR" | "Closing ARR"
+): { multiplier: number; payout: number } {
+  const multiplier = getPayoutMultiplier(achievementPercent, salesFunction, metricType);
+  
+  // Payout = (Achievement % / 100) * Bonus Allocation * Multiplier
+  // For Closing ARR with gate: if multiplier is 0, payout is 0
+  const payout = multiplier === 0 
+    ? 0 
+    : (achievementPercent / 100) * bonusAllocation * multiplier;
+  
+  return { multiplier, payout };
+}
+
+// ============= VARIABLE PAY CALCULATION =============
+
 export interface VariablePayCalculation {
   employeeId: string;
   salesFunction: string;
@@ -118,11 +166,19 @@ export function calculateVariablePay(
   const newBookingAchievement = calculateAchievementPercent(newBookingActual, newBookingTarget);
   const closingAchievement = calculateAchievementPercent(closingActual, closingTarget);
   
-  const newBookingMultiplier = getPayoutMultiplier(newBookingAchievement, salesFunction, "New Software Booking ARR");
-  const closingMultiplier = getPayoutMultiplier(closingAchievement, salesFunction, "Closing ARR");
+  const newBookingResult = calculateMetricPayout(
+    newBookingAchievement,
+    bonusAllocation.newSoftwareBookingARR,
+    salesFunction,
+    "New Software Booking ARR"
+  );
   
-  const newBookingPayout = bonusAllocation.newSoftwareBookingARR * newBookingMultiplier;
-  const closingPayout = bonusAllocation.closingARR * closingMultiplier;
+  const closingResult = calculateMetricPayout(
+    closingAchievement,
+    bonusAllocation.closingARR,
+    salesFunction,
+    "Closing ARR"
+  );
   
   return {
     employeeId,
@@ -133,17 +189,17 @@ export function calculateVariablePay(
       actualValue: newBookingActual,
       achievementPercent: newBookingAchievement,
       bonusAllocation: bonusAllocation.newSoftwareBookingARR,
-      multiplier: newBookingMultiplier,
-      payout: newBookingPayout,
+      multiplier: newBookingResult.multiplier,
+      payout: newBookingResult.payout,
     },
     closingARR: {
       targetValue: closingTarget,
       actualValue: closingActual,
       achievementPercent: closingAchievement,
       bonusAllocation: bonusAllocation.closingARR,
-      multiplier: closingMultiplier,
-      payout: closingPayout,
+      multiplier: closingResult.multiplier,
+      payout: closingResult.payout,
     },
-    totalPayout: newBookingPayout + closingPayout,
+    totalPayout: newBookingResult.payout + closingResult.payout,
   };
 }
