@@ -43,7 +43,8 @@ import {
   Pencil,
   UserX,
   UserCheck,
-  Plus
+  Plus,
+  LogIn
 } from "lucide-react";
 import { EmployeeFormDialog, EmployeeFormData } from "./EmployeeFormDialog";
 
@@ -73,6 +74,7 @@ export function EmployeeAccounts() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [deactivatingEmployee, setDeactivatingEmployee] = useState<Employee | null>(null);
+  const [impersonatingEmployee, setImpersonatingEmployee] = useState<Employee | null>(null);
   const [activeTab, setActiveTab] = useState("active");
   const queryClient = useQueryClient();
 
@@ -260,6 +262,43 @@ export function EmployeeAccounts() {
     },
     onError: (error: Error) => {
       toast.error("Failed to update employee status", { description: error.message });
+    }
+  });
+
+  // Impersonate user mutation
+  const impersonateMutation = useMutation({
+    mutationFn: async (employee: Employee) => {
+      if (!employee.auth_user_id) {
+        throw new Error('Employee does not have an account');
+      }
+
+      const response = await supabase.functions.invoke('impersonate-user', {
+        body: { targetUserId: employee.auth_user_id }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to impersonate user');
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (data.actionLink) {
+        // Open the magic link in a new tab
+        window.open(data.actionLink, '_blank');
+        toast.success(`Opened session as ${data.email}`, {
+          description: 'A new tab has been opened with the user session'
+        });
+      }
+      setImpersonatingEmployee(null);
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to impersonate user', { description: error.message });
+      setImpersonatingEmployee(null);
     }
   });
 
@@ -487,6 +526,14 @@ export function EmployeeAccounts() {
                                 {creatingId === employee.id ? "Creating..." : "Create Account"}
                               </DropdownMenuItem>
                             )}
+                            {employee.auth_user_id && (
+                              <DropdownMenuItem 
+                                onClick={() => setImpersonatingEmployee(employee)}
+                              >
+                                <LogIn className="h-4 w-4 mr-2" />
+                                Login As
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               onClick={() => setDeactivatingEmployee(employee)}
@@ -572,6 +619,38 @@ export function EmployeeAccounts() {
                 "Deactivate"
               ) : (
                 "Reactivate"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Impersonate Confirmation Dialog */}
+      <AlertDialog open={!!impersonatingEmployee} onOpenChange={(open) => !open && setImpersonatingEmployee(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Login As User</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to login as <strong>{impersonatingEmployee?.full_name}</strong> ({impersonatingEmployee?.email}).
+              A new browser tab will open with their session. This action is logged for security purposes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => impersonatingEmployee && impersonateMutation.mutate(impersonatingEmployee)}
+              disabled={impersonateMutation.isPending}
+            >
+              {impersonateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Opening...
+                </>
+              ) : (
+                <>
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Login As User
+                </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
