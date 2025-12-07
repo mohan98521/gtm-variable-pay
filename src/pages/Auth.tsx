@@ -151,7 +151,7 @@ export default function Auth() {
                   <Input
                     id="signin-email"
                     type="email"
-                    placeholder="name@company.com"
+                    placeholder="EmployeeID@azentio.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"
