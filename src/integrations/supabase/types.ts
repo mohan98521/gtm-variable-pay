@@ -185,33 +185,57 @@ export type Database = {
       }
       profiles: {
         Row: {
+          business_unit: string | null
+          city: string | null
+          country: string | null
           created_at: string
+          date_of_hire: string | null
+          designation: string | null
           email: string
+          employee_id: string | null
           full_name: string
+          function_area: string | null
+          group_name: string | null
           id: string
           local_currency: string
           manager_id: string | null
-          role: Database["public"]["Enums"]["user_role"]
+          sales_function: string | null
           updated_at: string
         }
         Insert: {
+          business_unit?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
+          date_of_hire?: string | null
+          designation?: string | null
           email: string
+          employee_id?: string | null
           full_name: string
+          function_area?: string | null
+          group_name?: string | null
           id: string
           local_currency?: string
           manager_id?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
+          sales_function?: string | null
           updated_at?: string
         }
         Update: {
+          business_unit?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
+          date_of_hire?: string | null
+          designation?: string | null
           email?: string
+          employee_id?: string | null
           full_name?: string
+          function_area?: string | null
+          group_name?: string | null
           id?: string
           local_currency?: string
           manager_id?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
+          sales_function?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -224,6 +248,27 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_targets: {
         Row: {
           created_at: string
@@ -231,8 +276,14 @@ export type Database = {
           effective_end_date: string
           effective_start_date: string
           id: string
+          ote_local_currency: number | null
+          ote_usd: number | null
           plan_id: string
+          target_bonus_percent: number | null
+          target_bonus_usd: number | null
           target_value_annual: number
+          tfp_local_currency: number | null
+          tfp_usd: number | null
           user_id: string
         }
         Insert: {
@@ -241,8 +292,14 @@ export type Database = {
           effective_end_date: string
           effective_start_date: string
           id?: string
+          ote_local_currency?: number | null
+          ote_usd?: number | null
           plan_id: string
+          target_bonus_percent?: number | null
+          target_bonus_usd?: number | null
           target_value_annual: number
+          tfp_local_currency?: number | null
+          tfp_usd?: number | null
           user_id: string
         }
         Update: {
@@ -251,8 +308,14 @@ export type Database = {
           effective_end_date?: string
           effective_start_date?: string
           id?: string
+          ote_local_currency?: number | null
+          ote_usd?: number | null
           plan_id?: string
+          target_bonus_percent?: number | null
+          target_bonus_usd?: number | null
           target_value_annual?: number
+          tfp_local_currency?: number | null
+          tfp_usd?: number | null
           user_id?: string
         }
         Relationships: [
@@ -277,9 +340,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
+      app_role: "admin" | "sales_head" | "sales_rep"
       logic_type: "Stepped_Accelerator" | "Gated_Threshold" | "Linear"
       user_role: "Admin" | "Sales_Head" | "Sales_Rep"
     }
@@ -409,6 +479,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "sales_head", "sales_rep"],
       logic_type: ["Stepped_Accelerator", "Gated_Threshold", "Linear"],
       user_role: ["Admin", "Sales_Head", "Sales_Rep"],
     },
