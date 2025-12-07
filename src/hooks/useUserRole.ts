@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "admin" | "sales_head" | "sales_rep";
+export type AppRole = "admin" | "sales_head" | "sales_rep" | "gtm_ops" | "finance" | "executive";
 
 export function useUserRole() {
   const [roles, setRoles] = useState<AppRole[]>([]);
@@ -44,6 +44,13 @@ export function useUserRole() {
   const isAdmin = () => hasRole("admin");
   const isSalesHead = () => hasRole("sales_head");
   const isSalesRep = () => hasRole("sales_rep");
+  const isGtmOps = () => hasRole("gtm_ops");
+  const isFinance = () => hasRole("finance");
+  const isExecutive = () => hasRole("executive");
+
+  // Check if user has any management/viewing role for broader access
+  const canViewAllData = () => isAdmin() || isGtmOps() || isFinance() || isExecutive();
+  const canManageData = () => isAdmin() || isGtmOps();
 
   return {
     roles,
@@ -52,5 +59,10 @@ export function useUserRole() {
     isAdmin,
     isSalesHead,
     isSalesRep,
+    isGtmOps,
+    isFinance,
+    isExecutive,
+    canViewAllData,
+    canManageData,
   };
 }

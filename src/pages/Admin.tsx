@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -15,8 +15,12 @@ import {
 import { useCompPlans } from "@/hooks/useCompPlans";
 import { useUserTargets } from "@/hooks/useUserTargets";
 import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
+import { RoleManagement } from "@/components/admin/RoleManagement";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { useUserRole } from "@/hooks/useUserRole";
 
 export default function Admin() {
+  const { isAdmin } = useUserRole();
   const { data: compPlans, isLoading: plansLoading } = useCompPlans();
   const { data: allTargets, isLoading: targetsLoading } = useUserTargets();
 
@@ -53,10 +57,18 @@ export default function Admin() {
               <Layers className="h-4 w-4" />
               Compensation Plans
             </TabsTrigger>
-            <TabsTrigger value="accounts" className="gap-2">
-              <UserCog className="h-4 w-4" />
-              Employee Accounts
-            </TabsTrigger>
+            {isAdmin() && (
+              <>
+                <TabsTrigger value="accounts" className="gap-2">
+                  <UserCog className="h-4 w-4" />
+                  Employee Accounts
+                </TabsTrigger>
+                <TabsTrigger value="roles" className="gap-2">
+                  <Shield className="h-4 w-4" />
+                  Role Management
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           {/* Plans Tab */}
@@ -198,10 +210,19 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          {/* Employee Accounts Tab */}
-          <TabsContent value="accounts">
-            <EmployeeAccounts />
-          </TabsContent>
+          {/* Employee Accounts Tab - Admin Only */}
+          {isAdmin() && (
+            <TabsContent value="accounts">
+              <EmployeeAccounts />
+            </TabsContent>
+          )}
+
+          {/* Role Management Tab - Admin Only */}
+          {isAdmin() && (
+            <TabsContent value="roles">
+              <RoleManagement />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppLayout>
