@@ -41,6 +41,69 @@ export type Database = {
         }
         Relationships: []
       }
+      employees: {
+        Row: {
+          auth_user_id: string | null
+          business_unit: string | null
+          city: string | null
+          country: string | null
+          created_at: string
+          date_of_hire: string | null
+          designation: string | null
+          email: string
+          employee_id: string
+          full_name: string
+          function_area: string | null
+          group_name: string | null
+          id: string
+          is_active: boolean
+          local_currency: string
+          manager_employee_id: string | null
+          sales_function: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth_user_id?: string | null
+          business_unit?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_hire?: string | null
+          designation?: string | null
+          email: string
+          employee_id: string
+          full_name: string
+          function_area?: string | null
+          group_name?: string | null
+          id?: string
+          is_active?: boolean
+          local_currency?: string
+          manager_employee_id?: string | null
+          sales_function?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth_user_id?: string | null
+          business_unit?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_hire?: string | null
+          designation?: string | null
+          email?: string
+          employee_id?: string
+          full_name?: string
+          function_area?: string | null
+          group_name?: string | null
+          id?: string
+          is_active?: boolean
+          local_currency?: string
+          manager_employee_id?: string | null
+          sales_function?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       exchange_rates: {
         Row: {
           created_at: string
@@ -95,17 +158,17 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "monthly_actuals_employee_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "monthly_actuals_metric_id_fkey"
             columns: ["metric_id"]
             isOneToOne: false
             referencedRelation: "plan_metrics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "monthly_actuals_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -320,17 +383,17 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "user_targets_employee_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "user_targets_plan_id_fkey"
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "comp_plans"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_targets_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
