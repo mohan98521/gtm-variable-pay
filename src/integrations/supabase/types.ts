@@ -208,6 +208,33 @@ export type Database = {
           },
         ]
       }
+      performance_targets: {
+        Row: {
+          created_at: string
+          effective_year: number
+          employee_id: string
+          id: string
+          metric_type: string
+          target_value_usd: number
+        }
+        Insert: {
+          created_at?: string
+          effective_year?: number
+          employee_id: string
+          id?: string
+          metric_type: string
+          target_value_usd?: number
+        }
+        Update: {
+          created_at?: string
+          effective_year?: number
+          employee_id?: string
+          id?: string
+          metric_type?: string
+          target_value_usd?: number
+        }
+        Relationships: []
+      }
       plan_metrics: {
         Row: {
           created_at: string
