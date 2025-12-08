@@ -1,9 +1,17 @@
-import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, FileSpreadsheet, CheckCircle, AlertCircle, DollarSign, Target } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Upload, Save, Calendar, FileSpreadsheet, AlertCircle, CheckCircle } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -11,47 +19,73 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BookingsTab } from "@/components/data-inputs/BookingsTab";
-import { QuarterlyTargetsTab } from "@/components/data-inputs/QuarterlyTargetsTab";
-import { ClosingArrTab } from "@/components/data-inputs/ClosingArrTab";
-import { ExchangeRatesTab } from "@/components/data-inputs/ExchangeRatesTab";
-import { PayoutsTab } from "@/components/data-inputs/PayoutsTab";
-import { useMonthlyBookings } from "@/hooks/useMonthlyBookings";
-import { useMonthlyPayouts } from "@/hooks/useMonthlyPayouts";
-import { format, subMonths } from "date-fns";
 
-// Generate last 12 months for selection
-const generateMonthOptions = () => {
-  const options = [];
-  const today = new Date();
-  for (let i = 0; i < 12; i++) {
-    const date = subMonths(today, i);
-    const value = format(date, "yyyy-MM-01");
-    const label = format(date, "MMMM yyyy");
-    options.push({ value, label });
+// Mock data for monthly actuals input
+const monthlyData = [
+  {
+    id: "1",
+    userName: "Sarah Johnson",
+    metric: "New Software Sales",
+    month: "2025-08",
+    value: 52500,
+    status: "submitted",
+  },
+  {
+    id: "2",
+    userName: "Sarah Johnson",
+    metric: "Closing ARR",
+    month: "2025-08",
+    value: 28000,
+    status: "submitted",
+  },
+  {
+    id: "3",
+    userName: "Michael Chen",
+    metric: "Retention Rate",
+    month: "2025-08",
+    value: 95.5,
+    status: "pending",
+  },
+  {
+    id: "4",
+    userName: "Michael Chen",
+    metric: "Upsell Revenue",
+    month: "2025-08",
+    value: 18500,
+    status: "pending",
+  },
+  {
+    id: "5",
+    userName: "Emily Rodriguez",
+    metric: "New Software Sales",
+    month: "2025-08",
+    value: 68000,
+    status: "submitted",
+  },
+];
+
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case "submitted":
+      return (
+        <Badge className="bg-success/10 text-success">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Submitted
+        </Badge>
+      );
+    case "pending":
+      return (
+        <Badge className="bg-warning/10 text-warning">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Pending
+        </Badge>
+      );
+    default:
+      return null;
   }
-  return options;
 };
 
-const monthOptions = generateMonthOptions();
-
 export default function DataInputs() {
-  const [selectedMonth, setSelectedMonth] = useState(monthOptions[0].value);
-  const [selectedYear, setSelectedYear] = useState(2025);
-  const [activeTab, setActiveTab] = useState("bookings");
-
-  const { data: bookings } = useMonthlyBookings(selectedMonth);
-  const { data: payouts } = useMonthlyPayouts(selectedMonth);
-
-  const totalBookings = bookings?.length || 0;
-  const pendingBookings = bookings?.filter((b) => b.status === "pending").length || 0;
-  const totalPayouts = payouts?.reduce((sum, p) => sum + p.calculated_amount_usd, 0) || 0;
-
-  // Get quarter and fiscal year info
-  const selectedDate = new Date(selectedMonth);
-  const quarter = Math.ceil((selectedDate.getMonth() + 1) / 3);
-  const fiscalYear = selectedDate.getFullYear();
-
   return (
     <AppLayout>
       <div className="p-6 lg:p-8 space-y-6">
@@ -59,24 +93,29 @@ export default function DataInputs() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Data Inputs</h1>
-            <p className="text-muted-foreground">
-              Upload and manage performance data, targets, and payouts
-            </p>
+            <p className="text-muted-foreground">Upload and manage monthly actuals</p>
           </div>
           <div className="flex items-center gap-2">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-48">
+            <Select defaultValue="2025-08">
+              <SelectTrigger className="w-40">
                 <Calendar className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Select month" />
               </SelectTrigger>
               <SelectContent>
-                {monthOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
+                <SelectItem value="2025-08">August 2025</SelectItem>
+                <SelectItem value="2025-07">July 2025</SelectItem>
+                <SelectItem value="2025-06">June 2025</SelectItem>
+                <SelectItem value="2025-05">May 2025</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline">
+              <Upload className="h-4 w-4 mr-1.5" />
+              Import CSV
+            </Button>
+            <Button variant="accent">
+              <Save className="h-4 w-4 mr-1.5" />
+              Save All
+            </Button>
           </div>
         </div>
 
@@ -89,8 +128,23 @@ export default function DataInputs() {
                   <FileSpreadsheet className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Bookings</p>
-                  <p className="text-2xl font-semibold text-foreground">{totalBookings}</p>
+                  <p className="text-sm text-muted-foreground">Total Entries</p>
+                  <p className="text-2xl font-semibold text-foreground">{monthlyData.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-success/10 text-success">
+                  <CheckCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Submitted</p>
+                  <p className="text-2xl font-semibold text-foreground">
+                    {monthlyData.filter(d => d.status === "submitted").length}
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -102,22 +156,9 @@ export default function DataInputs() {
                   <AlertCircle className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Pending Review</p>
-                  <p className="text-2xl font-semibold text-foreground">{pendingBookings}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-success/10 text-success">
-                  <DollarSign className="h-6 w-6" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Payouts</p>
+                  <p className="text-sm text-muted-foreground">Pending</p>
                   <p className="text-2xl font-semibold text-foreground">
-                    ${totalPayouts.toLocaleString()}
+                    {monthlyData.filter(d => d.status === "pending").length}
                   </p>
                 </div>
               </div>
@@ -127,95 +168,93 @@ export default function DataInputs() {
             <CardContent className="pt-6">
               <div>
                 <p className="text-sm text-muted-foreground">Selected Period</p>
-                <p className="text-lg font-semibold text-foreground">
-                  {format(selectedDate, "MMMM yyyy")}
-                </p>
-                <p className="text-xs text-muted-foreground">FY {fiscalYear} Q{quarter}</p>
+                <p className="text-lg font-semibold text-foreground">August 2025</p>
+                <p className="text-xs text-muted-foreground">FY 2025 Q3</p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Tabs */}
+        {/* Data Entry Table */}
         <Card>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="border-b px-4">
-              <TabsList className="h-12 bg-transparent">
-                <TabsTrigger value="bookings" className="data-[state=active]:bg-muted">
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Bookings
-                </TabsTrigger>
-                <TabsTrigger value="quarterly" className="data-[state=active]:bg-muted">
-                  <Target className="h-4 w-4 mr-2" />
-                  Quarterly Targets
-                </TabsTrigger>
-                <TabsTrigger value="closing-arr" className="data-[state=active]:bg-muted">
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Closing ARR
-                </TabsTrigger>
-                <TabsTrigger value="payouts" className="data-[state=active]:bg-muted">
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Payouts
-                </TabsTrigger>
-                <TabsTrigger value="exchange-rates" className="data-[state=active]:bg-muted">
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Exchange Rates
-                </TabsTrigger>
-              </TabsList>
-            </div>
+          <CardHeader>
+            <CardTitle className="text-lg">Monthly Actuals</CardTitle>
+            <CardDescription>Enter or edit performance data for the selected period</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Team Member</TableHead>
+                  <TableHead>Metric</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">Value</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyData.map((entry) => (
+                  <TableRow key={entry.id} className="data-row">
+                    <TableCell className="font-medium">{entry.userName}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="font-normal">
+                        {entry.metric}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{entry.month}</TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        type="number"
+                        defaultValue={entry.value}
+                        className="w-32 text-right ml-auto"
+                      />
+                    </TableCell>
+                    <TableCell>{getStatusBadge(entry.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm">
+                        <Save className="h-4 w-4 mr-1" />
+                        Update
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-            <div className="p-4">
-              <TabsContent value="bookings" className="mt-0">
-                <BookingsTab selectedMonth={selectedMonth} />
-              </TabsContent>
-
-              <TabsContent value="quarterly" className="mt-0">
-                <div className="mb-4">
-                  <Select
-                    value={selectedYear.toString()}
-                    onValueChange={(v) => setSelectedYear(parseInt(v))}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="Year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2024">2024</SelectItem>
-                      <SelectItem value="2025">2025</SelectItem>
-                      <SelectItem value="2026">2026</SelectItem>
-                    </SelectContent>
-                  </Select>
+        {/* Exchange Rates Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Exchange Rates</CardTitle>
+            <CardDescription>Currency conversion rates for multi-currency calculations</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-4">
+              {[
+                { currency: "EUR", rate: 1.08 },
+                { currency: "GBP", rate: 1.26 },
+                { currency: "INR", rate: 0.012 },
+                { currency: "SGD", rate: 0.74 },
+              ].map((rate) => (
+                <div key={rate.currency} className="flex items-center gap-3 rounded-md border p-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded bg-muted font-semibold text-sm">
+                    {rate.currency}
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      defaultValue={rate.rate}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground">to USD</span>
                 </div>
-                <QuarterlyTargetsTab selectedYear={selectedYear} />
-              </TabsContent>
-
-              <TabsContent value="closing-arr" className="mt-0">
-                <div className="mb-4">
-                  <Select
-                    value={selectedYear.toString()}
-                    onValueChange={(v) => setSelectedYear(parseInt(v))}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="Year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2024">2024</SelectItem>
-                      <SelectItem value="2025">2025</SelectItem>
-                      <SelectItem value="2026">2026</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <ClosingArrTab selectedYear={selectedYear} />
-              </TabsContent>
-
-              <TabsContent value="payouts" className="mt-0">
-                <PayoutsTab selectedMonth={selectedMonth} />
-              </TabsContent>
-
-              <TabsContent value="exchange-rates" className="mt-0">
-                <ExchangeRatesTab selectedMonth={selectedMonth} />
-              </TabsContent>
+              ))}
             </div>
-          </Tabs>
+          </CardContent>
         </Card>
       </div>
     </AppLayout>
