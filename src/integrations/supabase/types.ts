@@ -14,6 +14,84 @@ export type Database = {
   }
   public: {
     Tables: {
+      closing_arr_targets: {
+        Row: {
+          closing_arr_target_usd: number
+          created_at: string
+          effective_year: number
+          employee_id: string
+          id: string
+          ms_churn_allowance_usd: number
+          msps_bookings_target_usd: number
+          net_price_increase_target_usd: number
+          opening_arr_usd: number
+          software_bookings_target_usd: number
+          software_churn_allowance_usd: number
+        }
+        Insert: {
+          closing_arr_target_usd?: number
+          created_at?: string
+          effective_year?: number
+          employee_id: string
+          id?: string
+          ms_churn_allowance_usd?: number
+          msps_bookings_target_usd?: number
+          net_price_increase_target_usd?: number
+          opening_arr_usd?: number
+          software_bookings_target_usd?: number
+          software_churn_allowance_usd?: number
+        }
+        Update: {
+          closing_arr_target_usd?: number
+          created_at?: string
+          effective_year?: number
+          employee_id?: string
+          id?: string
+          ms_churn_allowance_usd?: number
+          msps_bookings_target_usd?: number
+          net_price_increase_target_usd?: number
+          opening_arr_usd?: number
+          software_bookings_target_usd?: number
+          software_churn_allowance_usd?: number
+        }
+        Relationships: []
+      }
+      commission_structures: {
+        Row: {
+          commission_rate_pct: number
+          commission_type: string
+          created_at: string
+          effective_year: number
+          id: string
+          is_active: boolean
+          min_arr_threshold_usd: number | null
+          requires_100_pct_achievement: boolean
+          sales_function: string
+        }
+        Insert: {
+          commission_rate_pct?: number
+          commission_type: string
+          created_at?: string
+          effective_year?: number
+          id?: string
+          is_active?: boolean
+          min_arr_threshold_usd?: number | null
+          requires_100_pct_achievement?: boolean
+          sales_function: string
+        }
+        Update: {
+          commission_rate_pct?: number
+          commission_type?: string
+          created_at?: string
+          effective_year?: number
+          id?: string
+          is_active?: boolean
+          min_arr_threshold_usd?: number | null
+          requires_100_pct_achievement?: boolean
+          sales_function?: string
+        }
+        Relationships: []
+      }
       comp_plans: {
         Row: {
           created_at: string
@@ -172,6 +250,108 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      monthly_bookings: {
+        Row: {
+          booking_type: string
+          booking_value_local: number | null
+          booking_value_usd: number
+          client_name: string | null
+          collection_date: string | null
+          created_at: string
+          deal_name: string | null
+          deal_type: string | null
+          employee_id: string
+          first_year_amc_arr_usd: number | null
+          id: string
+          local_currency: string | null
+          month_year: string
+          status: string
+          tcv_value_usd: number | null
+          updated_at: string
+        }
+        Insert: {
+          booking_type: string
+          booking_value_local?: number | null
+          booking_value_usd?: number
+          client_name?: string | null
+          collection_date?: string | null
+          created_at?: string
+          deal_name?: string | null
+          deal_type?: string | null
+          employee_id: string
+          first_year_amc_arr_usd?: number | null
+          id?: string
+          local_currency?: string | null
+          month_year: string
+          status?: string
+          tcv_value_usd?: number | null
+          updated_at?: string
+        }
+        Update: {
+          booking_type?: string
+          booking_value_local?: number | null
+          booking_value_usd?: number
+          client_name?: string | null
+          collection_date?: string | null
+          created_at?: string
+          deal_name?: string | null
+          deal_type?: string | null
+          employee_id?: string
+          first_year_amc_arr_usd?: number | null
+          id?: string
+          local_currency?: string | null
+          month_year?: string
+          status?: string
+          tcv_value_usd?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      monthly_payouts: {
+        Row: {
+          calculated_amount_usd: number
+          created_at: string
+          employee_id: string
+          holdback_amount_usd: number | null
+          id: string
+          month_year: string
+          notes: string | null
+          paid_amount_usd: number | null
+          paid_date: string | null
+          payout_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          calculated_amount_usd?: number
+          created_at?: string
+          employee_id: string
+          holdback_amount_usd?: number | null
+          id?: string
+          month_year: string
+          notes?: string | null
+          paid_amount_usd?: number | null
+          paid_date?: string | null
+          payout_type: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          calculated_amount_usd?: number
+          created_at?: string
+          employee_id?: string
+          holdback_amount_usd?: number | null
+          id?: string
+          month_year?: string
+          notes?: string | null
+          paid_amount_usd?: number | null
+          paid_date?: string | null
+          payout_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       multiplier_grids: {
         Row: {
@@ -337,6 +517,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      quarterly_targets: {
+        Row: {
+          created_at: string
+          effective_year: number
+          employee_id: string
+          id: string
+          metric_type: string
+          quarter: number
+          target_value_usd: number
+        }
+        Insert: {
+          created_at?: string
+          effective_year?: number
+          employee_id: string
+          id?: string
+          metric_type: string
+          quarter: number
+          target_value_usd?: number
+        }
+        Update: {
+          created_at?: string
+          effective_year?: number
+          employee_id?: string
+          id?: string
+          metric_type?: string
+          quarter?: number
+          target_value_usd?: number
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
