@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import TeamView from "./pages/TeamView";
 import Admin from "./pages/Admin";
 import DataInputs from "./pages/DataInputs";
+import PlanBuilder from "./pages/PlanBuilder";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/team" element={<TeamView />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/plan/:planId" element={<PlanBuilder />} />
           <Route path="/data-inputs" element={<DataInputs />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
 export default function Admin() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isAdmin } = useUserRole();
   const { data: compPlans, isLoading: plansLoading } = useCompPlans();
@@ -141,7 +143,7 @@ export default function Admin() {
   };
 
   const handleViewPlan = (plan: CompPlan) => {
-    setViewingPlan(plan);
+    navigate(`/admin/plan/${plan.id}`);
   };
 
   const handleDeletePlan = (plan: CompPlan) => {
