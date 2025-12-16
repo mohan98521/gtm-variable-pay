@@ -13,7 +13,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles, redirectTo = "/dashboard" }: ProtectedRouteProps) {
-  const { roles, isLoading } = useUserRole();
+  const { roles, isLoading, isAuthenticated } = useUserRole();
   const navigate = useNavigate();
 
   if (isLoading) {
@@ -24,8 +24,13 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo = "/dashboar
     );
   }
 
+  // If not logged in, send to auth
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
+
   // Check if user has any of the allowed roles
-  const hasAccess = allowedRoles.some(role => roles.includes(role));
+  const hasAccess = allowedRoles.some((role) => roles.includes(role));
 
   if (!hasAccess) {
     return (

@@ -6,16 +6,22 @@ export type AppRole = "admin" | "sales_head" | "sales_rep" | "gtm_ops" | "financ
 export function useUserRole() {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const fetchRoles = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
+        setIsAuthenticated(false);
         setRoles([]);
         setIsLoading(false);
         return;
       }
+
+      setIsAuthenticated(true);
 
       const { data, error } = await supabase
         .from("user_roles")
@@ -33,7 +39,10 @@ export function useUserRole() {
 
     fetchRoles();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      setIsLoading(true);
       fetchRoles();
     });
 
@@ -55,6 +64,7 @@ export function useUserRole() {
   return {
     roles,
     isLoading,
+    isAuthenticated,
     hasRole,
     isAdmin,
     isSalesHead,
