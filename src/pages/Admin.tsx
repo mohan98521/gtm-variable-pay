@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,19 +14,109 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useCompPlans } from "@/hooks/useCompPlans";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useCompPlans, CompPlan } from "@/hooks/useCompPlans";
 import { useUserTargets } from "@/hooks/useUserTargets";
 import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
 import { RoleManagement } from "@/components/admin/RoleManagement";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { CompPlanFormDialog } from "@/components/admin/CompPlanFormDialog";
+import { CompPlanDetailsDialog } from "@/components/admin/CompPlanDetailsDialog";
 import { useUserRole } from "@/hooks/useUserRole";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 export default function Admin() {
+  const queryClient = useQueryClient();
   const { isAdmin } = useUserRole();
   const { data: compPlans, isLoading: plansLoading } = useCompPlans();
   const { data: allTargets, isLoading: targetsLoading } = useUserTargets();
 
+  // Dialog states
+  const [showFormDialog, setShowFormDialog] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<CompPlan | null>(null);
+  const [viewingPlan, setViewingPlan] = useState<CompPlan | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState<CompPlan | null>(null);
+
   const isLoading = plansLoading || targetsLoading;
+
+  // Create plan mutation
+  const createPlanMutation = useMutation({
+    mutationFn: async (values: { name: string; description?: string | null; is_active: boolean }) => {
+      const { data, error } = await supabase
+        .from("comp_plans")
+        .insert({
+          name: values.name,
+          description: values.description || null,
+          is_active: values.is_active,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comp_plans"] });
+      setShowFormDialog(false);
+      toast({ title: "Plan created", description: "Compensation plan has been created successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Update plan mutation
+  const updatePlanMutation = useMutation({
+    mutationFn: async (values: { id: string; name: string; description?: string | null; is_active: boolean }) => {
+      const { data, error } = await supabase
+        .from("comp_plans")
+        .update({
+          name: values.name,
+          description: values.description || null,
+          is_active: values.is_active,
+        })
+        .eq("id", values.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comp_plans"] });
+      setEditingPlan(null);
+      toast({ title: "Plan updated", description: "Compensation plan has been updated successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Delete plan mutation
+  const deletePlanMutation = useMutation({
+    mutationFn: async (planId: string) => {
+      const { error } = await supabase
+        .from("comp_plans")
+        .delete()
+        .eq("id", planId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comp_plans"] });
+      setDeletingPlan(null);
+      toast({ title: "Plan deleted", description: "Compensation plan has been deleted." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
 
   // Calculate assigned users per plan
   const getAssignedUsersCount = (planId: string) => {
@@ -33,10 +125,41 @@ export default function Admin() {
     return uniqueUsers.size;
   };
 
-  // Get unique metrics count (placeholder for now)
+  // Get unique metrics count
   const getMetricsCount = () => {
-    // This would come from plan_metrics table
     return compPlans?.length || 0;
+  };
+
+  const handleCreatePlan = () => {
+    setEditingPlan(null);
+    setShowFormDialog(true);
+  };
+
+  const handleEditPlan = (plan: CompPlan) => {
+    setEditingPlan(plan);
+    setShowFormDialog(true);
+  };
+
+  const handleViewPlan = (plan: CompPlan) => {
+    setViewingPlan(plan);
+  };
+
+  const handleDeletePlan = (plan: CompPlan) => {
+    setDeletingPlan(plan);
+  };
+
+  const handleFormSubmit = (values: { name: string; description?: string | null; is_active: boolean }) => {
+    if (editingPlan) {
+      updatePlanMutation.mutate({ ...values, id: editingPlan.id });
+    } else {
+      createPlanMutation.mutate(values);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (deletingPlan) {
+      deletePlanMutation.mutate(deletingPlan.id);
+    }
   };
 
   return (
@@ -75,7 +198,7 @@ export default function Admin() {
           <TabsContent value="plans" className="space-y-6">
             {/* Action Button */}
             <div className="flex justify-end">
-              <Button variant="accent">
+              <Button variant="accent" onClick={handleCreatePlan}>
                 <Plus className="h-4 w-4 mr-1.5" />
                 Create New Plan
               </Button>
@@ -172,13 +295,30 @@ export default function Admin() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleEditPlan(plan)}
+                                title="Edit plan"
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => handleDeletePlan(plan)}
+                                title="Delete plan"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="sm">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewPlan(plan)}
+                                title="View details"
+                              >
                                 <ArrowRight className="h-4 w-4" />
                               </Button>
                             </div>
@@ -202,7 +342,7 @@ export default function Admin() {
                   Create custom compensation plans with multiple metrics, split weightings, 
                   gate thresholds, and accelerator multipliers.
                 </p>
-                <Button variant="accent">
+                <Button variant="accent" onClick={handleCreatePlan}>
                   <Plus className="h-4 w-4 mr-1.5" />
                   Start Building
                 </Button>
@@ -225,6 +365,53 @@ export default function Admin() {
           )}
         </Tabs>
       </div>
+
+      {/* Create/Edit Plan Dialog */}
+      <CompPlanFormDialog
+        open={showFormDialog}
+        onOpenChange={(open) => {
+          setShowFormDialog(open);
+          if (!open) setEditingPlan(null);
+        }}
+        plan={editingPlan}
+        onSubmit={handleFormSubmit}
+        isSubmitting={createPlanMutation.isPending || updatePlanMutation.isPending}
+      />
+
+      {/* View Plan Details Dialog */}
+      <CompPlanDetailsDialog
+        open={!!viewingPlan}
+        onOpenChange={(open) => !open && setViewingPlan(null)}
+        plan={viewingPlan}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingPlan} onOpenChange={(open) => !open && setDeletingPlan(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Compensation Plan</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingPlan?.name}"? This action cannot be undone.
+              {getAssignedUsersCount(deletingPlan?.id || "") > 0 && (
+                <span className="block mt-2 text-destructive font-medium">
+                  Warning: This plan has {getAssignedUsersCount(deletingPlan?.id || "")} assigned user(s).
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletePlanMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deletePlanMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletePlanMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete Plan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
