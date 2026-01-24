@@ -58,7 +58,7 @@ export default function Dashboard() {
   const paceStatus = achievementPct >= expectedPct ? "on-track" : achievementPct >= expectedPct * 0.85 ? "at-risk" : "behind";
 
   const planName = userTarget?.comp_plans?.name ?? "No Plan Assigned";
-  const fiscalYear = new Date().getFullYear();
+  const fiscalYear = 2026; // Current fiscal year
 
   // Metrics breakdown
   const metrics = [
