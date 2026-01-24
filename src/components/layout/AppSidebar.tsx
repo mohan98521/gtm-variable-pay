@@ -60,9 +60,9 @@ export function AppSidebar() {
   );
 
   return (
-    <aside className="flex h-screen w-64 flex-col bg-sidebar border-r border-sidebar-border">
+    <aside className="flex h-screen w-64 flex-col bg-sidebar border-r border-sidebar-border shadow-lg">
       {/* Logo */}
-      <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
+      <div className="flex h-16 items-center px-6 border-b border-sidebar-border bg-sidebar/95">
         <AzentioLogo variant="light" size="sm" />
       </div>
 
@@ -74,20 +74,23 @@ export function AppSidebar() {
             <NavLink
               key={item.name}
               to={item.href}
-              className={`nav-item ${isActive ? "active" : "text-sidebar-muted hover:text-sidebar-foreground"}`}
+              className={`nav-item ${isActive ? "active bg-sidebar-accent" : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
             >
-              <item.icon className="h-5 w-5" />
-              <span>{item.name}</span>
+              <item.icon className={`h-5 w-5 ${isActive ? "text-sidebar-primary" : ""}`} />
+              <span className={isActive ? "text-sidebar-foreground font-semibold" : ""}>{item.name}</span>
             </NavLink>
           );
         })}
       </nav>
 
-      {/* Sign Out */}
-      <div className="border-t border-sidebar-border p-3">
+      {/* User info section */}
+      <div className="border-t border-sidebar-border p-4">
+        <div className="mb-3 text-xs text-sidebar-muted uppercase tracking-wider">
+          GTM Variable Compensation
+        </div>
         <button
           onClick={handleSignOut}
-          className="nav-item w-full text-sidebar-muted hover:text-sidebar-foreground"
+          className="nav-item w-full text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
         >
           <LogOut className="h-5 w-5" />
           <span>Sign Out</span>
