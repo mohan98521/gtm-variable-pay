@@ -7,122 +7,122 @@
 
 @layer base {
   :root {
-    /* Azentio Corporate Color Palette */
-    --background: 0 0% 100%;
-    --foreground: 195 40% 16%;
+    /* Azentio Corporate Color Palette - Deep Blues & Teals */
+    --background: 210 40% 98%;
+    --foreground: 210 50% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 195 40% 16%;
+    --card-foreground: 210 50% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 195 40% 16%;
+    --popover-foreground: 210 50% 12%;
 
-    /* Deep Corporate Teal - Primary (Azentio Dark Navy) */
-    --primary: 195 50% 18%;
+    /* Deep Corporate Navy - Primary (Azentio Brand) */
+    --primary: 210 60% 18%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Light gray for subtle backgrounds */
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 195 50% 18%;
+    /* Secondary - Subtle blue-gray backgrounds */
+    --secondary: 210 25% 95%;
+    --secondary-foreground: 210 50% 18%;
 
-    --muted: 210 15% 96%;
-    --muted-foreground: 195 20% 40%;
+    --muted: 210 20% 94%;
+    --muted-foreground: 210 25% 45%;
 
-    /* Azentio Mint Green - Accent for CTAs */
-    --accent: 166 76% 47%;
-    --accent-foreground: 195 50% 18%;
+    /* Azentio Teal - Accent for CTAs and highlights */
+    --accent: 175 70% 40%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Success green for positive metrics */
-    --success: 166 76% 47%;
-    --success-foreground: 195 50% 18%;
+    /* Success teal for positive metrics */
+    --success: 160 70% 40%;
+    --success-foreground: 0 0% 100%;
 
     /* Warning amber */
     --warning: 38 92% 50%;
-    --warning-foreground: 195 50% 18%;
+    --warning-foreground: 210 50% 12%;
 
-    --border: 210 20% 90%;
-    --input: 210 20% 90%;
-    --ring: 166 76% 47%;
+    --border: 210 25% 88%;
+    --input: 210 25% 88%;
+    --ring: 175 70% 40%;
 
     --radius: 0.5rem;
 
-    /* Sidebar - Deep Corporate Teal */
-    --sidebar-background: 195 50% 14%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 166 76% 47%;
-    --sidebar-primary-foreground: 195 50% 18%;
-    --sidebar-accent: 195 45% 20%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 195 40% 22%;
-    --sidebar-ring: 166 76% 47%;
-    --sidebar-muted: 195 20% 60%;
+    /* Sidebar - Deep Corporate Navy */
+    --sidebar-background: 210 55% 12%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 175 70% 50%;
+    --sidebar-primary-foreground: 210 55% 12%;
+    --sidebar-accent: 210 50% 18%;
+    --sidebar-accent-foreground: 210 20% 95%;
+    --sidebar-border: 210 45% 20%;
+    --sidebar-ring: 175 70% 50%;
+    --sidebar-muted: 210 20% 55%;
 
-    /* Chart colors */
-    --chart-1: 195 50% 18%;
-    --chart-2: 166 76% 47%;
-    --chart-3: 142 71% 45%;
+    /* Chart colors - Azentio palette */
+    --chart-1: 210 60% 18%;
+    --chart-2: 175 70% 40%;
+    --chart-3: 160 70% 45%;
     --chart-4: 38 92% 50%;
-    --chart-5: 262 83% 58%;
+    --chart-5: 280 70% 55%;
 
     /* Gradient tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(195 50% 18%), hsl(195 45% 25%));
-    --gradient-accent: linear-gradient(135deg, hsl(166 76% 47%), hsl(166 70% 55%));
-    --gradient-success: linear-gradient(135deg, hsl(166 76% 47%), hsl(166 70% 55%));
+    --gradient-primary: linear-gradient(135deg, hsl(210 60% 18%), hsl(210 55% 25%));
+    --gradient-accent: linear-gradient(135deg, hsl(175 70% 40%), hsl(175 65% 50%));
+    --gradient-success: linear-gradient(135deg, hsl(160 70% 40%), hsl(160 65% 50%));
 
     /* Shadow tokens */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px 0 rgb(0 0 0 / 0.03);
   }
 
   .dark {
-    --background: 195 40% 8%;
-    --foreground: 0 0% 95%;
+    --background: 210 50% 6%;
+    --foreground: 210 15% 92%;
 
-    --card: 195 40% 12%;
-    --card-foreground: 0 0% 95%;
+    --card: 210 45% 10%;
+    --card-foreground: 210 15% 92%;
 
-    --popover: 195 40% 12%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 210 45% 10%;
+    --popover-foreground: 210 15% 92%;
 
-    --primary: 166 76% 47%;
-    --primary-foreground: 195 50% 10%;
+    --primary: 175 70% 50%;
+    --primary-foreground: 210 55% 8%;
 
-    --secondary: 195 35% 18%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 210 40% 15%;
+    --secondary-foreground: 210 15% 92%;
 
-    --muted: 195 35% 18%;
-    --muted-foreground: 195 15% 60%;
+    --muted: 210 40% 15%;
+    --muted-foreground: 210 20% 55%;
 
-    --accent: 166 76% 47%;
-    --accent-foreground: 195 50% 10%;
+    --accent: 175 70% 50%;
+    --accent-foreground: 210 55% 8%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 166 76% 47%;
-    --success-foreground: 195 50% 10%;
+    --success: 160 70% 45%;
+    --success-foreground: 210 55% 8%;
 
     --warning: 38 92% 50%;
-    --warning-foreground: 195 50% 10%;
+    --warning-foreground: 210 55% 8%;
 
-    --border: 195 35% 22%;
-    --input: 195 35% 22%;
-    --ring: 166 76% 47%;
+    --border: 210 40% 18%;
+    --input: 210 40% 18%;
+    --ring: 175 70% 50%;
 
-    --sidebar-background: 195 45% 6%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 166 76% 47%;
-    --sidebar-primary-foreground: 195 50% 10%;
-    --sidebar-accent: 195 40% 15%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 195 35% 18%;
-    --sidebar-ring: 166 76% 47%;
-    --sidebar-muted: 195 20% 50%;
+    --sidebar-background: 210 55% 5%;
+    --sidebar-foreground: 210 15% 92%;
+    --sidebar-primary: 175 70% 50%;
+    --sidebar-primary-foreground: 210 55% 8%;
+    --sidebar-accent: 210 45% 12%;
+    --sidebar-accent-foreground: 210 15% 92%;
+    --sidebar-border: 210 40% 15%;
+    --sidebar-ring: 175 70% 50%;
+    --sidebar-muted: 210 20% 50%;
   }
 }
 

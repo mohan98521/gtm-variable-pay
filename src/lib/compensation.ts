@@ -33,6 +33,93 @@ export function getBonusSplit(salesFunction: string | null | undefined): MetricS
   return BONUS_SPLITS[salesFunction] ?? DEFAULT_BONUS_SPLIT;
 }
 
+// ============= PRO-RATION UTILITIES =============
+
+export interface ProRationInput {
+  effectiveStartDate: Date | string;
+  effectiveEndDate: Date | string;
+  targetBonusUSD: number;
+  fullYearDays?: number; // defaults to 365
+}
+
+export interface ProRationResult {
+  proRatedTargetBonusUSD: number;
+  proRationFactor: number; // 0.0 to 1.0
+  daysInPeriod: number;
+  fullYearDays: number;
+}
+
+/**
+ * Calculate pro-rated target bonus based on effective dates.
+ * For new joiners: start date = joining date
+ * For existing employees: start date = Jan 1st
+ * End date = Dec 31st unless earlier departure
+ */
+export function calculateProRation(input: ProRationInput): ProRationResult {
+  const fullYearDays = input.fullYearDays ?? 365;
+  
+  const startDate = typeof input.effectiveStartDate === 'string' 
+    ? new Date(input.effectiveStartDate) 
+    : input.effectiveStartDate;
+  
+  const endDate = typeof input.effectiveEndDate === 'string' 
+    ? new Date(input.effectiveEndDate) 
+    : input.effectiveEndDate;
+  
+  // Calculate days in period (inclusive of both start and end dates)
+  const timeDiff = endDate.getTime() - startDate.getTime();
+  const daysInPeriod = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
+  
+  // Calculate pro-ration factor (capped at 1.0)
+  const proRationFactor = Math.min(daysInPeriod / fullYearDays, 1.0);
+  
+  // Calculate pro-rated target bonus
+  const proRatedTargetBonusUSD = input.targetBonusUSD * proRationFactor;
+  
+  return {
+    proRatedTargetBonusUSD,
+    proRationFactor,
+    daysInPeriod: Math.max(0, daysInPeriod),
+    fullYearDays,
+  };
+}
+
+/**
+ * Helper to determine effective dates for an employee
+ * @param dateOfHire - Employee's hire date (null for existing employees assumed before current year)
+ * @param currentYear - The fiscal year to calculate for (defaults to current year)
+ * @returns Start and end dates for the compensation period
+ */
+export function getEffectiveDates(
+  dateOfHire: Date | string | null,
+  departureDate: Date | string | null = null,
+  currentYear: number = new Date().getFullYear()
+): { startDate: Date; endDate: Date } {
+  const yearStart = new Date(currentYear, 0, 1); // Jan 1st
+  const yearEnd = new Date(currentYear, 11, 31); // Dec 31st
+  
+  let startDate = yearStart;
+  let endDate = yearEnd;
+  
+  // For new joiners, use hire date if it's in the current year
+  if (dateOfHire) {
+    const hireDate = typeof dateOfHire === 'string' ? new Date(dateOfHire) : dateOfHire;
+    if (hireDate.getFullYear() === currentYear && hireDate > yearStart) {
+      startDate = hireDate;
+    }
+  }
+  
+  // Handle early departure
+  if (departureDate) {
+    const depDate = typeof departureDate === 'string' ? new Date(departureDate) : departureDate;
+    if (depDate.getFullYear() === currentYear && depDate < yearEnd) {
+      endDate = depDate;
+    }
+  }
+  
+  return { startDate, endDate };
+}
+
 // Calculate bonus allocation for each metric based on total target bonus
 export function calculateBonusAllocation(
   targetBonusUSD: number,
@@ -127,31 +214,68 @@ export function calculateMetricPayout(
   return { multiplier, payout };
 }
 
+// ============= CURRENCY CONVERSION =============
+
+export interface CurrencyAmount {
+  localCurrency: number;
+  usd: number;
+  currencyCode: string;
+}
+
+export function convertToUSD(
+  localAmount: number,
+  exchangeRateToUSD: number
+): number {
+  return localAmount * exchangeRateToUSD;
+}
+
+export function convertFromUSD(
+  usdAmount: number,
+  exchangeRateToUSD: number
+): number {
+  if (exchangeRateToUSD === 0) return 0;
+  return usdAmount / exchangeRateToUSD;
+}
+
 // ============= VARIABLE PAY CALCULATION =============
+
+export interface MetricPayoutDetail {
+  targetValue: number;
+  actualValue: number;
+  achievementPercent: number;
+  bonusAllocation: number;
+  multiplier: number;
+  payout: number;
+}
 
 export interface VariablePayCalculation {
   employeeId: string;
   salesFunction: string;
   targetBonusUSD: number;
-  newSoftwareBookingARR: {
-    targetValue: number;
-    actualValue: number;
-    achievementPercent: number;
-    bonusAllocation: number;
-    multiplier: number;
-    payout: number;
-  };
-  closingARR: {
-    targetValue: number;
-    actualValue: number;
-    achievementPercent: number;
-    bonusAllocation: number;
-    multiplier: number;
-    payout: number;
-  };
-  totalPayout: number;
+  proRatedTargetBonusUSD: number;
+  proRationFactor: number;
+  newSoftwareBookingARR: MetricPayoutDetail;
+  closingARR: MetricPayoutDetail;
+  totalPayout: CurrencyAmount;
+  currencyCode: string;
+  exchangeRateToUSD: number;
 }
 
+export interface VariablePayInput {
+  employeeId: string;
+  salesFunction: string;
+  targetBonusUSD: number;
+  effectiveStartDate: Date | string;
+  effectiveEndDate: Date | string;
+  newBookingTarget: number;
+  newBookingActual: number;
+  closingTarget: number;
+  closingActual: number;
+  currencyCode?: string;
+  exchangeRateToUSD?: number;
+}
+
+export function calculateVariablePay(input: VariablePayInput): VariablePayCalculation;
 export function calculateVariablePay(
   employeeId: string,
   salesFunction: string,
@@ -160,46 +284,101 @@ export function calculateVariablePay(
   newBookingActual: number,
   closingTarget: number,
   closingActual: number
+): VariablePayCalculation;
+
+export function calculateVariablePay(
+  employeeIdOrInput: string | VariablePayInput,
+  salesFunction?: string,
+  targetBonusUSD?: number,
+  newBookingTarget?: number,
+  newBookingActual?: number,
+  closingTarget?: number,
+  closingActual?: number
 ): VariablePayCalculation {
-  const bonusAllocation = calculateBonusAllocation(targetBonusUSD, salesFunction);
+  // Handle both function signatures
+  let input: VariablePayInput;
   
-  const newBookingAchievement = calculateAchievementPercent(newBookingActual, newBookingTarget);
-  const closingAchievement = calculateAchievementPercent(closingActual, closingTarget);
+  if (typeof employeeIdOrInput === 'object') {
+    input = employeeIdOrInput;
+  } else {
+    // Legacy signature - use full year
+    const currentYear = new Date().getFullYear();
+    input = {
+      employeeId: employeeIdOrInput,
+      salesFunction: salesFunction!,
+      targetBonusUSD: targetBonusUSD!,
+      effectiveStartDate: new Date(currentYear, 0, 1),
+      effectiveEndDate: new Date(currentYear, 11, 31),
+      newBookingTarget: newBookingTarget!,
+      newBookingActual: newBookingActual!,
+      closingTarget: closingTarget!,
+      closingActual: closingActual!,
+      currencyCode: 'USD',
+      exchangeRateToUSD: 1,
+    };
+  }
+
+  const currencyCode = input.currencyCode ?? 'USD';
+  const exchangeRateToUSD = input.exchangeRateToUSD ?? 1;
+
+  // Calculate pro-ration
+  const proRation = calculateProRation({
+    effectiveStartDate: input.effectiveStartDate,
+    effectiveEndDate: input.effectiveEndDate,
+    targetBonusUSD: input.targetBonusUSD,
+  });
+
+  // Use pro-rated target bonus for allocations
+  const bonusAllocation = calculateBonusAllocation(proRation.proRatedTargetBonusUSD, input.salesFunction);
+  
+  const newBookingAchievement = calculateAchievementPercent(input.newBookingActual, input.newBookingTarget);
+  const closingAchievement = calculateAchievementPercent(input.closingActual, input.closingTarget);
   
   const newBookingResult = calculateMetricPayout(
     newBookingAchievement,
     bonusAllocation.newSoftwareBookingARR,
-    salesFunction,
+    input.salesFunction,
     "New Software Booking ARR"
   );
   
   const closingResult = calculateMetricPayout(
     closingAchievement,
     bonusAllocation.closingARR,
-    salesFunction,
+    input.salesFunction,
     "Closing ARR"
   );
   
+  const totalPayoutUSD = newBookingResult.payout + closingResult.payout;
+  const totalPayoutLocal = convertFromUSD(totalPayoutUSD, exchangeRateToUSD);
+
   return {
-    employeeId,
-    salesFunction,
-    targetBonusUSD,
+    employeeId: input.employeeId,
+    salesFunction: input.salesFunction,
+    targetBonusUSD: input.targetBonusUSD,
+    proRatedTargetBonusUSD: proRation.proRatedTargetBonusUSD,
+    proRationFactor: proRation.proRationFactor,
     newSoftwareBookingARR: {
-      targetValue: newBookingTarget,
-      actualValue: newBookingActual,
+      targetValue: input.newBookingTarget,
+      actualValue: input.newBookingActual,
       achievementPercent: newBookingAchievement,
       bonusAllocation: bonusAllocation.newSoftwareBookingARR,
       multiplier: newBookingResult.multiplier,
       payout: newBookingResult.payout,
     },
     closingARR: {
-      targetValue: closingTarget,
-      actualValue: closingActual,
+      targetValue: input.closingTarget,
+      actualValue: input.closingActual,
       achievementPercent: closingAchievement,
       bonusAllocation: bonusAllocation.closingARR,
       multiplier: closingResult.multiplier,
       payout: closingResult.payout,
     },
-    totalPayout: newBookingResult.payout + closingResult.payout,
+    totalPayout: {
+      localCurrency: totalPayoutLocal,
+      usd: totalPayoutUSD,
+      currencyCode,
+    },
+    currencyCode,
+    exchangeRateToUSD,
   };
 }
