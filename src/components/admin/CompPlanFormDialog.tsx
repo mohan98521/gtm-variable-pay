@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Calendar } from "lucide-react";
 
 const compPlanSchema = z.object({
   name: z.string().trim().min(1, "Plan name is required").max(100, "Plan name must be less than 100 characters"),
@@ -46,6 +46,7 @@ interface CompPlanFormDialogProps {
   plan?: CompPlan | null;
   onSubmit: (values: CompPlanFormValues) => void;
   isSubmitting: boolean;
+  selectedYear?: number;
 }
 
 export function CompPlanFormDialog({
@@ -54,8 +55,10 @@ export function CompPlanFormDialog({
   plan,
   onSubmit,
   isSubmitting,
+  selectedYear,
 }: CompPlanFormDialogProps) {
   const isEditing = !!plan;
+  const displayYear = selectedYear || new Date().getFullYear();
 
   const form = useForm<CompPlanFormValues>({
     resolver: zodResolver(compPlanSchema),
@@ -102,6 +105,16 @@ export function CompPlanFormDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            {/* Fiscal Year Indicator */}
+            {!isEditing && (
+              <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Creating plan for fiscal year: <strong className="text-foreground">{displayYear}</strong>
+                </span>
+              </div>
+            )}
+            
             <FormField
               control={form.control}
               name="name"
@@ -109,7 +122,7 @@ export function CompPlanFormDialog({
                 <FormItem>
                   <FormLabel>Plan Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Hunter 2025" {...field} />
+                    <Input placeholder="e.g., Hunter" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

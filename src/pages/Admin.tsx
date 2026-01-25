@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Calendar } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -25,7 +25,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useCompPlans, CompPlan } from "@/hooks/useCompPlans";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useCompPlans, useAvailableYears, CompPlan } from "@/hooks/useCompPlans";
 import { useUserTargets } from "@/hooks/useUserTargets";
 import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
 import { RoleManagement } from "@/components/admin/RoleManagement";
@@ -43,7 +50,13 @@ export default function Admin() {
   const queryClient = useQueryClient();
   const { isAdmin } = useUserRole();
   const { canAccessTab, canPerformAction } = usePermissions();
-  const { data: compPlans, isLoading: plansLoading } = useCompPlans();
+  
+  // Year selection state
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  
+  const { data: availableYears, isLoading: yearsLoading } = useAvailableYears();
+  const { data: compPlans, isLoading: plansLoading } = useCompPlans(selectedYear);
   const { data: allTargets, isLoading: targetsLoading } = useUserTargets();
 
   // Dialog states
@@ -52,7 +65,7 @@ export default function Admin() {
   const [viewingPlan, setViewingPlan] = useState<CompPlan | null>(null);
   const [deletingPlan, setDeletingPlan] = useState<CompPlan | null>(null);
 
-  const isLoading = plansLoading || targetsLoading;
+  const isLoading = plansLoading || targetsLoading || yearsLoading;
 
   // Create plan mutation
   const createPlanMutation = useMutation({
@@ -63,6 +76,7 @@ export default function Admin() {
           name: values.name,
           description: values.description || null,
           is_active: values.is_active,
+          effective_year: selectedYear,
         })
         .select()
         .single();
@@ -71,6 +85,7 @@ export default function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["comp_plans"] });
+      queryClient.invalidateQueries({ queryKey: ["comp_plan_years"] });
       setShowFormDialog(false);
       toast({ title: "Plan created", description: "Compensation plan has been created successfully." });
     },
@@ -216,8 +231,27 @@ export default function Admin() {
 
           {/* Plans Tab */}
           <TabsContent value="plans" className="space-y-6">
-            {/* Action Button */}
-            <div className="flex justify-end">
+            {/* Year Selector and Action Button */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">Fiscal Year:</span>
+                <Select
+                  value={selectedYear.toString()}
+                  onValueChange={(val) => setSelectedYear(parseInt(val))}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableYears?.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button variant="accent" onClick={handleCreatePlan}>
                 <Plus className="h-4 w-4 mr-1.5" />
                 Create New Plan
@@ -410,6 +444,7 @@ export default function Admin() {
         plan={editingPlan}
         onSubmit={handleFormSubmit}
         isSubmitting={createPlanMutation.isPending || updatePlanMutation.isPending}
+        selectedYear={selectedYear}
       />
 
       {/* View Plan Details Dialog */}

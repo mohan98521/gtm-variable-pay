@@ -6,21 +6,51 @@ export interface CompPlan {
   name: string;
   description: string | null;
   is_active: boolean;
+  effective_year: number;
   created_at: string;
   updated_at: string;
 }
 
-export function useCompPlans() {
+export function useCompPlans(year?: number) {
   return useQuery({
-    queryKey: ["comp_plans"],
+    queryKey: ["comp_plans", year],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("comp_plans")
         .select("*")
         .order("name");
 
+      if (year) {
+        query = query.eq("effective_year", year);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as CompPlan[];
+    },
+  });
+}
+
+export function useAvailableYears() {
+  return useQuery({
+    queryKey: ["comp_plan_years"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("comp_plans")
+        .select("effective_year")
+        .order("effective_year", { ascending: false });
+
+      if (error) throw error;
+
+      // Get unique years
+      const years = [...new Set(data?.map((d) => d.effective_year) || [])];
+
+      // Ensure current year and next year are always available
+      const currentYear = new Date().getFullYear();
+      if (!years.includes(currentYear)) years.push(currentYear);
+      if (!years.includes(currentYear + 1)) years.push(currentYear + 1);
+
+      return years.sort((a, b) => b - a); // Descending order
     },
   });
 }
