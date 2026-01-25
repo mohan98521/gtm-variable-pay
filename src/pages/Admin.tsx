@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -30,9 +30,11 @@ import { useUserTargets } from "@/hooks/useUserTargets";
 import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
 import { RoleManagement } from "@/components/admin/RoleManagement";
 import { BulkUpload } from "@/components/admin/BulkUpload";
+import { PermissionsManagement } from "@/components/admin/PermissionsManagement";
 import { CompPlanFormDialog } from "@/components/admin/CompPlanFormDialog";
 import { CompPlanDetailsDialog } from "@/components/admin/CompPlanDetailsDialog";
 import { useUserRole } from "@/hooks/useUserRole";
+import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -40,6 +42,7 @@ export default function Admin() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isAdmin } = useUserRole();
+  const { canAccessTab, canPerformAction } = usePermissions();
   const { data: compPlans, isLoading: plansLoading } = useCompPlans();
   const { data: allTargets, isLoading: targetsLoading } = useUserTargets();
 
@@ -179,25 +182,35 @@ export default function Admin() {
         {/* Tabs */}
         <Tabs defaultValue="plans" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="plans" className="gap-2">
-              <Layers className="h-4 w-4" />
-              Compensation Plans
-            </TabsTrigger>
+            {canAccessTab("tab:comp_plans") && (
+              <TabsTrigger value="plans" className="gap-2">
+                <Layers className="h-4 w-4" />
+                Compensation Plans
+              </TabsTrigger>
+            )}
+            {canAccessTab("tab:employee_accounts") && (
+              <TabsTrigger value="accounts" className="gap-2">
+                <UserCog className="h-4 w-4" />
+                Employee Accounts
+              </TabsTrigger>
+            )}
+            {canAccessTab("tab:bulk_upload") && (
+              <TabsTrigger value="bulk-upload" className="gap-2">
+                <Upload className="h-4 w-4" />
+                Bulk Upload
+              </TabsTrigger>
+            )}
+            {canAccessTab("tab:role_management") && (
+              <TabsTrigger value="roles" className="gap-2">
+                <Shield className="h-4 w-4" />
+                Role Management
+              </TabsTrigger>
+            )}
             {isAdmin() && (
-              <>
-                <TabsTrigger value="accounts" className="gap-2">
-                  <UserCog className="h-4 w-4" />
-                  Employee Accounts
-                </TabsTrigger>
-                <TabsTrigger value="bulk-upload" className="gap-2">
-                  <Upload className="h-4 w-4" />
-                  Bulk Upload
-                </TabsTrigger>
-                <TabsTrigger value="roles" className="gap-2">
-                  <Shield className="h-4 w-4" />
-                  Role Management
-                </TabsTrigger>
-              </>
+              <TabsTrigger value="permissions" className="gap-2">
+                <Lock className="h-4 w-4" />
+                Permissions
+              </TabsTrigger>
             )}
           </TabsList>
 
@@ -357,24 +370,31 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          {/* Employee Accounts Tab - Admin Only */}
-          {isAdmin() && (
+          {/* Employee Accounts Tab */}
+          {canAccessTab("tab:employee_accounts") && (
             <TabsContent value="accounts">
               <EmployeeAccounts />
             </TabsContent>
           )}
 
-          {/* Bulk Upload Tab - Admin Only */}
-          {isAdmin() && (
+          {/* Bulk Upload Tab */}
+          {canAccessTab("tab:bulk_upload") && (
             <TabsContent value="bulk-upload">
               <BulkUpload />
             </TabsContent>
           )}
 
-          {/* Role Management Tab - Admin Only */}
-          {isAdmin() && (
+          {/* Role Management Tab */}
+          {canAccessTab("tab:role_management") && (
             <TabsContent value="roles">
               <RoleManagement />
+            </TabsContent>
+          )}
+
+          {/* Permissions Tab - Admin Only */}
+          {isAdmin() && (
+            <TabsContent value="permissions">
+              <PermissionsManagement />
             </TabsContent>
           )}
         </Tabs>
