@@ -14,24 +14,25 @@ interface UploadResult {
   errors: string[];
 }
 
+// All 17 employee fields
 const EMPLOYEE_HEADERS = [
-  "employee_id",
   "full_name",
   "email",
+  "employee_id",
   "designation",
-  "country",
-  "city",
+  "sales_function",
+  "business_unit",
+  "group_name",
+  "function_area",
+  "manager_employee_id",
   "date_of_hire",
-  "departure_date",
+  "is_active",
+  "city",
+  "country",
+  "local_currency",
   "department",
   "region",
-  "group_name",
-  "business_unit",
-  "function_area",
-  "sales_function",
-  "local_currency",
-  "manager_employee_id",
-  "is_active",
+  "departure_date",
 ];
 
 const USER_TARGETS_HEADERS = [
@@ -59,23 +60,23 @@ export function BulkUpload() {
     const allHeaders = [...EMPLOYEE_HEADERS, ...USER_TARGETS_HEADERS.slice(1)];
     const csvContent = allHeaders.join(",") + "\n";
     const sampleRow = [
-      "EMP001",
       "John Doe",
       "john.doe@example.com",
+      "EMP001",
       "Sales Manager",
-      "USA",
-      "New York",
+      "Hunter",
+      "Enterprise",
+      "GTM",
+      "Sales",
+      "EMP000",
       "2024-01-15",
-      "",
+      "true",
+      "New York",
+      "USA",
+      "USD",
       "Sales",
       "North America",
-      "GTM",
-      "Enterprise",
-      "Sales",
-      "Hunter",
-      "USD",
-      "EMP000",
-      "true",
+      "",
       "Standard Plan 2026",
       "2026-01-01",
       "2026-12-31",
@@ -127,25 +128,25 @@ export function BulkUpload() {
       setProgress(Math.round(((i + 1) / total) * 100));
       
       try {
-        // Prepare employee data
+        // Prepare employee data with all 17 fields
         const employeeData = {
-          employee_id: row.employee_id,
           full_name: row.full_name,
           email: row.email,
+          employee_id: row.employee_id,
           designation: row.designation || null,
-          country: row.country || null,
-          city: row.city || null,
+          sales_function: row.sales_function || null,
+          business_unit: row.business_unit || null,
+          group_name: row.group_name || null,
+          function_area: row.function_area || null,
+          manager_employee_id: row.manager_employee_id || null,
           date_of_hire: row.date_of_hire || null,
-          departure_date: row.departure_date || null,
+          is_active: row.is_active?.toLowerCase() !== "false",
+          city: row.city || null,
+          country: row.country || null,
+          local_currency: row.local_currency || "USD",
           department: row.department || null,
           region: row.region || null,
-          group_name: row.group_name || null,
-          business_unit: row.business_unit || null,
-          function_area: row.function_area || null,
-          sales_function: row.sales_function || null,
-          local_currency: row.local_currency || "USD",
-          manager_employee_id: row.manager_employee_id || null,
-          is_active: row.is_active?.toLowerCase() !== "false",
+          departure_date: row.departure_date || null,
         };
 
         // Check if employee exists
@@ -265,6 +266,7 @@ export function BulkUpload() {
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ["employees"] });
       queryClient.invalidateQueries({ queryKey: ["user_targets"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
       
       if (uploadResult.errors.length === 0) {
         toast.success(`Upload complete: ${uploadResult.created} created, ${uploadResult.updated} updated`);
@@ -291,13 +293,22 @@ export function BulkUpload() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
-            Bulk Upload Utility
+            Employee Data Management - Bulk Upload
           </CardTitle>
           <CardDescription>
-            Upload employee and compensation target data via CSV. Existing records will be updated based on Employee ID or Email.
+            Upload employee data (all 17 fields) and compensation targets via CSV. Records are matched by Email or Employee ID for upsert.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="bg-muted/50 p-4 rounded-lg">
+            <h4 className="font-medium mb-2">Supported Fields (17 Employee Fields):</h4>
+            <p className="text-sm text-muted-foreground">
+              Full Name, Email, Employee ID, Designation, Sales Function, Business Unit, Group Name, 
+              Function Area, Manager (Employee ID), Date of Hire, Is Active, City, Country, Local Currency, 
+              Department, Region, Departure Date
+            </p>
+          </div>
+
           <Button 
             onClick={generateTemplate} 
             variant="outline"

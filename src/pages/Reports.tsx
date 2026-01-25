@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Search, Users, DollarSign, Calculator } from "lucide-react";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Download, Search, Users, DollarSign, Calculator, Columns } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { calculateProRation, getEffectiveDates, calculateBonusAllocation, calculateAchievementPercent, getPayoutMultiplier } from "@/lib/compensation";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const SALES_FUNCTIONS = [
   "All",
@@ -22,6 +24,27 @@ const SALES_FUNCTIONS = [
   "Farmer - Retain",
   "Channel Sales",
   "Sales Engineering",
+];
+
+// All 17 employee fields for the master report
+const ALL_EMPLOYEE_COLUMNS = [
+  { key: "full_name", label: "Full Name", default: true },
+  { key: "email", label: "Email", default: true },
+  { key: "employee_id", label: "Employee ID", default: true },
+  { key: "designation", label: "Designation", default: true },
+  { key: "sales_function", label: "Sales Function", default: true },
+  { key: "business_unit", label: "Business Unit", default: false },
+  { key: "group_name", label: "Group Name", default: false },
+  { key: "function_area", label: "Function Area", default: false },
+  { key: "manager_employee_id", label: "Manager ID", default: false },
+  { key: "date_of_hire", label: "Date of Hire", default: true },
+  { key: "is_active", label: "Status", default: true },
+  { key: "city", label: "City", default: false },
+  { key: "country", label: "Country", default: false },
+  { key: "local_currency", label: "Local Currency", default: false },
+  { key: "department", label: "Department", default: false },
+  { key: "region", label: "Region", default: false },
+  { key: "departure_date", label: "Departure Date", default: false },
 ];
 
 interface Employee {
@@ -37,6 +60,12 @@ interface Employee {
   is_active: boolean;
   sales_function: string | null;
   local_currency: string;
+  business_unit: string | null;
+  group_name: string | null;
+  function_area: string | null;
+  manager_employee_id: string | null;
+  city: string | null;
+  country: string | null;
 }
 
 interface UserTarget {
@@ -74,6 +103,9 @@ interface MonthlyBooking {
 export default function Reports() {
   const [searchTerm, setSearchTerm] = useState("");
   const [salesFunctionFilter, setSalesFunctionFilter] = useState("All");
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(
+    ALL_EMPLOYEE_COLUMNS.filter((c) => c.default).map((c) => c.key)
+  );
 
   // Fetch employees
   const { data: employees = [] } = useQuery({
@@ -159,7 +191,7 @@ export default function Reports() {
 
       const { startDate, endDate } = getEffectiveDates(
         profile.date_of_hire,
-        null, // departure_date would come from employees table
+        null,
         2026
       );
 
@@ -213,7 +245,6 @@ export default function Reports() {
       const actuals = actualMap.get(empId) || { newBooking: 0, closing: 0 };
       const salesFunction = employee?.sales_function || "Hunter";
 
-      // Find user target for this employee
       const userTarget = userTargets.find(ut => 
         ut.profiles?.email === employee?.email
       );
@@ -262,7 +293,56 @@ export default function Reports() {
     });
   }, [incentiveAuditData, searchTerm, salesFunctionFilter]);
 
-  // CSV Export function
+  // Toggle column visibility
+  const toggleColumn = (key: string) => {
+    setVisibleColumns((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  // Get cell value for employee table
+  const getCellValue = (emp: Employee, key: string): string => {
+    switch (key) {
+      case "full_name":
+        return emp.full_name;
+      case "email":
+        return emp.email;
+      case "employee_id":
+        return emp.employee_id;
+      case "designation":
+        return emp.designation || "-";
+      case "sales_function":
+        return emp.sales_function || "-";
+      case "business_unit":
+        return emp.business_unit || "-";
+      case "group_name":
+        return emp.group_name || "-";
+      case "function_area":
+        return emp.function_area || "-";
+      case "manager_employee_id":
+        return emp.manager_employee_id || "-";
+      case "date_of_hire":
+        return emp.date_of_hire ? format(new Date(emp.date_of_hire), "MMM dd, yyyy") : "-";
+      case "is_active":
+        return emp.is_active ? "Active" : "Inactive";
+      case "city":
+        return emp.city || "-";
+      case "country":
+        return emp.country || "-";
+      case "local_currency":
+        return emp.local_currency;
+      case "department":
+        return emp.department || "-";
+      case "region":
+        return emp.region || "-";
+      case "departure_date":
+        return emp.departure_date ? format(new Date(emp.departure_date), "MMM dd, yyyy") : "-";
+      default:
+        return "-";
+    }
+  };
+
+  // CSV Export functions - always exports all 17 fields
   const exportToCSV = (data: any[], filename: string, headers: string[]) => {
     const csvRows = [headers.join(",")];
     data.forEach((row) => {
@@ -282,16 +362,28 @@ export default function Reports() {
     URL.revokeObjectURL(url);
   };
 
+  // Export all 17 fields regardless of visible columns
   const exportEmployees = () => {
     const data = filteredEmployees.map((e) => ({
-      name: e.full_name,
+      full_name: e.full_name,
+      email: e.email,
       employee_id: e.employee_id,
       designation: e.designation || "",
-      joining_date: e.date_of_hire || "",
-      status: e.is_active ? "Active" : "Inactive",
       sales_function: e.sales_function || "",
+      business_unit: e.business_unit || "",
+      group_name: e.group_name || "",
+      function_area: e.function_area || "",
+      manager_employee_id: e.manager_employee_id || "",
+      date_of_hire: e.date_of_hire || "",
+      is_active: e.is_active ? "Active" : "Inactive",
+      city: e.city || "",
+      country: e.country || "",
+      local_currency: e.local_currency,
+      department: e.department || "",
+      region: e.region || "",
+      departure_date: e.departure_date || "",
     }));
-    exportToCSV(data, "employee_master", ["name", "employee_id", "designation", "joining_date", "status", "sales_function"]);
+    exportToCSV(data, "employee_master_full", ALL_EMPLOYEE_COLUMNS.map((c) => c.key));
   };
 
   const exportCompensation = () => {
@@ -382,48 +474,72 @@ export default function Reports() {
             </CardContent>
           </Card>
 
-          {/* Tab 1: Employee Master Data */}
+          {/* Tab 1: Employee Master Data with Column Toggle */}
           <TabsContent value="employees">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Employee Master Data</CardTitle>
-                  <CardDescription>Complete employee directory with status information</CardDescription>
+                  <CardDescription>Complete 17-field employee directory with column toggle</CardDescription>
                 </div>
-                <Button onClick={exportEmployees} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
-                  <Download className="mr-2 h-4 w-4" />
-                  Export CSV
-                </Button>
+                <div className="flex gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="border-[hsl(var(--azentio-navy))]">
+                        <Columns className="mr-2 h-4 w-4" />
+                        Columns
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto">
+                      {ALL_EMPLOYEE_COLUMNS.map((col) => (
+                        <DropdownMenuCheckboxItem
+                          key={col.key}
+                          checked={visibleColumns.includes(col.key)}
+                          onCheckedChange={() => toggleColumn(col.key)}
+                        >
+                          {col.label}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button onClick={exportEmployees} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export All Fields
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                      <TableHead className="text-white font-semibold">Name</TableHead>
-                      <TableHead className="text-white font-semibold">Employee ID</TableHead>
-                      <TableHead className="text-white font-semibold">Designation</TableHead>
-                      <TableHead className="text-white font-semibold">Joining Date</TableHead>
-                      <TableHead className="text-white font-semibold">Sales Function</TableHead>
-                      <TableHead className="text-white font-semibold">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEmployees.map((emp) => (
-                      <TableRow key={emp.id} className="data-row">
-                        <TableCell className="font-medium">{emp.full_name}</TableCell>
-                        <TableCell>{emp.employee_id}</TableCell>
-                        <TableCell>{emp.designation || "-"}</TableCell>
-                        <TableCell>{emp.date_of_hire ? format(new Date(emp.date_of_hire), "MMM dd, yyyy") : "-"}</TableCell>
-                        <TableCell>{emp.sales_function || "-"}</TableCell>
-                        <TableCell>
-                          <span className={`status-badge ${emp.is_active ? "status-on-track" : "status-behind"}`}>
-                            {emp.is_active ? "Active" : "Inactive"}
-                          </span>
-                        </TableCell>
+                <ScrollArea className="w-full whitespace-nowrap">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                        {ALL_EMPLOYEE_COLUMNS.filter((c) => visibleColumns.includes(c.key)).map((col) => (
+                          <TableHead key={col.key} className="text-white font-semibold whitespace-nowrap">
+                            {col.label}
+                          </TableHead>
+                        ))}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredEmployees.map((emp) => (
+                        <TableRow key={emp.id} className="data-row">
+                          {ALL_EMPLOYEE_COLUMNS.filter((c) => visibleColumns.includes(c.key)).map((col) => (
+                            <TableCell key={col.key} className={col.key === "full_name" ? "font-medium" : ""}>
+                              {col.key === "is_active" ? (
+                                <span className={`status-badge ${emp.is_active ? "status-on-track" : "status-behind"}`}>
+                                  {emp.is_active ? "Active" : "Inactive"}
+                                </span>
+                              ) : (
+                                getCellValue(emp, col.key)
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
                 {filteredEmployees.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">No employees found</p>
                 )}
@@ -493,49 +609,52 @@ export default function Reports() {
                   Export CSV
                 </Button>
               </CardHeader>
-              <CardContent className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                      <TableHead className="text-white font-semibold">Name</TableHead>
-                      <TableHead className="text-white font-semibold">Function</TableHead>
-                      <TableHead className="text-white font-semibold text-right">New Booking Actual</TableHead>
-                      <TableHead className="text-white font-semibold text-right">New Booking Target</TableHead>
-                      <TableHead className="text-white font-semibold text-right">Achievement %</TableHead>
-                      <TableHead className="text-white font-semibold text-right">Multiplier</TableHead>
-                      <TableHead className="text-white font-semibold text-right">NB Payout</TableHead>
-                      <TableHead className="text-white font-semibold text-right">Closing Achievement</TableHead>
-                      <TableHead className="text-white font-semibold text-right">Closing Payout</TableHead>
-                      <TableHead className="text-white font-semibold text-right">Total Payout</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredAuditData.map((item) => (
-                      <TableRow key={item.employeeId} className="data-row">
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.salesFunction}</TableCell>
-                        <TableCell className="text-right">${item.actual.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">${item.target.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">
-                          <span className={item.achievementPct >= 100 ? "text-success" : item.achievementPct >= 85 ? "text-warning" : "text-destructive"}>
-                            {item.achievementPct.toFixed(1)}%
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">{item.multiplier}x</TableCell>
-                        <TableCell className="text-right">${item.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                        <TableCell className="text-right">
-                          <span className={item.closingAchievementPct >= 100 ? "text-success" : item.closingAchievementPct >= 85 ? "text-warning" : "text-destructive"}>
-                            {item.closingAchievementPct.toFixed(1)}%
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">${item.closingPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                        <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
-                          ${item.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        </TableCell>
+              <CardContent>
+                <ScrollArea className="w-full whitespace-nowrap">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                        <TableHead className="text-white font-semibold">Name</TableHead>
+                        <TableHead className="text-white font-semibold">Function</TableHead>
+                        <TableHead className="text-white font-semibold text-right">New Booking Actual</TableHead>
+                        <TableHead className="text-white font-semibold text-right">New Booking Target</TableHead>
+                        <TableHead className="text-white font-semibold text-right">Achievement %</TableHead>
+                        <TableHead className="text-white font-semibold text-right">Multiplier</TableHead>
+                        <TableHead className="text-white font-semibold text-right">NB Payout</TableHead>
+                        <TableHead className="text-white font-semibold text-right">Closing Achievement</TableHead>
+                        <TableHead className="text-white font-semibold text-right">Closing Payout</TableHead>
+                        <TableHead className="text-white font-semibold text-right">Total Payout</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAuditData.map((item) => (
+                        <TableRow key={item.employeeId} className="data-row">
+                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell>{item.salesFunction}</TableCell>
+                          <TableCell className="text-right">${item.actual.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">${item.target.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            <span className={item.achievementPct >= 100 ? "text-success" : item.achievementPct >= 85 ? "text-warning" : "text-destructive"}>
+                              {item.achievementPct.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">{item.multiplier}x</TableCell>
+                          <TableCell className="text-right">${item.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell className="text-right">
+                            <span className={item.closingAchievementPct >= 100 ? "text-success" : item.closingAchievementPct >= 85 ? "text-warning" : "text-destructive"}>
+                              {item.closingAchievementPct.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">${item.closingPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                            ${item.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
                 {filteredAuditData.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">No incentive data found</p>
                 )}
