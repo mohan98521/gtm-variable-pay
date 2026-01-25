@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Calendar, Copy } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Copy } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -25,14 +25,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useCompPlans, useAvailableYears, CompPlan } from "@/hooks/useCompPlans";
+import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { useUserTargets } from "@/hooks/useUserTargets";
 import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
 import { RoleManagement } from "@/components/admin/RoleManagement";
@@ -52,9 +46,8 @@ export default function Admin() {
   const { isAdmin } = useUserRole();
   const { canAccessTab, canPerformAction } = usePermissions();
   
-  // Year selection state
-  const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  // Use global fiscal year context
+  const { selectedYear, yearOptions } = useFiscalYear();
   
   const { data: availableYears, isLoading: yearsLoading } = useAvailableYears();
   const { data: compPlans, isLoading: plansLoading } = useCompPlans(selectedYear);
@@ -233,39 +226,18 @@ export default function Admin() {
 
           {/* Plans Tab */}
           <TabsContent value="plans" className="space-y-6">
-            {/* Year Selector and Action Buttons */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">Fiscal Year:</span>
-                <Select
-                  value={selectedYear.toString()}
-                  onValueChange={(val) => setSelectedYear(parseInt(val))}
-                >
-                  <SelectTrigger className="w-[120px]">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableYears?.map((year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedYear > (availableYears?.[availableYears.length - 1] || currentYear - 2) && (
-                  <Button variant="outline" onClick={() => setShowCopyDialog(true)}>
-                    <Copy className="h-4 w-4 mr-1.5" />
-                    Copy from {selectedYear - 1}
-                  </Button>
-                )}
-                <Button variant="accent" onClick={handleCreatePlan}>
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Create New Plan
+          {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2">
+              {selectedYear > (yearOptions[0] || selectedYear - 1) && (
+                <Button variant="outline" onClick={() => setShowCopyDialog(true)}>
+                  <Copy className="h-4 w-4 mr-1.5" />
+                  Copy from {selectedYear - 1}
                 </Button>
-              </div>
+              )}
+              <Button variant="accent" onClick={handleCreatePlan}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Create New Plan
+              </Button>
             </div>
 
             {/* Quick Stats */}
