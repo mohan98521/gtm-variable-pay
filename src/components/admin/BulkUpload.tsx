@@ -345,8 +345,8 @@ export function BulkUpload() {
             <h4 className="font-medium mb-2">Supported Fields (26 Employee Fields):</h4>
             <p className="text-sm text-muted-foreground">
               <strong>Core (17):</strong> Full Name, Email, Employee ID, Designation, Sales Function, Business Unit, Group Name, 
-              Function Area, Manager (Employee ID), Date of Hire, Is Active, City, Country, Local Currency, 
-              Department, Region, Departure Date
+              Function Area, Manager (Employee ID), Date of Joining, Is Active, City, Country, Local Currency, 
+              Department, Region, Last Working Day
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               <strong>Compensation (9):</strong> Employee Role, Incentive Type, Target Bonus %, TFP (LC), TVP (LC), 
