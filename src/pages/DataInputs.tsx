@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Calendar, FileSpreadsheet, CheckCircle, AlertCircle, Clock } from "lucide-react";
+import { Plus, Calendar, FileSpreadsheet, CheckCircle, Clock, Upload } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -14,30 +14,23 @@ import {
 } from "@/components/ui/select";
 import { DealsTable } from "@/components/data-inputs/DealsTable";
 import { DealFormDialog } from "@/components/data-inputs/DealFormDialog";
+import { DealsBulkUpload } from "@/components/data-inputs/DealsBulkUpload";
 import { useDeals, DealWithParticipants, METRIC_TYPES } from "@/hooks/useDeals";
-import { format, subMonths, addMonths } from "date-fns";
-
-// Generate month options for the last 12 months + next 3 months
-const generateMonthOptions = () => {
-  const options = [];
-  const today = new Date();
-  
-  for (let i = 11; i >= -3; i--) {
-    const date = i > 0 ? subMonths(today, i) : addMonths(today, Math.abs(i));
-    const value = format(date, "yyyy-MM-01");
-    const label = format(date, "MMMM yyyy");
-    options.push({ value, label });
-  }
-  
-  return options;
-};
-
-const monthOptions = generateMonthOptions();
+import { useFiscalYear } from "@/contexts/FiscalYearContext";
+import { format } from "date-fns";
 
 export default function DataInputs() {
-  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), "yyyy-MM-01"));
+  const { selectedYear, getMonthsForYear } = useFiscalYear();
+  const monthOptions = useMemo(() => getMonthsForYear(selectedYear), [selectedYear, getMonthsForYear]);
+  
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const currentMonth = format(new Date(), "yyyy-MM-01");
+    const yearMatch = monthOptions.find(m => m.value === currentMonth);
+    return yearMatch ? currentMonth : (monthOptions[0]?.value || currentMonth);
+  });
   const [selectedMetricType, setSelectedMetricType] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<DealWithParticipants | null>(null);
 
   // Fetch deals based on filters
@@ -105,6 +98,10 @@ export default function DataInputs() {
                 ))}
               </SelectContent>
             </Select>
+            <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
+              <Upload className="h-4 w-4 mr-1.5" />
+              Bulk Upload
+            </Button>
             <Button onClick={() => handleAddDeal()}>
               <Plus className="h-4 w-4 mr-1.5" />
               Add Deal
@@ -232,6 +229,12 @@ export default function DataInputs() {
           deal={editingDeal}
           defaultMonth={selectedMonth}
           defaultMetricType={selectedMetricType === "all" ? undefined : selectedMetricType}
+        />
+
+        {/* Bulk Upload Dialog */}
+        <DealsBulkUpload
+          open={bulkUploadOpen}
+          onOpenChange={setBulkUploadOpen}
         />
       </div>
     </AppLayout>

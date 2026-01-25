@@ -122,6 +122,53 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_audit_log: {
+        Row: {
+          action: string
+          changed_at: string
+          changed_by: string | null
+          deal_id: string | null
+          id: string
+          is_retroactive: boolean
+          new_values: Json | null
+          old_values: Json | null
+          period_month: string | null
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          changed_at?: string
+          changed_by?: string | null
+          deal_id?: string | null
+          id?: string
+          is_retroactive?: boolean
+          new_values?: Json | null
+          old_values?: Json | null
+          period_month?: string | null
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          changed_at?: string
+          changed_by?: string | null
+          deal_id?: string | null
+          id?: string
+          is_retroactive?: boolean
+          new_values?: Json | null
+          old_values?: Json | null
+          period_month?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_audit_log_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_participants: {
         Row: {
           created_at: string
@@ -159,6 +206,7 @@ export type Database = {
       }
       deals: {
         Row: {
+          business_unit: string | null
           client_name: string
           created_at: string
           deal_id: string
@@ -174,6 +222,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          business_unit?: string | null
           client_name: string
           created_at?: string
           deal_id: string
@@ -189,6 +238,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          business_unit?: string | null
           client_name?: string
           created_at?: string
           deal_id?: string
