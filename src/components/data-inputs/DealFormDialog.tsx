@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -28,10 +28,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 import { DealParticipantsEditor } from "./DealParticipantsEditor";
 import {
   DealWithParticipants,
   METRIC_TYPES,
+  BUSINESS_UNITS,
   DEAL_STATUSES,
   useCreateDeal,
   useUpdateDeal,
@@ -40,12 +43,14 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { useFiscalYear } from "@/contexts/FiscalYearContext";
 
 const dealFormSchema = z.object({
   deal_id: z.string().min(1, "Deal ID is required"),
   deal_name: z.string().min(1, "Deal name is required"),
   client_name: z.string().min(1, "Client name is required"),
   metric_type: z.string().min(1, "Metric type is required"),
+  business_unit: z.string().min(1, "Business unit is required"),
   month_year: z.string().min(1, "Month is required"),
   deal_value_usd: z.coerce.number().min(0, "Value must be positive"),
   deal_value_local: z.coerce.number().optional(),
@@ -81,6 +86,20 @@ export function DealFormDialog({
   const createDeal = useCreateDeal();
   const updateDeal = useUpdateDeal();
   const isEditing = !!deal;
+  const { selectedYear, getMonthsForYear } = useFiscalYear();
+
+  // Get months for the current fiscal year
+  const monthOptions = useMemo(() => getMonthsForYear(selectedYear), [selectedYear, getMonthsForYear]);
+
+  // Check if this is a retroactive change (editing past period)
+  const isRetroactiveChange = useMemo(() => {
+    if (!isEditing || !deal) return false;
+    const currentPeriod = new Date();
+    currentPeriod.setDate(1);
+    currentPeriod.setHours(0, 0, 0, 0);
+    const dealDate = new Date(deal.month_year);
+    return dealDate < currentPeriod;
+  }, [isEditing, deal]);
 
   // Fetch employees for the participant dropdown
   const { data: employees = [] } = useQuery({
@@ -104,6 +123,7 @@ export function DealFormDialog({
       deal_name: "",
       client_name: "",
       metric_type: defaultMetricType || "",
+      business_unit: "",
       month_year: defaultMonth || format(new Date(), "yyyy-MM-01"),
       deal_value_usd: 0,
       deal_value_local: undefined,
@@ -122,6 +142,7 @@ export function DealFormDialog({
           deal_name: deal.deal_name,
           client_name: deal.client_name,
           metric_type: deal.metric_type,
+          business_unit: deal.business_unit || "",
           month_year: deal.month_year,
           deal_value_usd: deal.deal_value_usd,
           deal_value_local: deal.deal_value_local || undefined,
@@ -138,12 +159,15 @@ export function DealFormDialog({
         );
       } else {
         const metricType = defaultMetricType || "software_arr";
+        // Use first month of fiscal year if no default
+        const defaultMonthValue = defaultMonth || (monthOptions.length > 0 ? monthOptions[new Date().getMonth()]?.value : format(new Date(), "yyyy-MM-01"));
         form.reset({
           deal_id: generateDealId(metricType),
           deal_name: "",
           client_name: "",
           metric_type: metricType,
-          month_year: defaultMonth || format(new Date(), "yyyy-MM-01"),
+          business_unit: "",
+          month_year: defaultMonthValue,
           deal_value_usd: 0,
           deal_value_local: undefined,
           local_currency: "USD",
@@ -153,7 +177,7 @@ export function DealFormDialog({
         setParticipants([]);
       }
     }
-  }, [open, deal, defaultMetricType, defaultMonth, form]);
+  }, [open, deal, defaultMetricType, defaultMonth, form, monthOptions]);
 
   // Auto-generate deal ID when metric type changes (only for new deals)
   const watchMetricType = form.watch("metric_type");
@@ -176,6 +200,7 @@ export function DealFormDialog({
         deal_name: values.deal_name,
         client_name: values.client_name,
         metric_type: values.metric_type,
+        business_unit: values.business_unit,
         month_year: values.month_year,
         deal_value_usd: values.deal_value_usd,
         deal_value_local: values.deal_value_local,
@@ -202,6 +227,17 @@ export function DealFormDialog({
               : "Enter deal details and assign team members."}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Retroactive Change Warning */}
+        {isRetroactiveChange && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Retroactive Change:</strong> You are editing a deal from a past period. 
+              This change will be logged in the audit trail.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -279,16 +315,58 @@ export function DealFormDialog({
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="business_unit"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Business Unit</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select business unit" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {BUSINESS_UNITS.map((bu) => (
+                          <SelectItem key={bu.value} value={bu.value}>
+                            {bu.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="month_year"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Month</FormLabel>
-                    <FormControl>
-                      <Input type="month" {...field} />
-                    </FormControl>
+                    <FormLabel>Month (FY {selectedYear})</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select month" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {monthOptions.map((month) => (
+                          <SelectItem key={month.value} value={month.value}>
+                            {month.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

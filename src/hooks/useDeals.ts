@@ -12,6 +12,7 @@ export interface Deal {
   deal_value_usd: number;
   deal_value_local: number | null;
   local_currency: string;
+  business_unit: string | null;
   status: string;
   notes: string | null;
   created_at: string;
@@ -40,6 +41,7 @@ export interface CreateDealInput {
   deal_value_usd: number;
   deal_value_local?: number;
   local_currency: string;
+  business_unit?: string;
   status?: string;
   notes?: string;
   participants: Omit<DealParticipant, "id" | "deal_id" | "created_at">[];
@@ -55,7 +57,14 @@ export const METRIC_TYPES = [
   { value: "cr_er", label: "CR/ER (Contract Renewal / Extension)" },
   { value: "implementation", label: "Implementation" },
   { value: "perpetual_license", label: "Perpetual License" },
-  { value: "premium_support", label: "Premium Support" },
+] as const;
+
+export const BUSINESS_UNITS = [
+  { value: "banking", label: "Banking" },
+  { value: "insurance", label: "Insurance" },
+  { value: "wealth", label: "Wealth Management" },
+  { value: "capital_markets", label: "Capital Markets" },
+  { value: "corporate", label: "Corporate" },
 ] as const;
 
 export const PARTICIPANT_ROLES = [
