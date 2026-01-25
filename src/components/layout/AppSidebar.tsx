@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Settings, FileSpreadsheet, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Settings, FileSpreadsheet, LogOut, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +30,12 @@ const navigation: NavItem[] = [
     name: "Plan Config", 
     href: "/admin", 
     icon: Settings,
+    allowedRoles: ["admin", "gtm_ops", "finance", "executive"]
+  },
+  { 
+    name: "Reports", 
+    href: "/reports", 
+    icon: BarChart3,
     allowedRoles: ["admin", "gtm_ops", "finance", "executive"]
   },
   { 

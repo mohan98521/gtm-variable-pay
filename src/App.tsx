@@ -11,6 +11,7 @@ import TeamView from "./pages/TeamView";
 import Admin from "./pages/Admin";
 import DataInputs from "./pages/DataInputs";
 import PlanBuilder from "./pages/PlanBuilder";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,14 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
                 <PlanBuilder />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "gtm_ops", "finance", "executive"]}>
+                <Reports />
               </ProtectedRoute>
             }
           />

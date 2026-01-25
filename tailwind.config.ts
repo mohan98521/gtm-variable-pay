@@ -76,6 +76,10 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
           muted: "hsl(var(--sidebar-muted))",
         },
+        azentio: {
+          navy: "hsl(var(--azentio-navy))",
+          teal: "hsl(var(--azentio-teal))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

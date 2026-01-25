@@ -127,6 +127,8 @@ export type Database = {
           country: string | null
           created_at: string
           date_of_hire: string | null
+          department: string | null
+          departure_date: string | null
           designation: string | null
           email: string
           employee_id: string
@@ -137,6 +139,7 @@ export type Database = {
           is_active: boolean
           local_currency: string
           manager_employee_id: string | null
+          region: string | null
           sales_function: string | null
           updated_at: string
         }
@@ -147,6 +150,8 @@ export type Database = {
           country?: string | null
           created_at?: string
           date_of_hire?: string | null
+          department?: string | null
+          departure_date?: string | null
           designation?: string | null
           email: string
           employee_id: string
@@ -157,6 +162,7 @@ export type Database = {
           is_active?: boolean
           local_currency?: string
           manager_employee_id?: string | null
+          region?: string | null
           sales_function?: string | null
           updated_at?: string
         }
@@ -167,6 +173,8 @@ export type Database = {
           country?: string | null
           created_at?: string
           date_of_hire?: string | null
+          department?: string | null
+          departure_date?: string | null
           designation?: string | null
           email?: string
           employee_id?: string
@@ -177,6 +185,7 @@ export type Database = {
           is_active?: boolean
           local_currency?: string
           manager_employee_id?: string | null
+          region?: string | null
           sales_function?: string | null
           updated_at?: string
         }
