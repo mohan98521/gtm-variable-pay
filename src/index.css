@@ -67,6 +67,10 @@
     --chart-4: 38 92% 50%;
     --chart-5: 280 70% 55%;
 
+    /* Azentio Brand Colors */
+    --azentio-navy: 212 100% 22%; /* #002D72 */
+    --azentio-teal: 180 100% 34%; /* #00A3AD */
+
     /* Gradient tokens */
     --gradient-primary: linear-gradient(135deg, hsl(210 60% 18%), hsl(210 55% 25%));
     --gradient-accent: linear-gradient(135deg, hsl(175 70% 40%), hsl(175 65% 50%));

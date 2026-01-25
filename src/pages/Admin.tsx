@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -29,6 +29,7 @@ import { useCompPlans, CompPlan } from "@/hooks/useCompPlans";
 import { useUserTargets } from "@/hooks/useUserTargets";
 import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
 import { RoleManagement } from "@/components/admin/RoleManagement";
+import { BulkUpload } from "@/components/admin/BulkUpload";
 import { CompPlanFormDialog } from "@/components/admin/CompPlanFormDialog";
 import { CompPlanDetailsDialog } from "@/components/admin/CompPlanDetailsDialog";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -187,6 +188,10 @@ export default function Admin() {
                 <TabsTrigger value="accounts" className="gap-2">
                   <UserCog className="h-4 w-4" />
                   Employee Accounts
+                </TabsTrigger>
+                <TabsTrigger value="bulk-upload" className="gap-2">
+                  <Upload className="h-4 w-4" />
+                  Bulk Upload
                 </TabsTrigger>
                 <TabsTrigger value="roles" className="gap-2">
                   <Shield className="h-4 w-4" />
@@ -356,6 +361,13 @@ export default function Admin() {
           {isAdmin() && (
             <TabsContent value="accounts">
               <EmployeeAccounts />
+            </TabsContent>
+          )}
+
+          {/* Bulk Upload Tab - Admin Only */}
+          {isAdmin() && (
+            <TabsContent value="bulk-upload">
+              <BulkUpload />
             </TabsContent>
           )}
 
