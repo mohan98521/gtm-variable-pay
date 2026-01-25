@@ -1,11 +1,27 @@
-// Bonus split configuration by sales function
-// Maps sales_function to percentage allocation for each metric
+/**
+ * COMPENSATION UTILITIES
+ * 
+ * NOTE: The hardcoded BONUS_SPLITS and multiplier configurations below are
+ * DEPRECATED. New code should use the database-driven calculation engine
+ * in src/lib/compensationEngine.ts which fetches configurations from:
+ * - comp_plans (plan definitions)
+ * - plan_metrics (metric weightages and logic types)
+ * - multiplier_grids (achievement-based multipliers)
+ * 
+ * The legacy functions below are kept for backward compatibility only.
+ * They will be removed in a future version.
+ */
+
+// ============= DEPRECATED: LEGACY BONUS SPLITS =============
+// These are kept for backward compatibility only.
+// Use plan_metrics.weightage_percent from database instead.
 
 export interface MetricSplit {
   newSoftwareBookingARR: number; // percentage (0-100)
   closingARR: number; // percentage (0-100)
 }
 
+/** @deprecated Use plan_metrics from database instead */
 export const BONUS_SPLITS: Record<string, MetricSplit> = {
   "Farmer": { newSoftwareBookingARR: 50, closingARR: 50 },
   "Hunter": { newSoftwareBookingARR: 100, closingARR: 0 },
@@ -22,12 +38,17 @@ export const BONUS_SPLITS: Record<string, MetricSplit> = {
   "Sales Engineering": { newSoftwareBookingARR: 100, closingARR: 0 },
 };
 
-// Default split if sales function not found
+/** @deprecated Use plan_metrics from database instead */
 export const DEFAULT_BONUS_SPLIT: MetricSplit = { 
   newSoftwareBookingARR: 100, 
   closingARR: 0 
 };
 
+/** 
+ * @deprecated Use useUserPlanConfiguration hook and plan_metrics instead.
+ * This function uses hardcoded values. New implementations should fetch
+ * metric weightages from the database via plan_metrics table.
+ */
 export function getBonusSplit(salesFunction: string | null | undefined): MetricSplit {
   if (!salesFunction) return DEFAULT_BONUS_SPLIT;
   return BONUS_SPLITS[salesFunction] ?? DEFAULT_BONUS_SPLIT;
@@ -141,13 +162,19 @@ export function calculateAchievementPercent(
   return (actualValue / targetValue) * 100;
 }
 
-// ============= MULTIPLIER CONFIGURATIONS =============
+// ============= DEPRECATED: LEGACY MULTIPLIER CONFIGURATIONS =============
+// These are kept for backward compatibility only.
+// Use multiplier_grids table from database instead via compensationEngine.ts
 
-// Role groups for New Software Booking ARR multipliers
+/** @deprecated Role groups - use plan_metrics.logic_type instead */
 const STANDARD_ACCELERATOR_ROLES = ["Farmer", "Hunter"];
+/** @deprecated Role groups - use plan_metrics.logic_type instead */
 const SALES_HEAD_ACCELERATOR_ROLES = ["Sales head - Farmer", "Sales Head - Hunter"];
 
-// New Software Booking ARR Multipliers
+/**
+ * @deprecated Use getMultiplierFromGrid in compensationEngine.ts instead.
+ * New Software Booking ARR Multipliers - hardcoded legacy logic.
+ */
 export function getNewSoftwareBookingMultiplier(
   achievementPercent: number,
   salesFunction: string
