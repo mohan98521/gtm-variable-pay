@@ -57,14 +57,27 @@ interface Employee {
   country: string | null;
   city: string | null;
   date_of_hire: string | null;
+  departure_date: string | null;
   group_name: string | null;
   business_unit: string | null;
   function_area: string | null;
   sales_function: string | null;
   local_currency: string;
   manager_employee_id: string | null;
+  department: string | null;
+  region: string | null;
   auth_user_id: string | null;
   is_active: boolean;
+  // Compensation fields
+  employee_role: string | null;
+  incentive_type: string | null;
+  target_bonus_percent: number | null;
+  tfp_local_currency: number | null;
+  tvp_local_currency: number | null;
+  ote_local_currency: number | null;
+  tfp_usd: number | null;
+  tvp_usd: number | null;
+  ote_usd: number | null;
 }
 
 export function EmployeeAccounts() {
@@ -191,12 +204,24 @@ export function EmployeeAccounts() {
           country: data.country || null,
           city: data.city || null,
           date_of_hire: data.date_of_hire || null,
+          departure_date: data.departure_date || null,
           group_name: data.group_name || null,
           business_unit: data.business_unit || null,
           function_area: data.function_area || null,
           sales_function: data.sales_function || null,
           local_currency: data.local_currency || 'USD',
           manager_employee_id: data.manager_employee_id || null,
+          department: data.department || null,
+          region: data.region || null,
+          employee_role: data.employee_role || null,
+          incentive_type: data.incentive_type || null,
+          target_bonus_percent: data.target_bonus_percent ?? null,
+          tfp_local_currency: data.tfp_local_currency ?? null,
+          tvp_local_currency: data.tvp_local_currency ?? null,
+          ote_local_currency: data.ote_local_currency ?? null,
+          tfp_usd: data.tfp_usd ?? null,
+          tvp_usd: data.tvp_usd ?? null,
+          ote_usd: data.ote_usd ?? null,
           is_active: true,
         });
 
@@ -224,12 +249,24 @@ export function EmployeeAccounts() {
           country: data.country || null,
           city: data.city || null,
           date_of_hire: data.date_of_hire || null,
+          departure_date: data.departure_date || null,
           group_name: data.group_name || null,
           business_unit: data.business_unit || null,
           function_area: data.function_area || null,
           sales_function: data.sales_function || null,
           local_currency: data.local_currency || 'USD',
           manager_employee_id: data.manager_employee_id || null,
+          department: data.department || null,
+          region: data.region || null,
+          employee_role: data.employee_role || null,
+          incentive_type: data.incentive_type || null,
+          target_bonus_percent: data.target_bonus_percent ?? null,
+          tfp_local_currency: data.tfp_local_currency ?? null,
+          tvp_local_currency: data.tvp_local_currency ?? null,
+          ote_local_currency: data.ote_local_currency ?? null,
+          tfp_usd: data.tfp_usd ?? null,
+          tvp_usd: data.tvp_usd ?? null,
+          ote_usd: data.ote_usd ?? null,
         })
         .eq('id', id);
 
