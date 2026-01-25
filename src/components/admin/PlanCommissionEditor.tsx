@@ -27,7 +27,6 @@ import {
   useUpdatePlanCommission,
   useDeletePlanCommission,
   PlanCommission,
-  COMMISSION_TYPES,
 } from "@/hooks/usePlanCommissions";
 import { CommissionFormDialog } from "./CommissionFormDialog";
 
@@ -127,7 +126,8 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
     );
   }
 
-  const canAddMore = existingTypes.length < COMMISSION_TYPES.length;
+  // Always allow adding more commission types (including custom ones)
+  const canAddMore = true;
 
   return (
     <>

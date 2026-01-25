@@ -30,16 +30,27 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
-import { PlanCommission, COMMISSION_TYPES, CommissionType } from "@/hooks/usePlanCommissions";
+import { PlanCommission, PREDEFINED_COMMISSION_TYPES } from "@/hooks/usePlanCommissions";
+
+const CUSTOM_TYPE_OPTION = "__custom__";
 
 const formSchema = z.object({
   commission_type: z.string().min(1, "Commission type is required"),
+  custom_type_name: z.string().optional(),
   commission_rate_pct: z.coerce
     .number()
     .min(0, "Rate must be at least 0%")
     .max(100, "Rate cannot exceed 100%"),
   min_threshold_usd: z.coerce.number().nullable().optional(),
   is_active: z.boolean().default(true),
+}).refine((data) => {
+  if (data.commission_type === CUSTOM_TYPE_OPTION) {
+    return data.custom_type_name && data.custom_type_name.trim().length >= 2;
+  }
+  return true;
+}, {
+  message: "Custom type name must be at least 2 characters",
+  path: ["custom_type_name"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -67,17 +78,24 @@ export function CommissionFormDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       commission_type: "",
+      custom_type_name: "",
       commission_rate_pct: 0,
       min_threshold_usd: null,
       is_active: true,
     },
   });
 
+  const watchedType = form.watch("commission_type");
+  const isCustomType = watchedType === CUSTOM_TYPE_OPTION;
+
   useEffect(() => {
     if (open) {
       if (commission) {
+        // Check if editing a custom type (not in predefined list)
+        const isPredefined = PREDEFINED_COMMISSION_TYPES.includes(commission.commission_type as any);
         form.reset({
-          commission_type: commission.commission_type,
+          commission_type: isPredefined ? commission.commission_type : CUSTOM_TYPE_OPTION,
+          custom_type_name: isPredefined ? "" : commission.commission_type,
           commission_rate_pct: commission.commission_rate_pct,
           min_threshold_usd: commission.min_threshold_usd,
           is_active: commission.is_active,
@@ -85,6 +103,7 @@ export function CommissionFormDialog({
       } else {
         form.reset({
           commission_type: "",
+          custom_type_name: "",
           commission_rate_pct: 0,
           min_threshold_usd: null,
           is_active: true,
@@ -93,12 +112,27 @@ export function CommissionFormDialog({
     }
   }, [open, commission, form]);
 
+  // Available predefined types (excluding already used ones when adding new)
   const availableTypes = isEditing
-    ? COMMISSION_TYPES
-    : COMMISSION_TYPES.filter((type) => !existingTypes.includes(type));
+    ? [...PREDEFINED_COMMISSION_TYPES]
+    : PREDEFINED_COMMISSION_TYPES.filter((type) => !existingTypes.includes(type));
 
   const handleSubmit = (values: FormValues) => {
-    onSubmit(values);
+    // Resolve the actual commission type name
+    const finalType = values.commission_type === CUSTOM_TYPE_OPTION
+      ? values.custom_type_name?.trim() || ""
+      : values.commission_type;
+    
+    // Check for duplicate custom type name
+    if (values.commission_type === CUSTOM_TYPE_OPTION && existingTypes.includes(finalType)) {
+      form.setError("custom_type_name", { message: "This commission type already exists" });
+      return;
+    }
+    
+    onSubmit({
+      ...values,
+      commission_type: finalType,
+    });
   };
 
   return (
@@ -137,12 +171,40 @@ export function CommissionFormDialog({
                           {type}
                         </SelectItem>
                       ))}
+                      {!isEditing && (
+                        <SelectItem value={CUSTOM_TYPE_OPTION}>
+                          Other (custom)
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {isCustomType && (
+              <FormField
+                control={form.control}
+                name="custom_type_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Custom Commission Type Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter custom type name..."
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Enter a unique name for this commission type.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -223,7 +285,7 @@ export function CommissionFormDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || availableTypes.length === 0}>
+              <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {isEditing ? "Save Changes" : "Add Commission"}
               </Button>
