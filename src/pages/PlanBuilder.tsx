@@ -40,11 +40,14 @@ import {
   Percent,
   Settings,
   AlertTriangle,
+  DollarSign,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { MetricFormDialog, PlanMetric } from "@/components/admin/MetricFormDialog";
 import { MultiplierGridEditor } from "@/components/admin/MultiplierGridEditor";
+import { PlanCommissionEditor } from "@/components/admin/PlanCommissionEditor";
+import { usePlanCommissions } from "@/hooks/usePlanCommissions";
 
 interface MultiplierGrid {
   id: string;
@@ -115,6 +118,9 @@ export default function PlanBuilder() {
 
   const metrics = metricsData?.metrics || [];
   const multipliers = metricsData?.multipliers || [];
+
+  // Fetch plan commissions
+  const { data: commissions = [] } = usePlanCommissions(planId);
 
   // Calculate total weightage
   const totalWeightage = metrics.reduce((sum, m) => sum + m.weightage_percent, 0);
@@ -297,7 +303,7 @@ export default function PlanBuilder() {
         </div>
 
         {/* Plan Overview */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
@@ -335,6 +341,19 @@ export default function PlanBuilder() {
                 <div>
                   <p className="text-sm text-muted-foreground">Multiplier Grids</p>
                   <p className="text-2xl font-semibold text-foreground">{multipliers.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <DollarSign className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Commission Types</p>
+                  <p className="text-2xl font-semibold text-foreground">{commissions.length}</p>
                 </div>
               </div>
             </CardContent>
@@ -471,6 +490,9 @@ export default function PlanBuilder() {
             </CardContent>
           </Card>
         )}
+
+        {/* Commission Structure Section */}
+        <PlanCommissionEditor planId={planId!} />
       </div>
 
       {/* Add/Edit Metric Dialog */}
