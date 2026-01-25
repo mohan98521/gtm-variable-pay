@@ -4,16 +4,18 @@ import { ProgressBar } from "@/components/dashboard/ProgressBar";
 import { Target, DollarSign, TrendingUp, Award, Calendar, ArrowUpRight, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useCurrentUserTarget, useCurrentUserProfile } from "@/hooks/useCurrentUserTarget";
+import { useCurrentUserProfile } from "@/hooks/useCurrentUserTarget";
+import { useUserPlanConfiguration } from "@/hooks/useUserPlanConfiguration";
 import { useLatestExchangeRate } from "@/hooks/useExchangeRates";
-import { calculateProRation, getBonusSplit } from "@/lib/compensation";
+import { calculateProRation } from "@/lib/compensation";
+import { generatePayoutProjections } from "@/lib/compensationEngine";
 
 export default function Dashboard() {
-  const { data: userTarget, isLoading: targetLoading } = useCurrentUserTarget();
+  const { data: planConfig, isLoading: planLoading } = useUserPlanConfiguration();
   const { data: profile, isLoading: profileLoading } = useCurrentUserProfile();
   const { data: exchangeRate } = useLatestExchangeRate(profile?.local_currency);
 
-  const isLoading = targetLoading || profileLoading;
+  const isLoading = planLoading || profileLoading;
 
   if (isLoading) {
     return (
@@ -25,56 +27,63 @@ export default function Dashboard() {
     );
   }
 
-  // Calculate pro-rated values
-  const proRation = userTarget ? calculateProRation({
-    effectiveStartDate: userTarget.effective_start_date,
-    effectiveEndDate: userTarget.effective_end_date,
-    targetBonusUSD: userTarget.target_bonus_usd ?? 0,
+  // Calculate pro-rated values using plan configuration
+  const proRation = planConfig ? calculateProRation({
+    effectiveStartDate: planConfig.effectiveStartDate,
+    effectiveEndDate: planConfig.effectiveEndDate,
+    targetBonusUSD: planConfig.targetBonusUsd ?? 0,
   }) : null;
 
-  const annualTarget = userTarget?.target_value_annual ?? 0;
+  const annualTarget = planConfig?.targetValueAnnual ?? 0;
   const proRatedTargetBonus = proRation?.proRatedTargetBonusUSD ?? 0;
   const proRationPercent = proRation ? Math.round(proRation.proRationFactor * 100) : 100;
   
-  // Get bonus split for the user's sales function
-  const bonusSplit = getBonusSplit(profile?.sales_function);
-  
-  // Calculate targets by metric
-  const newSoftwareTarget = annualTarget * (bonusSplit.newSoftwareBookingARR / 100);
-  const closingARRTarget = annualTarget * (bonusSplit.closingARR / 100);
+  // Build metrics from plan configuration (database-driven)
+  const metrics = (planConfig?.metrics || []).map(metric => {
+    // Calculate target for this metric based on weightage
+    const metricTarget = annualTarget * (metric.weightage_percent / 100);
+    
+    // Mock achieved values (will be replaced with actual data from monthly_actuals)
+    // Using different mock percentages for variety
+    const mockAchievedPct = metric.metric_name.includes("Closing") ? 0.71 : 0.82;
+    const achieved = metricTarget * mockAchievedPct;
+    
+    return {
+      id: metric.id,
+      name: metric.metric_name,
+      target: metricTarget,
+      achieved,
+      weight: metric.weightage_percent,
+      logicType: metric.logic_type,
+      gateThreshold: metric.gate_threshold_percent,
+    };
+  }).filter(m => m.weight > 0);
 
-  // Mock YTD achieved values (will be replaced with actual data from monthly_actuals)
-  const ytdAchievedPct = 77.5; // This would come from actual performance data
-  const ytdAchieved = annualTarget * (ytdAchievedPct / 100);
+  // Calculate totals from metrics
+  const totalAchieved = metrics.reduce((sum, m) => sum + m.achieved, 0);
+  const ytdAchievedPct = annualTarget > 0 ? (totalAchieved / annualTarget) * 100 : 0;
   
   // Calculate current payout estimate
   const currentPayoutEstimate = proRatedTargetBonus * (ytdAchievedPct / 100);
 
-  const achievementPct = annualTarget > 0 ? (ytdAchieved / annualTarget) * 100 : 0;
+  const achievementPct = annualTarget > 0 ? (totalAchieved / annualTarget) * 100 : 0;
   
   // Determine pace status based on YTD progress
   const monthsElapsed = new Date().getMonth() + 1;
   const expectedPct = (monthsElapsed / 12) * 100;
   const paceStatus = achievementPct >= expectedPct ? "on-track" : achievementPct >= expectedPct * 0.85 ? "at-risk" : "behind";
 
-  const planName = userTarget?.comp_plans?.name ?? "No Plan Assigned";
+  const planName = planConfig?.planName ?? "No Plan Assigned";
   const fiscalYear = 2026; // Current fiscal year
 
-  // Metrics breakdown
-  const metrics = [
-    { 
-      name: "New Software Booking ARR", 
-      target: newSoftwareTarget, 
-      achieved: newSoftwareTarget * 0.82, // Mock: replace with actual
-      weight: bonusSplit.newSoftwareBookingARR 
-    },
-    { 
-      name: "Closing ARR", 
-      target: closingARRTarget, 
-      achieved: closingARRTarget * 0.71, // Mock: replace with actual
-      weight: bonusSplit.closingARR 
-    },
-  ].filter(m => m.weight > 0);
+  // Generate payout projections using database-driven calculation
+  const projections = planConfig?.metrics 
+    ? generatePayoutProjections(planConfig.metrics, proRatedTargetBonus, [100, 120, 150])
+    : [
+        { achievementLevel: 100, label: "100%", estimatedPayout: proRatedTargetBonus, averageMultiplier: 1.0 },
+        { achievementLevel: 120, label: "120%", estimatedPayout: proRatedTargetBonus * 1.44, averageMultiplier: 1.44 },
+        { achievementLevel: 150, label: "150%", estimatedPayout: proRatedTargetBonus * 2.25, averageMultiplier: 2.25 },
+      ];
 
   // Mock monthly trend (will be replaced with actual data)
   const monthlyTrend = [
@@ -123,7 +132,7 @@ export default function Dashboard() {
           />
           <MetricCard
             title="YTD Achieved"
-            value={`$${Math.round(ytdAchieved).toLocaleString()}`}
+            value={`$${Math.round(totalAchieved).toLocaleString()}`}
             subtitle={`${achievementPct.toFixed(1)}% of annual target`}
             trend="up"
             trendValue="+12.5% vs last month"
@@ -155,26 +164,33 @@ export default function Dashboard() {
               <CardDescription>Performance by compensation metric</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {metrics.map((metric) => {
-                const metricPct = metric.target > 0 ? (metric.achieved / metric.target) * 100 : 0;
-                return (
-                  <div key={metric.name} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-foreground">{metric.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Weight: {metric.weight}% • Target: ${metric.target.toLocaleString()}
-                        </p>
+              {metrics.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No metrics configured for this plan.</p>
+              ) : (
+                metrics.map((metric) => {
+                  const metricPct = metric.target > 0 ? (metric.achieved / metric.target) * 100 : 0;
+                  return (
+                    <div key={metric.id} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-foreground">{metric.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Weight: {metric.weight}% • Target: ${metric.target.toLocaleString()}
+                            {metric.gateThreshold && (
+                              <span className="text-warning"> • Gate: {metric.gateThreshold}%</span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-foreground">${Math.round(metric.achieved).toLocaleString()}</p>
+                          <p className="text-sm text-muted-foreground">{metricPct.toFixed(1)}%</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-foreground">${Math.round(metric.achieved).toLocaleString()}</p>
-                        <p className="text-sm text-muted-foreground">{metricPct.toFixed(1)}%</p>
-                      </div>
+                      <ProgressBar value={metric.achieved} max={metric.target} size="md" />
                     </div>
-                    <ProgressBar value={metric.achieved} max={metric.target} size="md" />
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </CardContent>
           </Card>
 
@@ -225,7 +241,7 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Payout Projection */}
+        {/* Payout Projection - Now Database-Driven */}
         <Card className="border-border/50 shadow-sm">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -242,21 +258,26 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-lg bg-muted/50 p-4 border border-border/30">
-                <p className="text-sm text-muted-foreground">If achieving 100%</p>
-                <p className="mt-1 text-xl font-semibold text-foreground">${Math.round(proRatedTargetBonus).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">1.0x multiplier</p>
-              </div>
-              <div className="rounded-lg bg-accent/10 p-4 border border-accent/30">
-                <p className="text-sm text-accent">If achieving 120%</p>
-                <p className="mt-1 text-xl font-semibold text-accent">${Math.round(proRatedTargetBonus * 1.44).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">1.44x multiplier (accelerator)</p>
-              </div>
-              <div className="rounded-lg bg-success/10 p-4 border border-success/30">
-                <p className="text-sm text-success">If achieving 150%</p>
-                <p className="mt-1 text-xl font-semibold text-success">${Math.round(proRatedTargetBonus * 2.25).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">2.25x multiplier (accelerator)</p>
-              </div>
+              {projections.map((proj, idx) => {
+                const variants = [
+                  { bg: "bg-muted/50", border: "border-border/30", text: "text-foreground" },
+                  { bg: "bg-accent/10", border: "border-accent/30", text: "text-accent" },
+                  { bg: "bg-success/10", border: "border-success/30", text: "text-success" },
+                ];
+                const variant = variants[idx] || variants[0];
+                
+                return (
+                  <div key={proj.achievementLevel} className={`rounded-lg ${variant.bg} p-4 border ${variant.border}`}>
+                    <p className={`text-sm ${variant.text}`}>If achieving {proj.label}</p>
+                    <p className={`mt-1 text-xl font-semibold ${variant.text}`}>
+                      ${Math.round(proj.estimatedPayout).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {proj.averageMultiplier.toFixed(2)}x average multiplier
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
