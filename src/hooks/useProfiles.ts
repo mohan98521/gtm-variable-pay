@@ -10,6 +10,9 @@ export interface Profile {
   country: string | null;
   city: string | null;
   date_of_hire: string | null;
+  departure_date: string | null;
+  department: string | null;
+  region: string | null;
   group_name: string | null;
   business_unit: string | null;
   function_area: string | null;
