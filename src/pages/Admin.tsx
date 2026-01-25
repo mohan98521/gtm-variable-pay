@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Calendar } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Calendar, Copy } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -40,6 +40,7 @@ import { BulkUpload } from "@/components/admin/BulkUpload";
 import { PermissionsManagement } from "@/components/admin/PermissionsManagement";
 import { CompPlanFormDialog } from "@/components/admin/CompPlanFormDialog";
 import { CompPlanDetailsDialog } from "@/components/admin/CompPlanDetailsDialog";
+import { CopyPlansDialog } from "@/components/admin/CopyPlansDialog";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,6 +62,7 @@ export default function Admin() {
 
   // Dialog states
   const [showFormDialog, setShowFormDialog] = useState(false);
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [editingPlan, setEditingPlan] = useState<CompPlan | null>(null);
   const [viewingPlan, setViewingPlan] = useState<CompPlan | null>(null);
   const [deletingPlan, setDeletingPlan] = useState<CompPlan | null>(null);
@@ -231,7 +233,7 @@ export default function Admin() {
 
           {/* Plans Tab */}
           <TabsContent value="plans" className="space-y-6">
-            {/* Year Selector and Action Button */}
+            {/* Year Selector and Action Buttons */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-muted-foreground">Fiscal Year:</span>
@@ -252,10 +254,18 @@ export default function Admin() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="accent" onClick={handleCreatePlan}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                Create New Plan
-              </Button>
+              <div className="flex items-center gap-2">
+                {selectedYear > (availableYears?.[availableYears.length - 1] || currentYear - 2) && (
+                  <Button variant="outline" onClick={() => setShowCopyDialog(true)}>
+                    <Copy className="h-4 w-4 mr-1.5" />
+                    Copy from {selectedYear - 1}
+                  </Button>
+                )}
+                <Button variant="accent" onClick={handleCreatePlan}>
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Create New Plan
+                </Button>
+              </div>
             </div>
 
             {/* Quick Stats */}
@@ -318,7 +328,7 @@ export default function Admin() {
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                ) : (
+                ) : compPlans && compPlans.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -329,7 +339,7 @@ export default function Admin() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {compPlans?.map((plan) => (
+                      {compPlans.map((plan) => (
                         <TableRow key={plan.id} className="data-row">
                           <TableCell>
                             <div>
@@ -381,6 +391,28 @@ export default function Admin() {
                       ))}
                     </TableBody>
                   </Table>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+                      <Layers className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      No plans for {selectedYear}
+                    </h3>
+                    <p className="text-muted-foreground max-w-md mb-4">
+                      Get started by creating a new plan or copy existing plans from a previous year.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setShowCopyDialog(true)}>
+                        <Copy className="h-4 w-4 mr-1.5" />
+                        Copy from {selectedYear - 1}
+                      </Button>
+                      <Button variant="accent" onClick={handleCreatePlan}>
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Create New Plan
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -452,6 +484,17 @@ export default function Admin() {
         open={!!viewingPlan}
         onOpenChange={(open) => !open && setViewingPlan(null)}
         plan={viewingPlan}
+      />
+
+      {/* Copy Plans Dialog */}
+      <CopyPlansDialog
+        open={showCopyDialog}
+        onOpenChange={setShowCopyDialog}
+        targetYear={selectedYear}
+        availableYears={availableYears || []}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["comp_plans"] });
+        }}
       />
 
       {/* Delete Confirmation Dialog */}

@@ -42,16 +42,34 @@ export function useAvailableYears() {
 
       if (error) throw error;
 
-      // Get unique years
+      // Get unique years from existing plans
       const years = [...new Set(data?.map((d) => d.effective_year) || [])];
 
-      // Ensure current year and next year are always available
+      // Include range: past 2 years to next 5 years
       const currentYear = new Date().getFullYear();
-      if (!years.includes(currentYear)) years.push(currentYear);
-      if (!years.includes(currentYear + 1)) years.push(currentYear + 1);
+      for (let y = currentYear - 2; y <= currentYear + 5; y++) {
+        if (!years.includes(y)) years.push(y);
+      }
 
       return years.sort((a, b) => b - a); // Descending order
     },
+  });
+}
+
+export function usePlansForYear(year: number) {
+  return useQuery({
+    queryKey: ["comp_plans_for_copy", year],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("comp_plans")
+        .select("*")
+        .eq("effective_year", year)
+        .order("name");
+
+      if (error) throw error;
+      return data as CompPlan[];
+    },
+    enabled: !!year,
   });
 }
 
