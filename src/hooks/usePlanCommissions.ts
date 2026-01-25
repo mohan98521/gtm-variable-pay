@@ -12,14 +12,17 @@ export interface PlanCommission {
   created_at: string;
 }
 
-export const COMMISSION_TYPES = [
+export const PREDEFINED_COMMISSION_TYPES = [
   "Managed Services",
   "Perpetual License",
   "CR/ER",
   "Implementation",
 ] as const;
 
-export type CommissionType = (typeof COMMISSION_TYPES)[number];
+export type PredefinedCommissionType = (typeof PREDEFINED_COMMISSION_TYPES)[number];
+
+// Allow custom commission types beyond the predefined list
+export const ALLOW_CUSTOM_TYPES = true;
 
 export function usePlanCommissions(planId: string | undefined) {
   return useQuery({
