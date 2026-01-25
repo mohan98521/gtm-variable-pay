@@ -26,7 +26,7 @@ const SALES_FUNCTIONS = [
   "Sales Engineering",
 ];
 
-// All 17 employee fields for the master report
+// All 27 employee fields for the master report (17 core + 9 compensation + 1 derived)
 const ALL_EMPLOYEE_COLUMNS = [
   { key: "full_name", label: "Full Name", default: true },
   { key: "email", label: "Email", default: true },
@@ -37,6 +37,7 @@ const ALL_EMPLOYEE_COLUMNS = [
   { key: "group_name", label: "Group Name", default: false },
   { key: "function_area", label: "Function Area", default: false },
   { key: "manager_employee_id", label: "Manager ID", default: false },
+  { key: "manager_full_name", label: "Manager Name", default: false },
   { key: "date_of_hire", label: "Date of Hire", default: true },
   { key: "is_active", label: "Status", default: true },
   { key: "city", label: "City", default: false },
@@ -45,6 +46,16 @@ const ALL_EMPLOYEE_COLUMNS = [
   { key: "department", label: "Department", default: false },
   { key: "region", label: "Region", default: false },
   { key: "departure_date", label: "Departure Date", default: false },
+  // Compensation fields
+  { key: "employee_role", label: "Employee Role", default: false },
+  { key: "incentive_type", label: "Incentive Type", default: false },
+  { key: "target_bonus_percent", label: "Target Bonus %", default: true },
+  { key: "tfp_local_currency", label: "TFP (LC)", default: true },
+  { key: "tvp_local_currency", label: "TVP (LC)", default: true },
+  { key: "ote_local_currency", label: "OTE (LC)", default: true },
+  { key: "tfp_usd", label: "TFP (USD)", default: false },
+  { key: "tvp_usd", label: "TVP (USD)", default: false },
+  { key: "ote_usd", label: "OTE (USD)", default: false },
 ];
 
 interface Employee {
@@ -66,6 +77,16 @@ interface Employee {
   manager_employee_id: string | null;
   city: string | null;
   country: string | null;
+  // Compensation target fields
+  employee_role: string | null;
+  incentive_type: string | null;
+  target_bonus_percent: number | null;
+  tfp_local_currency: number | null;
+  tvp_local_currency: number | null;
+  ote_local_currency: number | null;
+  tfp_usd: number | null;
+  tvp_usd: number | null;
+  ote_usd: number | null;
 }
 
 interface UserTarget {
@@ -169,6 +190,15 @@ export default function Reports() {
       return data as MonthlyBooking[];
     },
   });
+
+  // Create manager lookup map for Manager Full Name
+  const managerNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    employees.forEach((emp) => {
+      map.set(emp.employee_id, emp.full_name);
+    });
+    return map;
+  }, [employees]);
 
   // Filtered employees
   const filteredEmployees = useMemo(() => {
@@ -321,6 +351,8 @@ export default function Reports() {
         return emp.function_area || "-";
       case "manager_employee_id":
         return emp.manager_employee_id || "-";
+      case "manager_full_name":
+        return emp.manager_employee_id ? (managerNameMap.get(emp.manager_employee_id) || emp.manager_employee_id) : "-";
       case "date_of_hire":
         return emp.date_of_hire ? format(new Date(emp.date_of_hire), "MMM dd, yyyy") : "-";
       case "is_active":
@@ -337,6 +369,25 @@ export default function Reports() {
         return emp.region || "-";
       case "departure_date":
         return emp.departure_date ? format(new Date(emp.departure_date), "MMM dd, yyyy") : "-";
+      // Compensation target fields
+      case "employee_role":
+        return emp.employee_role || "-";
+      case "incentive_type":
+        return emp.incentive_type || "-";
+      case "target_bonus_percent":
+        return emp.target_bonus_percent != null ? `${emp.target_bonus_percent}%` : "-";
+      case "tfp_local_currency":
+        return emp.tfp_local_currency != null ? emp.tfp_local_currency.toLocaleString() : "-";
+      case "tvp_local_currency":
+        return emp.tvp_local_currency != null ? emp.tvp_local_currency.toLocaleString() : "-";
+      case "ote_local_currency":
+        return emp.ote_local_currency != null ? emp.ote_local_currency.toLocaleString() : "-";
+      case "tfp_usd":
+        return emp.tfp_usd != null ? `$${emp.tfp_usd.toLocaleString()}` : "-";
+      case "tvp_usd":
+        return emp.tvp_usd != null ? `$${emp.tvp_usd.toLocaleString()}` : "-";
+      case "ote_usd":
+        return emp.ote_usd != null ? `$${emp.ote_usd.toLocaleString()}` : "-";
       default:
         return "-";
     }
@@ -362,7 +413,7 @@ export default function Reports() {
     URL.revokeObjectURL(url);
   };
 
-  // Export all 17 fields regardless of visible columns
+  // Export all 27 fields regardless of visible columns
   const exportEmployees = () => {
     const data = filteredEmployees.map((e) => ({
       full_name: e.full_name,
@@ -374,6 +425,7 @@ export default function Reports() {
       group_name: e.group_name || "",
       function_area: e.function_area || "",
       manager_employee_id: e.manager_employee_id || "",
+      manager_full_name: e.manager_employee_id ? (managerNameMap.get(e.manager_employee_id) || "") : "",
       date_of_hire: e.date_of_hire || "",
       is_active: e.is_active ? "Active" : "Inactive",
       city: e.city || "",
@@ -382,6 +434,16 @@ export default function Reports() {
       department: e.department || "",
       region: e.region || "",
       departure_date: e.departure_date || "",
+      // Compensation target fields
+      employee_role: e.employee_role || "",
+      incentive_type: e.incentive_type || "",
+      target_bonus_percent: e.target_bonus_percent ?? "",
+      tfp_local_currency: e.tfp_local_currency ?? "",
+      tvp_local_currency: e.tvp_local_currency ?? "",
+      ote_local_currency: e.ote_local_currency ?? "",
+      tfp_usd: e.tfp_usd ?? "",
+      tvp_usd: e.tvp_usd ?? "",
+      ote_usd: e.ote_usd ?? "",
     }));
     exportToCSV(data, "employee_master_full", ALL_EMPLOYEE_COLUMNS.map((c) => c.key));
   };
@@ -480,7 +542,7 @@ export default function Reports() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Employee Master Data</CardTitle>
-                  <CardDescription>Complete 17-field employee directory with column toggle</CardDescription>
+                  <CardDescription>Complete 27-field employee directory with column toggle (17 core + 9 compensation + Manager Name)</CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <DropdownMenu>
