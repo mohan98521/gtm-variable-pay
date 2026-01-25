@@ -451,6 +451,44 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_commissions: {
+        Row: {
+          commission_rate_pct: number
+          commission_type: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          min_threshold_usd: number | null
+          plan_id: string
+        }
+        Insert: {
+          commission_rate_pct?: number
+          commission_type: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          min_threshold_usd?: number | null
+          plan_id: string
+        }
+        Update: {
+          commission_rate_pct?: number
+          commission_type?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          min_threshold_usd?: number | null
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_commissions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "comp_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plan_metrics: {
         Row: {
           created_at: string
