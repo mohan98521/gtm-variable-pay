@@ -45,20 +45,8 @@ const EMPLOYEE_HEADERS = [
   "ote_usd",
 ];
 
-const USER_TARGETS_HEADERS = [
-  "employee_email",
-  "plan_name",
-  "effective_start_date",
-  "effective_end_date",
-  "target_value_annual",
-  "currency",
-  "target_bonus_percent",
-  "tfp_local_currency",
-  "ote_local_currency",
-  "tfp_usd",
-  "target_bonus_usd",
-  "ote_usd",
-];
+// Optional field for linking employee to a compensation plan
+const OPTIONAL_HEADERS = ["plan_name"];
 
 export function BulkUpload() {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -67,7 +55,7 @@ export function BulkUpload() {
   const queryClient = useQueryClient();
 
   const generateTemplate = () => {
-    const allHeaders = [...EMPLOYEE_HEADERS, ...USER_TARGETS_HEADERS.slice(1)];
+    const allHeaders = [...EMPLOYEE_HEADERS, ...OPTIONAL_HEADERS];
     const csvContent = allHeaders.join(",") + "\n";
     const sampleRow = [
       // Core employee fields (17)
@@ -88,7 +76,7 @@ export function BulkUpload() {
       "Sales",
       "North America",
       "",
-      // New compensation fields (9)
+      // Compensation target fields (9)
       "Individual Contributor",
       "Standard",
       "20",
@@ -98,18 +86,8 @@ export function BulkUpload() {
       "80000",
       "20000",
       "100000",
-      // User targets fields
+      // Optional plan linking
       "Standard Plan 2026",
-      "2026-01-01",
-      "2026-12-31",
-      "100000",
-      "USD",
-      "20",
-      "80000",
-      "100000",
-      "80000",
-      "20000",
-      "100000",
     ].join(",");
     
     const blob = new Blob([csvContent + sampleRow], { type: "text/csv" });
@@ -213,8 +191,8 @@ export function BulkUpload() {
           result.created++;
         }
 
-        // Handle user_targets if plan data is provided
-        if (row.plan_name && row.effective_start_date) {
+        // Handle user_targets if plan_name is provided
+        if (row.plan_name) {
           // Find comp plan by name
           const { data: plan } = await supabase
             .from("comp_plans")
@@ -231,20 +209,30 @@ export function BulkUpload() {
               .maybeSingle();
 
             if (profile) {
+              // Auto-calculate effective dates
+              const currentYear = new Date().getFullYear();
+              const hireDate = row.date_of_hire ? new Date(row.date_of_hire) : null;
+              
+              let effectiveStart = `${currentYear}-01-01`;
+              if (hireDate && hireDate.getFullYear() === currentYear) {
+                effectiveStart = row.date_of_hire; // Use hire date if joined this year
+              }
+              const effectiveEnd = `${currentYear}-12-31`;
+
+              // Use compensation values from employee data (no duplicates)
               const targetData = {
                 user_id: profile.id,
                 plan_id: plan.id,
-                effective_start_date: row.effective_start_date,
-                effective_end_date: row.effective_end_date,
-                target_value_annual: parseFloat(row.target_value_annual) || 0,
-                currency: row.currency || "USD",
-                target_bonus_percent: row.target_bonus_percent ? parseFloat(row.target_bonus_percent) : null,
-                tfp_local_currency: row.tfp_local_currency ? parseFloat(row.tfp_local_currency) : null,
-                ote_local_currency: row.ote_local_currency ? parseFloat(row.ote_local_currency) : null,
-                tfp_usd: row.tfp_usd ? parseFloat(row.tfp_usd) : null,
-                target_bonus_usd: row.target_bonus_usd ? parseFloat(row.target_bonus_usd) : null,
-                ote_usd: row.ote_usd ? parseFloat(row.ote_usd) : null,
-              };
+                effective_start_date: effectiveStart,
+                effective_end_date: effectiveEnd,
+                currency: employeeData.local_currency || "USD",
+                target_bonus_percent: employeeData.target_bonus_percent,
+                tfp_local_currency: employeeData.tfp_local_currency,
+                ote_local_currency: employeeData.ote_local_currency,
+                tfp_usd: employeeData.tfp_usd,
+                target_bonus_usd: employeeData.tvp_usd, // TVP in USD as target bonus
+                ote_usd: employeeData.ote_usd,
+              } as const;
 
               // Upsert user_targets
               const { data: existingTarget } = await supabase
@@ -252,16 +240,37 @@ export function BulkUpload() {
                 .select("id")
                 .eq("user_id", profile.id)
                 .eq("plan_id", plan.id)
-                .eq("effective_start_date", row.effective_start_date)
+                .eq("effective_start_date", effectiveStart)
                 .maybeSingle();
 
               if (existingTarget) {
                 await supabase
                   .from("user_targets")
-                  .update(targetData)
+                  .update({
+                    currency: targetData.currency,
+                    target_bonus_percent: targetData.target_bonus_percent,
+                    tfp_local_currency: targetData.tfp_local_currency,
+                    ote_local_currency: targetData.ote_local_currency,
+                    tfp_usd: targetData.tfp_usd,
+                    target_bonus_usd: targetData.target_bonus_usd,
+                    ote_usd: targetData.ote_usd,
+                  })
                   .eq("id", existingTarget.id);
               } else {
-                await supabase.from("user_targets").insert(targetData);
+                await supabase.from("user_targets").insert([{
+                  user_id: targetData.user_id,
+                  plan_id: targetData.plan_id,
+                  effective_start_date: targetData.effective_start_date,
+                  effective_end_date: targetData.effective_end_date,
+                  target_value_annual: 0, // Will be uploaded separately
+                  currency: targetData.currency,
+                  target_bonus_percent: targetData.target_bonus_percent,
+                  tfp_local_currency: targetData.tfp_local_currency,
+                  ote_local_currency: targetData.ote_local_currency,
+                  tfp_usd: targetData.tfp_usd,
+                  target_bonus_usd: targetData.target_bonus_usd,
+                  ote_usd: targetData.ote_usd,
+                }]);
               }
             }
           }
@@ -327,8 +336,8 @@ export function BulkUpload() {
             <FileSpreadsheet className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
             Employee Data Management - Bulk Upload
           </CardTitle>
-          <CardDescription>
-            Upload employee data (all 17 fields) and compensation targets via CSV. Records are matched by Email or Employee ID for upsert.
+        <CardDescription>
+            Upload employee data (26 fields) via CSV. Optionally specify plan_name to link employees to compensation plans. Records are matched by Email or Employee ID for upsert.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
