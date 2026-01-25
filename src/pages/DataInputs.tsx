@@ -1,17 +1,10 @@
+import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Upload, Save, Calendar, FileSpreadsheet, AlertCircle, CheckCircle } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Calendar, FileSpreadsheet, CheckCircle, AlertCircle, Clock } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -19,73 +12,76 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DealsTable } from "@/components/data-inputs/DealsTable";
+import { DealFormDialog } from "@/components/data-inputs/DealFormDialog";
+import { useDeals, DealWithParticipants, METRIC_TYPES } from "@/hooks/useDeals";
+import { format, subMonths, addMonths } from "date-fns";
 
-// Mock data for monthly actuals input
-const monthlyData = [
-  {
-    id: "1",
-    userName: "Sarah Johnson",
-    metric: "New Software Sales",
-    month: "2025-08",
-    value: 52500,
-    status: "submitted",
-  },
-  {
-    id: "2",
-    userName: "Sarah Johnson",
-    metric: "Closing ARR",
-    month: "2025-08",
-    value: 28000,
-    status: "submitted",
-  },
-  {
-    id: "3",
-    userName: "Michael Chen",
-    metric: "Retention Rate",
-    month: "2025-08",
-    value: 95.5,
-    status: "pending",
-  },
-  {
-    id: "4",
-    userName: "Michael Chen",
-    metric: "Upsell Revenue",
-    month: "2025-08",
-    value: 18500,
-    status: "pending",
-  },
-  {
-    id: "5",
-    userName: "Emily Rodriguez",
-    metric: "New Software Sales",
-    month: "2025-08",
-    value: 68000,
-    status: "submitted",
-  },
-];
-
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "submitted":
-      return (
-        <Badge className="bg-success/10 text-success">
-          <CheckCircle className="h-3 w-3 mr-1" />
-          Submitted
-        </Badge>
-      );
-    case "pending":
-      return (
-        <Badge className="bg-warning/10 text-warning">
-          <AlertCircle className="h-3 w-3 mr-1" />
-          Pending
-        </Badge>
-      );
-    default:
-      return null;
+// Generate month options for the last 12 months + next 3 months
+const generateMonthOptions = () => {
+  const options = [];
+  const today = new Date();
+  
+  for (let i = 11; i >= -3; i--) {
+    const date = i > 0 ? subMonths(today, i) : addMonths(today, Math.abs(i));
+    const value = format(date, "yyyy-MM-01");
+    const label = format(date, "MMMM yyyy");
+    options.push({ value, label });
   }
+  
+  return options;
 };
 
+const monthOptions = generateMonthOptions();
+
 export default function DataInputs() {
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), "yyyy-MM-01"));
+  const [selectedMetricType, setSelectedMetricType] = useState<string>("all");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingDeal, setEditingDeal] = useState<DealWithParticipants | null>(null);
+
+  // Fetch deals based on filters
+  const { data: deals = [], isLoading } = useDeals(
+    selectedMonth,
+    selectedMetricType === "all" ? undefined : selectedMetricType
+  );
+
+  const handleAddDeal = (metricType?: string) => {
+    setEditingDeal(null);
+    setDialogOpen(true);
+  };
+
+  const handleEditDeal = (deal: DealWithParticipants) => {
+    setEditingDeal(deal);
+    setDialogOpen(true);
+  };
+
+  // Calculate stats
+  const totalDeals = deals.length;
+  const totalValue = deals.reduce((sum, d) => sum + d.deal_value_usd, 0);
+  const statusCounts = deals.reduce(
+    (acc, d) => {
+      acc[d.status] = (acc[d.status] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  // Filter deals by metric type for tabs
+  const getDealsForMetric = (metricType: string) => {
+    if (metricType === "all") return deals;
+    return deals.filter((d) => d.metric_type === metricType);
+  };
+
   return (
     <AppLayout>
       <div className="p-6 lg:p-8 space-y-6">
@@ -93,28 +89,25 @@ export default function DataInputs() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Data Inputs</h1>
-            <p className="text-muted-foreground">Upload and manage monthly actuals</p>
+            <p className="text-muted-foreground">Manage deal-level actuals and participant assignments</p>
           </div>
           <div className="flex items-center gap-2">
-            <Select defaultValue="2025-08">
-              <SelectTrigger className="w-40">
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-44">
                 <Calendar className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Select month" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="2025-08">August 2025</SelectItem>
-                <SelectItem value="2025-07">July 2025</SelectItem>
-                <SelectItem value="2025-06">June 2025</SelectItem>
-                <SelectItem value="2025-05">May 2025</SelectItem>
+                {monthOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Button variant="outline">
-              <Upload className="h-4 w-4 mr-1.5" />
-              Import CSV
-            </Button>
-            <Button variant="accent">
-              <Save className="h-4 w-4 mr-1.5" />
-              Save All
+            <Button onClick={() => handleAddDeal()}>
+              <Plus className="h-4 w-4 mr-1.5" />
+              Add Deal
             </Button>
           </div>
         </div>
@@ -128,8 +121,8 @@ export default function DataInputs() {
                   <FileSpreadsheet className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Entries</p>
-                  <p className="text-2xl font-semibold text-foreground">{monthlyData.length}</p>
+                  <p className="text-sm text-muted-foreground">Total Deals</p>
+                  <p className="text-2xl font-semibold text-foreground">{totalDeals}</p>
                 </div>
               </div>
             </CardContent>
@@ -141,9 +134,9 @@ export default function DataInputs() {
                   <CheckCircle className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Submitted</p>
+                  <p className="text-sm text-muted-foreground">Approved</p>
                   <p className="text-2xl font-semibold text-foreground">
-                    {monthlyData.filter(d => d.status === "submitted").length}
+                    {statusCounts.approved || 0}
                   </p>
                 </div>
               </div>
@@ -153,12 +146,12 @@ export default function DataInputs() {
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-md bg-warning/10 text-warning">
-                  <AlertCircle className="h-6 w-6" />
+                  <Clock className="h-6 w-6" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Pending</p>
                   <p className="text-2xl font-semibold text-foreground">
-                    {monthlyData.filter(d => d.status === "pending").length}
+                    {(statusCounts.draft || 0) + (statusCounts.submitted || 0)}
                   </p>
                 </div>
               </div>
@@ -167,95 +160,79 @@ export default function DataInputs() {
           <Card>
             <CardContent className="pt-6">
               <div>
-                <p className="text-sm text-muted-foreground">Selected Period</p>
-                <p className="text-lg font-semibold text-foreground">August 2025</p>
-                <p className="text-xs text-muted-foreground">FY 2025 Q3</p>
+                <p className="text-sm text-muted-foreground">Total Value (USD)</p>
+                <p className="text-2xl font-semibold text-foreground">
+                  {formatCurrency(totalValue)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {format(new Date(selectedMonth), "MMMM yyyy")}
+                </p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Data Entry Table */}
+        {/* Deals Table with Metric Type Tabs */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Monthly Actuals</CardTitle>
-            <CardDescription>Enter or edit performance data for the selected period</CardDescription>
+            <CardTitle className="text-lg">Deals by Metric Type</CardTitle>
+            <CardDescription>
+              View and manage deals categorized by metric type
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Team Member</TableHead>
-                  <TableHead>Metric</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="text-right">Value</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {monthlyData.map((entry) => (
-                  <TableRow key={entry.id} className="data-row">
-                    <TableCell className="font-medium">{entry.userName}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-normal">
-                        {entry.metric}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{entry.month}</TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="number"
-                        defaultValue={entry.value}
-                        className="w-32 text-right ml-auto"
-                      />
-                    </TableCell>
-                    <TableCell>{getStatusBadge(entry.status)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        <Save className="h-4 w-4 mr-1" />
-                        Update
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <Tabs value={selectedMetricType} onValueChange={setSelectedMetricType}>
+              <TabsList className="mb-4 flex-wrap h-auto gap-1">
+                <TabsTrigger value="all" className="text-xs">
+                  All
+                  <Badge variant="secondary" className="ml-1.5 text-xs">
+                    {deals.length}
+                  </Badge>
+                </TabsTrigger>
+                {METRIC_TYPES.map((type) => {
+                  const count = deals.filter((d) => d.metric_type === type.value).length;
+                  return (
+                    <TabsTrigger key={type.value} value={type.value} className="text-xs">
+                      {type.label.split(" ")[0]}
+                      {count > 0 && (
+                        <Badge variant="secondary" className="ml-1.5 text-xs">
+                          {count}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+
+              <TabsContent value="all">
+                <DealsTable
+                  deals={deals}
+                  onEdit={handleEditDeal}
+                  isLoading={isLoading}
+                />
+              </TabsContent>
+
+              {METRIC_TYPES.map((type) => (
+                <TabsContent key={type.value} value={type.value}>
+                  <DealsTable
+                    deals={getDealsForMetric(type.value)}
+                    onEdit={handleEditDeal}
+                    isLoading={isLoading}
+                  />
+                </TabsContent>
+              ))}
+            </Tabs>
           </CardContent>
         </Card>
 
-        {/* Exchange Rates Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Exchange Rates</CardTitle>
-            <CardDescription>Currency conversion rates for multi-currency calculations</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-4">
-              {[
-                { currency: "EUR", rate: 1.08 },
-                { currency: "GBP", rate: 1.26 },
-                { currency: "INR", rate: 0.012 },
-                { currency: "SGD", rate: 0.74 },
-              ].map((rate) => (
-                <div key={rate.currency} className="flex items-center gap-3 rounded-md border p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded bg-muted font-semibold text-sm">
-                    {rate.currency}
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      defaultValue={rate.rate}
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground">to USD</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Deal Form Dialog */}
+        <DealFormDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          deal={editingDeal}
+          defaultMonth={selectedMonth}
+          defaultMetricType={selectedMetricType === "all" ? undefined : selectedMetricType}
+        />
       </div>
     </AppLayout>
   );

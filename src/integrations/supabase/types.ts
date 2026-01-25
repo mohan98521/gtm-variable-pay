@@ -122,6 +122,89 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_participants: {
+        Row: {
+          created_at: string
+          deal_id: string
+          employee_id: string
+          id: string
+          participant_role: string
+          split_percent: number
+        }
+        Insert: {
+          created_at?: string
+          deal_id: string
+          employee_id: string
+          id?: string
+          participant_role: string
+          split_percent?: number
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string
+          employee_id?: string
+          id?: string
+          participant_role?: string
+          split_percent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_participants_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deals: {
+        Row: {
+          client_name: string
+          created_at: string
+          deal_id: string
+          deal_name: string
+          deal_value_local: number | null
+          deal_value_usd: number
+          id: string
+          local_currency: string
+          metric_type: string
+          month_year: string
+          notes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_name: string
+          created_at?: string
+          deal_id: string
+          deal_name: string
+          deal_value_local?: number | null
+          deal_value_usd?: number
+          id?: string
+          local_currency?: string
+          metric_type: string
+          month_year: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_name?: string
+          created_at?: string
+          deal_id?: string
+          deal_name?: string
+          deal_value_local?: number | null
+          deal_value_usd?: number
+          id?: string
+          local_currency?: string
+          metric_type?: string
+          month_year?: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       employees: {
         Row: {
           auth_user_id: string | null
