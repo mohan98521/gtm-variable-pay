@@ -132,15 +132,24 @@ export type Database = {
           designation: string | null
           email: string
           employee_id: string
+          employee_role: string | null
           full_name: string
           function_area: string | null
           group_name: string | null
           id: string
+          incentive_type: string | null
           is_active: boolean
           local_currency: string
           manager_employee_id: string | null
+          ote_local_currency: number | null
+          ote_usd: number | null
           region: string | null
           sales_function: string | null
+          target_bonus_percent: number | null
+          tfp_local_currency: number | null
+          tfp_usd: number | null
+          tvp_local_currency: number | null
+          tvp_usd: number | null
           updated_at: string
         }
         Insert: {
@@ -155,15 +164,24 @@ export type Database = {
           designation?: string | null
           email: string
           employee_id: string
+          employee_role?: string | null
           full_name: string
           function_area?: string | null
           group_name?: string | null
           id?: string
+          incentive_type?: string | null
           is_active?: boolean
           local_currency?: string
           manager_employee_id?: string | null
+          ote_local_currency?: number | null
+          ote_usd?: number | null
           region?: string | null
           sales_function?: string | null
+          target_bonus_percent?: number | null
+          tfp_local_currency?: number | null
+          tfp_usd?: number | null
+          tvp_local_currency?: number | null
+          tvp_usd?: number | null
           updated_at?: string
         }
         Update: {
@@ -178,15 +196,24 @@ export type Database = {
           designation?: string | null
           email?: string
           employee_id?: string
+          employee_role?: string | null
           full_name?: string
           function_area?: string | null
           group_name?: string | null
           id?: string
+          incentive_type?: string | null
           is_active?: boolean
           local_currency?: string
           manager_employee_id?: string | null
+          ote_local_currency?: number | null
+          ote_usd?: number | null
           region?: string | null
           sales_function?: string | null
+          target_bonus_percent?: number | null
+          tfp_local_currency?: number | null
+          tfp_usd?: number | null
+          tvp_local_currency?: number | null
+          tvp_usd?: number | null
           updated_at?: string
         }
         Relationships: []

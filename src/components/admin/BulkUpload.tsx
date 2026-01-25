@@ -14,7 +14,7 @@ interface UploadResult {
   errors: string[];
 }
 
-// All 17 employee fields
+// All 26 employee fields (17 core + 9 compensation)
 const EMPLOYEE_HEADERS = [
   "full_name",
   "email",
@@ -33,6 +33,16 @@ const EMPLOYEE_HEADERS = [
   "department",
   "region",
   "departure_date",
+  // New compensation target fields
+  "employee_role",
+  "incentive_type",
+  "target_bonus_percent",
+  "tfp_local_currency",
+  "tvp_local_currency",
+  "ote_local_currency",
+  "tfp_usd",
+  "tvp_usd",
+  "ote_usd",
 ];
 
 const USER_TARGETS_HEADERS = [
@@ -60,6 +70,7 @@ export function BulkUpload() {
     const allHeaders = [...EMPLOYEE_HEADERS, ...USER_TARGETS_HEADERS.slice(1)];
     const csvContent = allHeaders.join(",") + "\n";
     const sampleRow = [
+      // Core employee fields (17)
       "John Doe",
       "john.doe@example.com",
       "EMP001",
@@ -77,6 +88,17 @@ export function BulkUpload() {
       "Sales",
       "North America",
       "",
+      // New compensation fields (9)
+      "Individual Contributor",
+      "Standard",
+      "20",
+      "80000",
+      "20000",
+      "100000",
+      "80000",
+      "20000",
+      "100000",
+      // User targets fields
       "Standard Plan 2026",
       "2026-01-01",
       "2026-12-31",
@@ -128,7 +150,7 @@ export function BulkUpload() {
       setProgress(Math.round(((i + 1) / total) * 100));
       
       try {
-        // Prepare employee data with all 17 fields
+        // Prepare employee data with all 26 fields (17 core + 9 compensation)
         const employeeData = {
           full_name: row.full_name,
           email: row.email,
@@ -147,6 +169,16 @@ export function BulkUpload() {
           department: row.department || null,
           region: row.region || null,
           departure_date: row.departure_date || null,
+          // New compensation target fields
+          employee_role: row.employee_role || null,
+          incentive_type: row.incentive_type || null,
+          target_bonus_percent: row.target_bonus_percent ? parseFloat(row.target_bonus_percent) : null,
+          tfp_local_currency: row.tfp_local_currency ? parseFloat(row.tfp_local_currency) : null,
+          tvp_local_currency: row.tvp_local_currency ? parseFloat(row.tvp_local_currency) : null,
+          ote_local_currency: row.ote_local_currency ? parseFloat(row.ote_local_currency) : null,
+          tfp_usd: row.tfp_usd ? parseFloat(row.tfp_usd) : null,
+          tvp_usd: row.tvp_usd ? parseFloat(row.tvp_usd) : null,
+          ote_usd: row.ote_usd ? parseFloat(row.ote_usd) : null,
         };
 
         // Check if employee exists
@@ -301,11 +333,15 @@ export function BulkUpload() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="bg-muted/50 p-4 rounded-lg">
-            <h4 className="font-medium mb-2">Supported Fields (17 Employee Fields):</h4>
+            <h4 className="font-medium mb-2">Supported Fields (26 Employee Fields):</h4>
             <p className="text-sm text-muted-foreground">
-              Full Name, Email, Employee ID, Designation, Sales Function, Business Unit, Group Name, 
+              <strong>Core (17):</strong> Full Name, Email, Employee ID, Designation, Sales Function, Business Unit, Group Name, 
               Function Area, Manager (Employee ID), Date of Hire, Is Active, City, Country, Local Currency, 
               Department, Region, Departure Date
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              <strong>Compensation (9):</strong> Employee Role, Incentive Type, Target Bonus %, TFP (LC), TVP (LC), 
+              OTE (LC), TFP (USD), TVP (USD), OTE (USD)
             </p>
           </div>
 
