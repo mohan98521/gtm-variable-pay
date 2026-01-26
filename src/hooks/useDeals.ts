@@ -4,15 +4,37 @@ import { toast } from "sonner";
 
 export interface Deal {
   id: string;
-  deal_id: string;
-  deal_name: string;
-  client_name: string;
-  metric_type: string;
+  project_id: string;
+  customer_code: string;
+  region: string;
+  country: string;
+  bu: string;
+  product: string;
+  type_of_proposal: string;
+  gp_margin_percent: number | null;
   month_year: string;
-  deal_value_usd: number;
-  deal_value_local: number | null;
-  local_currency: string;
-  business_unit: string | null;
+  first_year_amc_usd: number | null;
+  first_year_subscription_usd: number | null;
+  new_software_booking_arr_usd: number | null;
+  managed_services_usd: number | null;
+  implementation_usd: number | null;
+  cr_usd: number | null;
+  er_usd: number | null;
+  tcv_usd: number | null;
+  sales_rep_employee_id: string | null;
+  sales_rep_name: string | null;
+  sales_head_employee_id: string | null;
+  sales_head_name: string | null;
+  sales_engineering_employee_id: string | null;
+  sales_engineering_name: string | null;
+  sales_engineering_head_employee_id: string | null;
+  sales_engineering_head_name: string | null;
+  channel_sales_employee_id: string | null;
+  channel_sales_name: string | null;
+  product_specialist_employee_id: string | null;
+  product_specialist_name: string | null;
+  linked_to_impl: boolean | null;
+  eligible_for_perpetual_incentive: boolean | null;
   status: string;
   notes: string | null;
   created_at: string;
@@ -33,30 +55,53 @@ export interface DealWithParticipants extends Deal {
 }
 
 export interface CreateDealInput {
-  deal_id: string;
-  deal_name: string;
-  client_name: string;
-  metric_type: string;
+  project_id: string;
+  customer_code: string;
+  region: string;
+  country: string;
+  bu: string;
+  product: string;
+  type_of_proposal: string;
+  gp_margin_percent?: number;
   month_year: string;
-  deal_value_usd: number;
-  deal_value_local?: number;
-  local_currency: string;
-  business_unit?: string;
+  first_year_amc_usd?: number;
+  first_year_subscription_usd?: number;
+  managed_services_usd?: number;
+  implementation_usd?: number;
+  cr_usd?: number;
+  er_usd?: number;
+  tcv_usd?: number;
+  sales_rep_employee_id?: string;
+  sales_rep_name?: string;
+  sales_head_employee_id?: string;
+  sales_head_name?: string;
+  sales_engineering_employee_id?: string;
+  sales_engineering_name?: string;
+  sales_engineering_head_employee_id?: string;
+  sales_engineering_head_name?: string;
+  channel_sales_employee_id?: string;
+  channel_sales_name?: string;
+  product_specialist_employee_id?: string;
+  product_specialist_name?: string;
+  linked_to_impl?: boolean;
+  eligible_for_perpetual_incentive?: boolean;
   status?: string;
   notes?: string;
-  participants: Omit<DealParticipant, "id" | "deal_id" | "created_at">[];
+  participants?: Omit<DealParticipant, "id" | "deal_id" | "created_at">[];
 }
 
 export interface UpdateDealInput extends Partial<CreateDealInput> {
   id: string;
 }
 
-export const METRIC_TYPES = [
-  { value: "software_arr", label: "New Software Booking ARR" },
-  { value: "managed_services", label: "Managed Services / PS" },
-  { value: "cr_er", label: "CR/ER (Contract Renewal / Extension)" },
+export const PROPOSAL_TYPES = [
+  { value: "amc", label: "AMC" },
+  { value: "subscription", label: "Subscription" },
+  { value: "managed_services", label: "Managed Services" },
+  { value: "perpetual_licence", label: "Perpetual Licence" },
+  { value: "cr", label: "CR (Change Request)" },
+  { value: "er", label: "ER (Enhancement Request)" },
   { value: "implementation", label: "Implementation" },
-  { value: "perpetual_license", label: "Perpetual License" },
 ] as const;
 
 export const BUSINESS_UNITS = [
@@ -70,8 +115,9 @@ export const BUSINESS_UNITS = [
 export const PARTICIPANT_ROLES = [
   { value: "sales_rep", label: "Sales Rep" },
   { value: "sales_head", label: "Sales Head" },
-  { value: "se", label: "Solutions Engineer" },
-  { value: "channel_rep", label: "Channel Sales Rep" },
+  { value: "sales_engineering", label: "Sales Engineering" },
+  { value: "sales_engineering_head", label: "Sales Engineering Head" },
+  { value: "channel_sales", label: "Channel Sales" },
   { value: "product_specialist", label: "Product Specialist" },
 ] as const;
 
@@ -82,9 +128,9 @@ export const DEAL_STATUSES = [
   { value: "rejected", label: "Rejected" },
 ] as const;
 
-export function useDeals(monthYear?: string, metricType?: string) {
+export function useDeals(monthYear?: string, proposalType?: string) {
   return useQuery({
-    queryKey: ["deals", monthYear, metricType],
+    queryKey: ["deals", monthYear, proposalType],
     queryFn: async () => {
       let query = supabase
         .from("deals")
@@ -98,8 +144,8 @@ export function useDeals(monthYear?: string, metricType?: string) {
         query = query.eq("month_year", monthYear);
       }
 
-      if (metricType) {
-        query = query.eq("metric_type", metricType);
+      if (proposalType) {
+        query = query.eq("type_of_proposal", proposalType);
       }
 
       const { data, error } = await query;
@@ -149,7 +195,7 @@ export function useCreateDeal() {
       if (dealError) throw dealError;
 
       // Insert participants if any
-      if (participants.length > 0) {
+      if (participants && participants.length > 0) {
         const participantsWithDealId = participants.map((p) => ({
           ...p,
           deal_id: deal.id,
@@ -246,9 +292,8 @@ export function useDeleteDeal() {
   });
 }
 
-export function generateDealId(metricType: string): string {
-  const prefix = metricType.toUpperCase().slice(0, 3);
+export function generateProjectId(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).slice(2, 5).toUpperCase();
-  return `${prefix}-${timestamp}-${random}`;
+  return `PRJ-${timestamp}-${random}`;
 }

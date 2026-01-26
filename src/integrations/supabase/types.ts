@@ -206,51 +206,117 @@ export type Database = {
       }
       deals: {
         Row: {
-          business_unit: string | null
-          client_name: string
+          bu: string
+          channel_sales_employee_id: string | null
+          channel_sales_name: string | null
+          country: string
+          cr_usd: number | null
           created_at: string
-          deal_id: string
-          deal_name: string
-          deal_value_local: number | null
-          deal_value_usd: number
+          customer_code: string
+          eligible_for_perpetual_incentive: boolean | null
+          er_usd: number | null
+          first_year_amc_usd: number | null
+          first_year_subscription_usd: number | null
+          gp_margin_percent: number | null
           id: string
-          local_currency: string
-          metric_type: string
+          implementation_usd: number | null
+          linked_to_impl: boolean | null
+          managed_services_usd: number | null
           month_year: string
+          new_software_booking_arr_usd: number | null
           notes: string | null
+          product: string
+          product_specialist_employee_id: string | null
+          product_specialist_name: string | null
+          project_id: string
+          region: string
+          sales_engineering_employee_id: string | null
+          sales_engineering_head_employee_id: string | null
+          sales_engineering_head_name: string | null
+          sales_engineering_name: string | null
+          sales_head_employee_id: string | null
+          sales_head_name: string | null
+          sales_rep_employee_id: string | null
+          sales_rep_name: string | null
           status: string
+          tcv_usd: number | null
+          type_of_proposal: string
           updated_at: string
         }
         Insert: {
-          business_unit?: string | null
-          client_name: string
+          bu: string
+          channel_sales_employee_id?: string | null
+          channel_sales_name?: string | null
+          country: string
+          cr_usd?: number | null
           created_at?: string
-          deal_id: string
-          deal_name: string
-          deal_value_local?: number | null
-          deal_value_usd?: number
+          customer_code: string
+          eligible_for_perpetual_incentive?: boolean | null
+          er_usd?: number | null
+          first_year_amc_usd?: number | null
+          first_year_subscription_usd?: number | null
+          gp_margin_percent?: number | null
           id?: string
-          local_currency?: string
-          metric_type: string
+          implementation_usd?: number | null
+          linked_to_impl?: boolean | null
+          managed_services_usd?: number | null
           month_year: string
+          new_software_booking_arr_usd?: number | null
           notes?: string | null
+          product: string
+          product_specialist_employee_id?: string | null
+          product_specialist_name?: string | null
+          project_id: string
+          region: string
+          sales_engineering_employee_id?: string | null
+          sales_engineering_head_employee_id?: string | null
+          sales_engineering_head_name?: string | null
+          sales_engineering_name?: string | null
+          sales_head_employee_id?: string | null
+          sales_head_name?: string | null
+          sales_rep_employee_id?: string | null
+          sales_rep_name?: string | null
           status?: string
+          tcv_usd?: number | null
+          type_of_proposal: string
           updated_at?: string
         }
         Update: {
-          business_unit?: string | null
-          client_name?: string
+          bu?: string
+          channel_sales_employee_id?: string | null
+          channel_sales_name?: string | null
+          country?: string
+          cr_usd?: number | null
           created_at?: string
-          deal_id?: string
-          deal_name?: string
-          deal_value_local?: number | null
-          deal_value_usd?: number
+          customer_code?: string
+          eligible_for_perpetual_incentive?: boolean | null
+          er_usd?: number | null
+          first_year_amc_usd?: number | null
+          first_year_subscription_usd?: number | null
+          gp_margin_percent?: number | null
           id?: string
-          local_currency?: string
-          metric_type?: string
+          implementation_usd?: number | null
+          linked_to_impl?: boolean | null
+          managed_services_usd?: number | null
           month_year?: string
+          new_software_booking_arr_usd?: number | null
           notes?: string | null
+          product?: string
+          product_specialist_employee_id?: string | null
+          product_specialist_name?: string | null
+          project_id?: string
+          region?: string
+          sales_engineering_employee_id?: string | null
+          sales_engineering_head_employee_id?: string | null
+          sales_engineering_head_name?: string | null
+          sales_engineering_name?: string | null
+          sales_head_employee_id?: string | null
+          sales_head_name?: string | null
+          sales_rep_employee_id?: string | null
+          sales_rep_name?: string | null
           status?: string
+          tcv_usd?: number | null
+          type_of_proposal?: string
           updated_at?: string
         }
         Relationships: []

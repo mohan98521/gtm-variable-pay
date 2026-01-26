@@ -15,7 +15,7 @@ import {
 import { DealsTable } from "@/components/data-inputs/DealsTable";
 import { DealFormDialog } from "@/components/data-inputs/DealFormDialog";
 import { DealsBulkUpload } from "@/components/data-inputs/DealsBulkUpload";
-import { useDeals, DealWithParticipants, METRIC_TYPES } from "@/hooks/useDeals";
+import { useDeals, DealWithParticipants, PROPOSAL_TYPES } from "@/hooks/useDeals";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { format } from "date-fns";
 
@@ -28,7 +28,7 @@ export default function DataInputs() {
     const yearMatch = monthOptions.find(m => m.value === currentMonth);
     return yearMatch ? currentMonth : (monthOptions[0]?.value || currentMonth);
   });
-  const [selectedMetricType, setSelectedMetricType] = useState<string>("all");
+  const [selectedProposalType, setSelectedProposalType] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<DealWithParticipants | null>(null);
@@ -36,10 +36,10 @@ export default function DataInputs() {
   // Fetch deals based on filters
   const { data: deals = [], isLoading } = useDeals(
     selectedMonth,
-    selectedMetricType === "all" ? undefined : selectedMetricType
+    selectedProposalType === "all" ? undefined : selectedProposalType
   );
 
-  const handleAddDeal = (metricType?: string) => {
+  const handleAddDeal = () => {
     setEditingDeal(null);
     setDialogOpen(true);
   };
@@ -51,7 +51,8 @@ export default function DataInputs() {
 
   // Calculate stats
   const totalDeals = deals.length;
-  const totalValue = deals.reduce((sum, d) => sum + d.deal_value_usd, 0);
+  const totalARR = deals.reduce((sum, d) => sum + (d.new_software_booking_arr_usd || 0), 0);
+  const totalTCV = deals.reduce((sum, d) => sum + (d.tcv_usd || 0), 0);
   const statusCounts = deals.reduce(
     (acc, d) => {
       acc[d.status] = (acc[d.status] || 0) + 1;
@@ -69,10 +70,10 @@ export default function DataInputs() {
     }).format(value);
   };
 
-  // Filter deals by metric type for tabs
-  const getDealsForMetric = (metricType: string) => {
-    if (metricType === "all") return deals;
-    return deals.filter((d) => d.metric_type === metricType);
+  // Filter deals by proposal type for tabs
+  const getDealsForType = (proposalType: string) => {
+    if (proposalType === "all") return deals;
+    return deals.filter((d) => d.type_of_proposal === proposalType);
   };
 
   return (
@@ -102,7 +103,7 @@ export default function DataInputs() {
               <Upload className="h-4 w-4 mr-1.5" />
               Bulk Upload
             </Button>
-            <Button onClick={() => handleAddDeal()}>
+            <Button onClick={handleAddDeal}>
               <Plus className="h-4 w-4 mr-1.5" />
               Add Deal
             </Button>
@@ -157,28 +158,28 @@ export default function DataInputs() {
           <Card>
             <CardContent className="pt-6">
               <div>
-                <p className="text-sm text-muted-foreground">Total Value (USD)</p>
+                <p className="text-sm text-muted-foreground">Total ARR (USD)</p>
                 <p className="text-2xl font-semibold text-foreground">
-                  {formatCurrency(totalValue)}
+                  {formatCurrency(totalARR)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {format(new Date(selectedMonth), "MMMM yyyy")}
+                  TCV: {formatCurrency(totalTCV)}
                 </p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Deals Table with Metric Type Tabs */}
+        {/* Deals Table with Proposal Type Tabs */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Deals by Metric Type</CardTitle>
+            <CardTitle className="text-lg">Deals by Proposal Type</CardTitle>
             <CardDescription>
-              View and manage deals categorized by metric type
+              View and manage deals categorized by type of proposal
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={selectedMetricType} onValueChange={setSelectedMetricType}>
+            <Tabs value={selectedProposalType} onValueChange={setSelectedProposalType}>
               <TabsList className="mb-4 flex-wrap h-auto gap-1">
                 <TabsTrigger value="all" className="text-xs">
                   All
@@ -186,11 +187,11 @@ export default function DataInputs() {
                     {deals.length}
                   </Badge>
                 </TabsTrigger>
-                {METRIC_TYPES.map((type) => {
-                  const count = deals.filter((d) => d.metric_type === type.value).length;
+                {PROPOSAL_TYPES.map((type) => {
+                  const count = deals.filter((d) => d.type_of_proposal === type.value).length;
                   return (
                     <TabsTrigger key={type.value} value={type.value} className="text-xs">
-                      {type.label.split(" ")[0]}
+                      {type.label}
                       {count > 0 && (
                         <Badge variant="secondary" className="ml-1.5 text-xs">
                           {count}
@@ -209,10 +210,10 @@ export default function DataInputs() {
                 />
               </TabsContent>
 
-              {METRIC_TYPES.map((type) => (
+              {PROPOSAL_TYPES.map((type) => (
                 <TabsContent key={type.value} value={type.value}>
                   <DealsTable
-                    deals={getDealsForMetric(type.value)}
+                    deals={getDealsForType(type.value)}
                     onEdit={handleEditDeal}
                     isLoading={isLoading}
                   />
@@ -228,7 +229,7 @@ export default function DataInputs() {
           onOpenChange={setDialogOpen}
           deal={editingDeal}
           defaultMonth={selectedMonth}
-          defaultMetricType={selectedMetricType === "all" ? undefined : selectedMetricType}
+          defaultProposalType={selectedProposalType === "all" ? undefined : selectedProposalType}
         />
 
         {/* Bulk Upload Dialog */}

@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Download, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
-import { METRIC_TYPES, BUSINESS_UNITS, PARTICIPANT_ROLES, generateDealId } from "@/hooks/useDeals";
+import { PROPOSAL_TYPES, BUSINESS_UNITS, generateProjectId } from "@/hooks/useDeals";
 
 interface DealsBulkUploadProps {
   open: boolean;
@@ -26,21 +26,32 @@ interface DealsBulkUploadProps {
 }
 
 interface ParsedDeal {
-  deal_id: string;
-  deal_name: string;
-  client_name: string;
-  metric_type: string;
-  business_unit: string;
+  project_id: string;
+  customer_code: string;
+  region: string;
+  country: string;
+  bu: string;
+  product: string;
+  type_of_proposal: string;
+  gp_margin_percent?: number;
   month_year: string;
-  deal_value_local: number;
-  local_currency: string;
-  deal_value_usd: number;
-  notes?: string;
+  first_year_amc_usd?: number;
+  first_year_subscription_usd?: number;
+  managed_services_usd?: number;
+  implementation_usd?: number;
+  cr_usd?: number;
+  er_usd?: number;
+  tcv_usd?: number;
   sales_rep_id?: string;
   sales_head_id?: string;
-  se_id?: string;
-  channel_rep_id?: string;
+  sales_engineering_id?: string;
+  sales_engineering_head_id?: string;
+  channel_sales_id?: string;
   product_specialist_id?: string;
+  linked_to_impl?: boolean;
+  eligible_for_perpetual_incentive?: boolean;
+  status?: string;
+  notes?: string;
 }
 
 interface ValidationError {
@@ -50,41 +61,63 @@ interface ValidationError {
 }
 
 const CSV_TEMPLATE_HEADERS = [
-  "deal_id",
-  "deal_name",
-  "client_name",
-  "metric_type",
-  "business_unit",
+  "project_id",
+  "customer_code",
+  "region",
+  "country",
+  "bu",
+  "product",
+  "type_of_proposal",
+  "gp_margin_percent",
   "month_year",
-  "deal_value_local",
-  "local_currency",
-  "deal_value_usd",
-  "notes",
+  "first_year_amc_usd",
+  "first_year_subscription_usd",
+  "managed_services_usd",
+  "implementation_usd",
+  "cr_usd",
+  "er_usd",
+  "tcv_usd",
   "sales_rep_id",
   "sales_head_id",
-  "se_id",
-  "channel_rep_id",
+  "sales_engineering_id",
+  "sales_engineering_head_id",
+  "channel_sales_id",
   "product_specialist_id",
+  "linked_to_impl",
+  "eligible_for_perpetual_incentive",
+  "status",
+  "notes",
 ];
 
 const generateCSVTemplate = (): string => {
   const headers = CSV_TEMPLATE_HEADERS.join(",");
   const exampleRow = [
     "AUTO",
-    "Example Deal Name",
-    "Example Client",
-    "software_arr",
+    "CUST001",
+    "APAC",
+    "Singapore",
     "banking",
+    "Core Banking",
+    "amc",
+    "25",
     "2026-01-01",
     "100000",
-    "USD",
-    "100000",
-    "Optional notes",
+    "50000",
+    "25000",
+    "30000",
+    "0",
+    "0",
+    "250000",
     "EMP001",
     "EMP002",
     "",
     "",
     "",
+    "",
+    "no",
+    "no",
+    "draft",
+    "Optional notes",
   ].join(",");
   
   return `${headers}\n${exampleRow}`;
@@ -112,8 +145,13 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     },
   });
 
-  const validMetricTypes = METRIC_TYPES.map((m) => m.value);
+  const validProposalTypes = PROPOSAL_TYPES.map((m) => m.value);
   const validBusinessUnits = BUSINESS_UNITS.map((b) => b.value);
+
+  const parseBoolean = (value: string): boolean => {
+    const lowered = value.toLowerCase().trim();
+    return ["yes", "y", "true", "1"].includes(lowered);
+  };
 
   const parseCSV = (text: string): ParsedDeal[] => {
     const lines = text.trim().split("\n");
@@ -131,21 +169,32 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       });
 
       deals.push({
-        deal_id: deal.deal_id === "AUTO" ? generateDealId(deal.metric_type || "software_arr") : deal.deal_id,
-        deal_name: deal.deal_name,
-        client_name: deal.client_name,
-        metric_type: deal.metric_type,
-        business_unit: deal.business_unit,
+        project_id: deal.project_id === "AUTO" ? generateProjectId() : deal.project_id,
+        customer_code: deal.customer_code,
+        region: deal.region,
+        country: deal.country,
+        bu: deal.bu,
+        product: deal.product,
+        type_of_proposal: deal.type_of_proposal,
+        gp_margin_percent: deal.gp_margin_percent ? parseFloat(deal.gp_margin_percent) : undefined,
         month_year: deal.month_year,
-        deal_value_local: parseFloat(deal.deal_value_local) || 0,
-        local_currency: deal.local_currency || "USD",
-        deal_value_usd: parseFloat(deal.deal_value_usd) || 0,
-        notes: deal.notes || undefined,
+        first_year_amc_usd: deal.first_year_amc_usd ? parseFloat(deal.first_year_amc_usd) : undefined,
+        first_year_subscription_usd: deal.first_year_subscription_usd ? parseFloat(deal.first_year_subscription_usd) : undefined,
+        managed_services_usd: deal.managed_services_usd ? parseFloat(deal.managed_services_usd) : undefined,
+        implementation_usd: deal.implementation_usd ? parseFloat(deal.implementation_usd) : undefined,
+        cr_usd: deal.cr_usd ? parseFloat(deal.cr_usd) : undefined,
+        er_usd: deal.er_usd ? parseFloat(deal.er_usd) : undefined,
+        tcv_usd: deal.tcv_usd ? parseFloat(deal.tcv_usd) : undefined,
         sales_rep_id: deal.sales_rep_id || undefined,
         sales_head_id: deal.sales_head_id || undefined,
-        se_id: deal.se_id || undefined,
-        channel_rep_id: deal.channel_rep_id || undefined,
+        sales_engineering_id: deal.sales_engineering_id || undefined,
+        sales_engineering_head_id: deal.sales_engineering_head_id || undefined,
+        channel_sales_id: deal.channel_sales_id || undefined,
         product_specialist_id: deal.product_specialist_id || undefined,
+        linked_to_impl: deal.linked_to_impl ? parseBoolean(deal.linked_to_impl) : false,
+        eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive ? parseBoolean(deal.eligible_for_perpetual_incentive) : false,
+        status: deal.status || "draft",
+        notes: deal.notes || undefined,
       });
     }
 
@@ -157,28 +206,36 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     const employeeIds = new Set(employees.map((e) => e.employee_id));
 
     deals.forEach((deal, index) => {
-      const row = index + 2; // Account for header row and 0-indexing
+      const row = index + 2;
 
-      if (!deal.deal_name) {
-        errors.push({ row, field: "deal_name", message: "Deal name is required" });
+      if (!deal.project_id) {
+        errors.push({ row, field: "project_id", message: "Project ID is required" });
+      }
+      if (!deal.customer_code) {
+        errors.push({ row, field: "customer_code", message: "Customer code is required" });
+      }
+      if (!deal.region) {
+        errors.push({ row, field: "region", message: "Region is required" });
+      }
+      if (!deal.country) {
+        errors.push({ row, field: "country", message: "Country is required" });
+      }
+      if (!deal.product) {
+        errors.push({ row, field: "product", message: "Product is required" });
       }
 
-      if (!deal.client_name) {
-        errors.push({ row, field: "client_name", message: "Client name is required" });
-      }
-
-      if (!validMetricTypes.includes(deal.metric_type as typeof validMetricTypes[number])) {
+      if (!validProposalTypes.includes(deal.type_of_proposal as typeof validProposalTypes[number])) {
         errors.push({
           row,
-          field: "metric_type",
-          message: `Invalid metric type. Must be one of: ${validMetricTypes.join(", ")}`,
+          field: "type_of_proposal",
+          message: `Invalid type. Must be one of: ${validProposalTypes.join(", ")}`,
         });
       }
 
-      if (!validBusinessUnits.includes(deal.business_unit as typeof validBusinessUnits[number])) {
+      if (!validBusinessUnits.includes(deal.bu as typeof validBusinessUnits[number])) {
         errors.push({
           row,
-          field: "business_unit",
+          field: "bu",
           message: `Invalid business unit. Must be one of: ${validBusinessUnits.join(", ")}`,
         });
       }
@@ -193,12 +250,11 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         });
       }
 
-      if (deal.deal_value_usd <= 0) {
-        errors.push({ row, field: "deal_value_usd", message: "Deal value USD must be greater than 0" });
-      }
-
       // Validate participant employee IDs if provided
-      const participantFields = ["sales_rep_id", "sales_head_id", "se_id", "channel_rep_id", "product_specialist_id"];
+      const participantFields = [
+        "sales_rep_id", "sales_head_id", "sales_engineering_id",
+        "sales_engineering_head_id", "channel_sales_id", "product_specialist_id"
+      ];
       participantFields.forEach((field) => {
         const empId = deal[field as keyof ParsedDeal] as string | undefined;
         if (empId && !employeeIds.has(empId)) {
@@ -237,6 +293,12 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     maxFiles: 1,
   });
 
+  const getEmployeeName = (employeeId: string | undefined): string | null => {
+    if (!employeeId) return null;
+    const emp = employees.find((e) => e.employee_id === employeeId);
+    return emp?.full_name || null;
+  };
+
   const uploadMutation = useMutation({
     mutationFn: async (deals: ParsedDeal[]) => {
       setIsUploading(true);
@@ -245,60 +307,47 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       for (let i = 0; i < deals.length; i++) {
         const deal = deals[i];
 
-        // Insert deal
-        const { data: createdDeal, error: dealError } = await supabase
+        // Build deal data with employee names
+        const dealData = {
+          project_id: deal.project_id,
+          customer_code: deal.customer_code,
+          region: deal.region,
+          country: deal.country,
+          bu: deal.bu,
+          product: deal.product,
+          type_of_proposal: deal.type_of_proposal,
+          gp_margin_percent: deal.gp_margin_percent,
+          month_year: deal.month_year,
+          first_year_amc_usd: deal.first_year_amc_usd || 0,
+          first_year_subscription_usd: deal.first_year_subscription_usd || 0,
+          managed_services_usd: deal.managed_services_usd || 0,
+          implementation_usd: deal.implementation_usd || 0,
+          cr_usd: deal.cr_usd || 0,
+          er_usd: deal.er_usd || 0,
+          tcv_usd: deal.tcv_usd || 0,
+          sales_rep_employee_id: deal.sales_rep_id || null,
+          sales_rep_name: getEmployeeName(deal.sales_rep_id),
+          sales_head_employee_id: deal.sales_head_id || null,
+          sales_head_name: getEmployeeName(deal.sales_head_id),
+          sales_engineering_employee_id: deal.sales_engineering_id || null,
+          sales_engineering_name: getEmployeeName(deal.sales_engineering_id),
+          sales_engineering_head_employee_id: deal.sales_engineering_head_id || null,
+          sales_engineering_head_name: getEmployeeName(deal.sales_engineering_head_id),
+          channel_sales_employee_id: deal.channel_sales_id || null,
+          channel_sales_name: getEmployeeName(deal.channel_sales_id),
+          product_specialist_employee_id: deal.product_specialist_id || null,
+          product_specialist_name: getEmployeeName(deal.product_specialist_id),
+          linked_to_impl: deal.linked_to_impl || false,
+          eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive || false,
+          status: deal.status || "draft",
+          notes: deal.notes,
+        };
+
+        const { error: dealError } = await supabase
           .from("deals")
-          .insert({
-            deal_id: deal.deal_id,
-            deal_name: deal.deal_name,
-            client_name: deal.client_name,
-            metric_type: deal.metric_type,
-            business_unit: deal.business_unit,
-            month_year: deal.month_year,
-            deal_value_local: deal.deal_value_local,
-            local_currency: deal.local_currency,
-            deal_value_usd: deal.deal_value_usd,
-            notes: deal.notes,
-            status: "draft",
-          })
-          .select()
-          .single();
+          .insert(dealData);
 
         if (dealError) throw dealError;
-
-        // Build participants array
-        const participants: { deal_id: string; employee_id: string; participant_role: string; split_percent: number }[] = [];
-
-        const participantMapping: { field: keyof ParsedDeal; role: string }[] = [
-          { field: "sales_rep_id", role: "sales_rep" },
-          { field: "sales_head_id", role: "sales_head" },
-          { field: "se_id", role: "se" },
-          { field: "channel_rep_id", role: "channel_rep" },
-          { field: "product_specialist_id", role: "product_specialist" },
-        ];
-
-        for (const { field, role } of participantMapping) {
-          const empId = deal[field] as string | undefined;
-          if (empId) {
-            const employee = employees.find((e) => e.employee_id === empId);
-            if (employee) {
-              participants.push({
-                deal_id: createdDeal.id,
-                employee_id: employee.employee_id,
-                participant_role: role,
-                split_percent: 100,
-              });
-            }
-          }
-        }
-
-        if (participants.length > 0) {
-          const { error: participantError } = await supabase
-            .from("deal_participants")
-            .insert(participants);
-
-          if (participantError) throw participantError;
-        }
 
         setUploadProgress(Math.round(((i + 1) / deals.length) * 100));
       }
@@ -360,7 +409,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
           <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm">CSV Template</span>
+              <span className="text-sm">CSV Template (Updated Schema)</span>
             </div>
             <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
               <Download className="h-4 w-4 mr-1.5" />
