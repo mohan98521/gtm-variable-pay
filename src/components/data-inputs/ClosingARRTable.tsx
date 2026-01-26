@@ -27,9 +27,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle, Download } from "lucide-react";
 import { ClosingARRActual, useDeleteClosingARR } from "@/hooks/useClosingARR";
 import { format } from "date-fns";
+import { generateCSV, downloadCSV } from "@/lib/csvExport";
 
 interface ClosingARRTableProps {
   records: ClosingARRActual[];
@@ -100,6 +101,49 @@ export function ClosingARRTable({
     return <Badge variant={variant}>{label}</Badge>;
   };
 
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "month_year", header: "Month" },
+      { key: "bu", header: "BU" },
+      { key: "product", header: "Product" },
+      { key: "pid", header: "PID" },
+      { key: "customer_code", header: "Customer Code" },
+      { key: "customer_name", header: "Customer Name" },
+      { key: "order_category", header: "Order Category" },
+      { key: "status", header: "Status" },
+      { key: "order_category_2", header: "Order Category 2" },
+      { key: "opening_arr", header: "Opening ARR" },
+      { key: "cr", header: "CR" },
+      { key: "als_others", header: "ALS + Others" },
+      { key: "new", header: "New" },
+      { key: "inflation", header: "Inflation" },
+      { key: "discount_decrement", header: "Discount/Decrement" },
+      { key: "churn", header: "Churn" },
+      { key: "adjustment", header: "Adjustment" },
+      { key: "closing_arr", header: "Closing ARR" },
+      { key: "country", header: "Country" },
+      { key: "revised_region", header: "Revised Region" },
+      { key: "start_date", header: "Start Date" },
+      { key: "end_date", header: "End Date" },
+      { key: "renewal_status", header: "Renewal Status" },
+      { key: "sales_rep_employee_id", header: "Sales Rep Employee ID" },
+      { key: "sales_rep_name", header: "Sales Rep Name" },
+      { key: "sales_head_employee_id", header: "Sales Head Employee ID" },
+      { key: "sales_head_name", header: "Sales Head Name" },
+      { 
+        key: "eligible", 
+        header: "Eligible", 
+        getValue: (row: ClosingARRActual) => isEligible(row) ? "Yes" : "No" 
+      },
+    ];
+
+    const csv = generateCSV(records, csvColumns);
+    const monthLabel = records.length > 0 
+      ? format(new Date(records[0].month_year), "yyyy-MM") 
+      : "export";
+    downloadCSV(csv, `closing-arr-${monthLabel}.csv`);
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -121,6 +165,12 @@ export function ClosingARRTable({
 
   return (
     <>
+      <div className="flex justify-end mb-3">
+        <Button variant="outline" size="sm" onClick={handleExportCSV}>
+          <Download className="h-4 w-4 mr-1.5" />
+          Export CSV
+        </Button>
+      </div>
       <ScrollArea className="w-full whitespace-nowrap rounded-md border">
         <Table>
           <TableHeader>
