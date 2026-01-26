@@ -31,9 +31,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Users, Download } from "lucide-react";
 import { DealWithParticipants, PROPOSAL_TYPES, useDeleteDeal } from "@/hooks/useDeals";
 import { format } from "date-fns";
+import { generateCSV, downloadCSV } from "@/lib/csvExport";
 
 interface DealsTableProps {
   deals: DealWithParticipants[];
@@ -84,6 +85,40 @@ export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
     }
   };
 
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "project_id", header: "Project ID" },
+      { key: "customer_code", header: "Customer Code" },
+      { key: "bu", header: "BU" },
+      { key: "product", header: "Product" },
+      { key: "region", header: "Region" },
+      { key: "country", header: "Country" },
+      { key: "type_of_proposal", header: "Type of Proposal", getValue: (row: DealWithParticipants) => getProposalTypeLabel(row.type_of_proposal) },
+      { key: "month_year", header: "Month" },
+      { key: "new_software_booking_arr_usd", header: "New Software Booking ARR (USD)" },
+      { key: "tcv_usd", header: "TCV (USD)" },
+      { key: "first_year_amc_usd", header: "First Year AMC (USD)" },
+      { key: "first_year_subscription_usd", header: "First Year Subscription (USD)" },
+      { key: "managed_services_usd", header: "Managed Services (USD)" },
+      { key: "cr_usd", header: "CR (USD)" },
+      { key: "er_usd", header: "ER (USD)" },
+      { key: "implementation_usd", header: "Implementation (USD)" },
+      { key: "gp_margin_percent", header: "GP Margin %" },
+      { key: "status", header: "Status" },
+      { key: "sales_rep_name", header: "Sales Rep Name" },
+      { key: "sales_rep_employee_id", header: "Sales Rep Employee ID" },
+      { key: "sales_head_name", header: "Sales Head Name" },
+      { key: "sales_head_employee_id", header: "Sales Head Employee ID" },
+      { key: "notes", header: "Notes" },
+    ];
+
+    const csv = generateCSV(deals, csvColumns);
+    const monthLabel = deals.length > 0 
+      ? format(new Date(deals[0].month_year), "yyyy-MM") 
+      : "export";
+    downloadCSV(csv, `deals-${monthLabel}.csv`);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -104,6 +139,12 @@ export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
 
   return (
     <TooltipProvider>
+      <div className="flex justify-end mb-3">
+        <Button variant="outline" size="sm" onClick={handleExportCSV}>
+          <Download className="h-4 w-4 mr-1.5" />
+          Export CSV
+        </Button>
+      </div>
       <div className="border rounded-md overflow-x-auto">
         <Table>
           <TableHeader>
