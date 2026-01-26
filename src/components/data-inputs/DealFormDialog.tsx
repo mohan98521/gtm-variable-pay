@@ -658,15 +658,15 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Rep</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {employees.map((emp) => (
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
                             <SelectItem key={emp.employee_id} value={emp.employee_id}>
                               {emp.full_name} ({emp.employee_id})
                             </SelectItem>
@@ -683,15 +683,15 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Head</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {employees.map((emp) => (
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
                             <SelectItem key={emp.employee_id} value={emp.employee_id}>
                               {emp.full_name} ({emp.employee_id})
                             </SelectItem>
@@ -708,15 +708,15 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Engineering</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {employees.map((emp) => (
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
                             <SelectItem key={emp.employee_id} value={emp.employee_id}>
                               {emp.full_name} ({emp.employee_id})
                             </SelectItem>
@@ -733,15 +733,15 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Engineering Head</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {employees.map((emp) => (
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
                             <SelectItem key={emp.employee_id} value={emp.employee_id}>
                               {emp.full_name} ({emp.employee_id})
                             </SelectItem>
@@ -758,15 +758,15 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Channel Sales</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {employees.map((emp) => (
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
                             <SelectItem key={emp.employee_id} value={emp.employee_id}>
                               {emp.full_name} ({emp.employee_id})
                             </SelectItem>
@@ -783,15 +783,15 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Product Specialist</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {employees.map((emp) => (
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
                             <SelectItem key={emp.employee_id} value={emp.employee_id}>
                               {emp.full_name} ({emp.employee_id})
                             </SelectItem>
