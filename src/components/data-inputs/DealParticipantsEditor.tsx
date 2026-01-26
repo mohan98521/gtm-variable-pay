@@ -116,16 +116,17 @@ export function DealParticipantsEditor({
                   </TableCell>
                   <TableCell>
                     <Select
-                      value={participant.employee_id}
+                      value={participant.employee_id || "_none"}
                       onValueChange={(value) =>
-                        updateParticipant(index, "employee_id", value)
+                        updateParticipant(index, "employee_id", value === "_none" ? "" : value)
                       }
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Select employee" />
                       </SelectTrigger>
                       <SelectContent>
-                        {employees.map((employee) => (
+                        <SelectItem value="_none">Select employee</SelectItem>
+                        {employees.filter(emp => emp.employee_id).map((employee) => (
                           <SelectItem
                             key={employee.employee_id}
                             value={employee.employee_id}
