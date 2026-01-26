@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      closing_arr_actuals: {
+        Row: {
+          adjustment: number | null
+          als_others: number | null
+          bu: string
+          churn: number | null
+          closing_arr: number | null
+          country: string | null
+          cr: number | null
+          created_at: string
+          customer_code: string
+          customer_name: string
+          discount_decrement: number | null
+          end_date: string | null
+          id: string
+          inflation: number | null
+          month_year: string
+          new: number | null
+          opening_arr: number | null
+          order_category: string | null
+          order_category_2: string | null
+          pid: string
+          product: string
+          renewal_status: string | null
+          revised_region: string | null
+          sales_head_employee_id: string | null
+          sales_head_name: string | null
+          sales_rep_employee_id: string | null
+          sales_rep_name: string | null
+          start_date: string | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          adjustment?: number | null
+          als_others?: number | null
+          bu: string
+          churn?: number | null
+          closing_arr?: number | null
+          country?: string | null
+          cr?: number | null
+          created_at?: string
+          customer_code: string
+          customer_name: string
+          discount_decrement?: number | null
+          end_date?: string | null
+          id?: string
+          inflation?: number | null
+          month_year: string
+          new?: number | null
+          opening_arr?: number | null
+          order_category?: string | null
+          order_category_2?: string | null
+          pid: string
+          product: string
+          renewal_status?: string | null
+          revised_region?: string | null
+          sales_head_employee_id?: string | null
+          sales_head_name?: string | null
+          sales_rep_employee_id?: string | null
+          sales_rep_name?: string | null
+          start_date?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          adjustment?: number | null
+          als_others?: number | null
+          bu?: string
+          churn?: number | null
+          closing_arr?: number | null
+          country?: string | null
+          cr?: number | null
+          created_at?: string
+          customer_code?: string
+          customer_name?: string
+          discount_decrement?: number | null
+          end_date?: string | null
+          id?: string
+          inflation?: number | null
+          month_year?: string
+          new?: number | null
+          opening_arr?: number | null
+          order_category?: string | null
+          order_category_2?: string | null
+          pid?: string
+          product?: string
+          renewal_status?: string | null
+          revised_region?: string | null
+          sales_head_employee_id?: string | null
+          sales_head_name?: string | null
+          sales_rep_employee_id?: string | null
+          sales_rep_name?: string | null
+          start_date?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       closing_arr_targets: {
         Row: {
           closing_arr_target_usd: number
