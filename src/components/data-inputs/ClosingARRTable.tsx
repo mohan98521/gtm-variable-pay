@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -25,9 +25,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle, Download } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle, Download, X } from "lucide-react";
 import { ClosingARRActual, useDeleteClosingARR } from "@/hooks/useClosingARR";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvExport";
@@ -48,6 +55,50 @@ export function ClosingARRTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<ClosingARRActual | null>(null);
   const deleteMutation = useDeleteClosingARR();
+
+  // Filter state
+  const [filterPID, setFilterPID] = useState<string>("_all");
+  const [filterBU, setFilterBU] = useState<string>("_all");
+  const [filterProduct, setFilterProduct] = useState<string>("_all");
+  const [filterSalesRep, setFilterSalesRep] = useState<string>("_all");
+  const [filterSalesHead, setFilterSalesHead] = useState<string>("_all");
+  const [filterCustomer, setFilterCustomer] = useState<string>("_all");
+
+  // Get unique values for filter dropdowns
+  const filterOptions = useMemo(() => {
+    const pids = [...new Set(records.map((r) => r.pid))].sort();
+    const bus = [...new Set(records.map((r) => r.bu))].sort();
+    const products = [...new Set(records.map((r) => r.product))].sort();
+    const salesReps = [...new Set(records.map((r) => r.sales_rep_name).filter(Boolean))].sort() as string[];
+    const salesHeads = [...new Set(records.map((r) => r.sales_head_name).filter(Boolean))].sort() as string[];
+    const customers = [...new Set(records.map((r) => r.customer_name))].sort();
+    return { pids, bus, products, salesReps, salesHeads, customers };
+  }, [records]);
+
+  // Apply filters
+  const filteredRecords = useMemo(() => {
+    return records.filter((record) => {
+      if (filterPID !== "_all" && record.pid !== filterPID) return false;
+      if (filterBU !== "_all" && record.bu !== filterBU) return false;
+      if (filterProduct !== "_all" && record.product !== filterProduct) return false;
+      if (filterSalesRep !== "_all" && record.sales_rep_name !== filterSalesRep) return false;
+      if (filterSalesHead !== "_all" && record.sales_head_name !== filterSalesHead) return false;
+      if (filterCustomer !== "_all" && record.customer_name !== filterCustomer) return false;
+      return true;
+    });
+  }, [records, filterPID, filterBU, filterProduct, filterSalesRep, filterSalesHead, filterCustomer]);
+
+  const hasActiveFilters = filterPID !== "_all" || filterBU !== "_all" || filterProduct !== "_all" || 
+    filterSalesRep !== "_all" || filterSalesHead !== "_all" || filterCustomer !== "_all";
+
+  const clearAllFilters = () => {
+    setFilterPID("_all");
+    setFilterBU("_all");
+    setFilterProduct("_all");
+    setFilterSalesRep("_all");
+    setFilterSalesHead("_all");
+    setFilterCustomer("_all");
+  };
 
   const formatCurrency = (value: number | null) => {
     if (value === null || value === undefined) return "-";
@@ -165,12 +216,100 @@ export function ClosingARRTable({
 
   return (
     <>
-      <div className="flex justify-end mb-3">
-        <Button variant="outline" size="sm" onClick={handleExportCSV}>
+      {/* Filters Row */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <Select value={filterPID} onValueChange={setFilterPID}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Filter PID" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All PIDs</SelectItem>
+            {filterOptions.pids.map((pid) => (
+              <SelectItem key={pid} value={pid}>{pid}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterBU} onValueChange={setFilterBU}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Filter BU" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All BUs</SelectItem>
+            {filterOptions.bus.map((bu) => (
+              <SelectItem key={bu} value={bu}>{bu}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterProduct} onValueChange={setFilterProduct}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Filter Product" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All Products</SelectItem>
+            {filterOptions.products.map((product) => (
+              <SelectItem key={product} value={product}>{product}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Filter Customer" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All Customers</SelectItem>
+            {filterOptions.customers.map((customer) => (
+              <SelectItem key={customer} value={customer}>{customer}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterSalesRep} onValueChange={setFilterSalesRep}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Filter Sales Rep" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All Sales Reps</SelectItem>
+            {filterOptions.salesReps.map((rep) => (
+              <SelectItem key={rep} value={rep}>{rep}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterSalesHead} onValueChange={setFilterSalesHead}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Filter Sales Head" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">All Sales Heads</SelectItem>
+            {filterOptions.salesHeads.map((head) => (
+              <SelectItem key={head} value={head}>{head}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-10">
+            <X className="h-4 w-4 mr-1" />
+            Clear
+          </Button>
+        )}
+
+        <div className="flex-1" />
+
+        <Button variant="outline" size="sm" onClick={handleExportCSV} className="h-10">
           <Download className="h-4 w-4 mr-1.5" />
           Export CSV
         </Button>
       </div>
+
+      {hasActiveFilters && (
+        <p className="text-sm text-muted-foreground mb-2">
+          Showing {filteredRecords.length} of {records.length} records
+        </p>
+      )}
       <ScrollArea className="w-full whitespace-nowrap rounded-md border">
         <Table>
           <TableHeader>
@@ -190,7 +329,7 @@ export function ClosingARRTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {records.map((record) => {
+            {filteredRecords.map((record) => {
               const changes = calculateChanges(record);
               const eligible = isEligible(record);
 
