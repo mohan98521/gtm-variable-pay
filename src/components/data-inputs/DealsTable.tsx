@@ -31,12 +31,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
-import { DealWithParticipants, PARTICIPANT_ROLES, useDeleteDeal } from "@/hooks/useDeals";
+import { DealWithParticipants, PROPOSAL_TYPES, useDeleteDeal } from "@/hooks/useDeals";
 import { format } from "date-fns";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 
 interface DealsTableProps {
   deals: DealWithParticipants[];
@@ -51,45 +48,27 @@ const statusColors: Record<string, string> = {
   rejected: "bg-destructive/10 text-destructive",
 };
 
+const proposalTypeColors: Record<string, string> = {
+  amc: "bg-blue-500/10 text-blue-700",
+  subscription: "bg-purple-500/10 text-purple-700",
+  managed_services: "bg-teal-500/10 text-teal-700",
+  perpetual_licence: "bg-amber-500/10 text-amber-700",
+  cr: "bg-orange-500/10 text-orange-700",
+  er: "bg-pink-500/10 text-pink-700",
+  implementation: "bg-green-500/10 text-green-700",
+};
+
 export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const deleteDeal = useDeleteDeal();
 
-  // Fetch employees for name lookup
-  const { data: employees = [] } = useQuery({
-    queryKey: ["employees-list"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("employees")
-        .select("employee_id, full_name")
-        .eq("is_active", true);
-
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const getEmployeeName = (employeeId: string) => {
-    const employee = employees.find((e) => e.employee_id === employeeId);
-    return employee?.full_name || employeeId;
+  const getProposalTypeLabel = (value: string) => {
+    const type = PROPOSAL_TYPES.find((t) => t.value === value);
+    return type?.label || value;
   };
 
-  const getEmployeeInitials = (employeeId: string) => {
-    const name = getEmployeeName(employeeId);
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const getRoleLabel = (roleValue: string) => {
-    const role = PARTICIPANT_ROLES.find((r) => r.value === roleValue);
-    return role?.label || roleValue;
-  };
-
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null) => {
+    if (value === null || value === undefined) return "-";
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -125,16 +104,17 @@ export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
 
   return (
     <TooltipProvider>
-      <div className="border rounded-md">
+      <div className="border rounded-md overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Deal ID</TableHead>
-              <TableHead>Deal Name</TableHead>
-              <TableHead>Client</TableHead>
+              <TableHead>Project ID</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>BU</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Month</TableHead>
-              <TableHead className="text-right">Value (USD)</TableHead>
-              <TableHead>Participants</TableHead>
+              <TableHead className="text-right">ARR USD</TableHead>
+              <TableHead className="text-right">TCV USD</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
@@ -143,55 +123,32 @@ export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
             {deals.map((deal) => (
               <TableRow key={deal.id} className="data-row">
                 <TableCell className="font-mono text-sm">
-                  {deal.deal_id}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help">{deal.project_id}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p><strong>Product:</strong> {deal.product}</p>
+                      <p><strong>Region:</strong> {deal.region}</p>
+                      <p><strong>Country:</strong> {deal.country}</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </TableCell>
-                <TableCell className="font-medium">{deal.deal_name}</TableCell>
-                <TableCell>{deal.client_name}</TableCell>
+                <TableCell className="font-medium">{deal.customer_code}</TableCell>
+                <TableCell className="text-muted-foreground">{deal.bu}</TableCell>
+                <TableCell>
+                  <Badge className={proposalTypeColors[deal.type_of_proposal] || "bg-muted"}>
+                    {getProposalTypeLabel(deal.type_of_proposal)}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {format(new Date(deal.month_year), "MMM yyyy")}
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  {formatCurrency(deal.deal_value_usd)}
+                  {formatCurrency(deal.new_software_booking_arr_usd)}
                 </TableCell>
-                <TableCell>
-                  <div className="flex -space-x-2">
-                    {deal.deal_participants.slice(0, 4).map((participant, idx) => (
-                      <Tooltip key={participant.id}>
-                        <TooltipTrigger asChild>
-                          <Avatar className="h-7 w-7 border-2 border-background">
-                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                              {getEmployeeInitials(participant.employee_id)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="font-medium">
-                            {getEmployeeName(participant.employee_id)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {getRoleLabel(participant.participant_role)} ({participant.split_percent}%)
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                    {deal.deal_participants.length > 4 && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Avatar className="h-7 w-7 border-2 border-background">
-                            <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                              +{deal.deal_participants.length - 4}
-                            </AvatarFallback>
-                          </Avatar>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{deal.deal_participants.length - 4} more participants</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    {deal.deal_participants.length === 0 && (
-                      <span className="text-xs text-muted-foreground">None</span>
-                    )}
-                  </div>
+                <TableCell className="text-right font-medium">
+                  {formatCurrency(deal.tcv_usd)}
                 </TableCell>
                 <TableCell>
                   <Badge className={statusColors[deal.status] || statusColors.draft}>

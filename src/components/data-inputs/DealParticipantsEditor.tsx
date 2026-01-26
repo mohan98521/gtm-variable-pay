@@ -62,15 +62,15 @@ export function DealParticipantsEditor({
     onChange(participants.filter((_, i) => i !== index));
   };
 
-  const getEmployeeName = (employeeId: string) => {
-    const employee = employees.find((e) => e.employee_id === employeeId);
-    return employee?.full_name || employeeId;
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium">Deal Participants</h4>
+        <div>
+          <h4 className="text-sm font-medium">Additional Participants (with Splits)</h4>
+          <p className="text-xs text-muted-foreground">
+            Add participants with custom split percentages for commission calculations
+          </p>
+        </div>
         <Button type="button" variant="outline" size="sm" onClick={addParticipant}>
           <Plus className="h-4 w-4 mr-1" />
           Add Participant
@@ -79,7 +79,7 @@ export function DealParticipantsEditor({
 
       {participants.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center border rounded-md">
-          No participants added. Click "Add Participant" to assign team members.
+          No additional participants. Use the fields above for standard assignments.
         </p>
       ) : (
         <div className="border rounded-md">
