@@ -538,7 +538,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 flex-1 overflow-hidden">
+        <div className="space-y-4 flex-1 overflow-y-auto">
           {/* Download Template */}
           <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div className="flex items-center gap-2">
