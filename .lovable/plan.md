@@ -1,76 +1,34 @@
 
 
-## Quick Fix: Add Customer Name Field to Deals
+## Update Date Format for Bulk Upload (MMM-YYYY)
 
 ### Overview
 
-Add the missing `customer_name` field to the Data Inputs deals section to match the Closing ARR structure and provide complete customer identification.
+Update the bulk upload validation for both Deals and Closing ARR to accept user-friendly `MMM-YYYY` format (e.g., "Jan-2026") instead of requiring the database format `YYYY-MM-DD`.
 
 ---
 
-### Current State
+### Current vs Proposed Format
 
-| Table | Has customer_code | Has customer_name |
-|-------|-------------------|-------------------|
-| `closing_arr_actuals` | ✅ Yes | ✅ Yes |
-| `deals` | ✅ Yes | ❌ **Missing** |
-
----
-
-### Changes Required
-
-**1. Database Migration**
-
-Add a new column to the `deals` table:
-
-```sql
-ALTER TABLE deals 
-ADD COLUMN IF NOT EXISTS customer_name text;
-```
-
-**2. Update Hook (`src/hooks/useDeals.ts`)**
-
-Add to the `Deal` interface:
-- `customer_name: string | null`
-
-Add to the `CreateDealInput` interface:
-- `customer_name?: string`
-
-**3. Update Form Dialog (`src/components/data-inputs/DealFormDialog.tsx`)**
-
-- Add `customer_name` to the Zod schema (optional string)
-- Add a new "Customer Name" input field in the Deal Identity section
-- Update form defaults and reset logic
-- Include in submit data
-
-**4. Update Bulk Upload (`src/components/data-inputs/DealsBulkUpload.tsx`)**
-
-- Add `customer_name` to CSV template headers
-- Update `ParsedDeal` interface
-- Add field mapping in parse logic
+| Component | Current Format | New Format |
+|-----------|----------------|------------|
+| Database Storage | `2026-01-01` (date) | `2026-01-01` (no change) |
+| CSV Upload Input | `YYYY-MM-DD` required | `MMM-YYYY` or `YYYY-MM-DD` accepted |
+| UI Display | "January 2026" | "January 2026" (no change) |
+| CSV Template Example | `2026-01-01` | `Jan-2026` |
 
 ---
 
-### Form Layout After Change
+### Technical Approach
 
-The Deal Identity section will have 4 fields in the first row:
+**No database changes required** - only client-side parsing logic needs updating.
 
-| Field 1 | Field 2 | Field 3 | Field 4 |
-|---------|---------|---------|---------|
-| Project ID | Customer Code | **Customer Name** | Product |
-
----
-
-### Technical Details
-
-**Schema field:**
-```text
-customer_name: z.string().optional()
-```
-
-**Form field placement:** Right after Customer Code, before Product in the Deal Identity grid.
-
-**Default value:** Empty string
+The solution will:
+1. Create a shared date parsing utility that accepts both formats
+2. Parse `MMM-YYYY` (e.g., "Jan-2026", "Feb-2026") and convert to `YYYY-MM-01`
+3. Continue accepting `YYYY-MM-DD` format for backward compatibility
+4. Update CSV template examples to show the new user-friendly format
+5. Update validation error messages
 
 ---
 
@@ -78,8 +36,107 @@ customer_name: z.string().optional()
 
 | File | Changes |
 |------|---------|
-| Database | Add `customer_name` column to `deals` table |
-| `src/hooks/useDeals.ts` | Add field to interfaces |
-| `src/components/data-inputs/DealFormDialog.tsx` | Add form field and validation |
-| `src/components/data-inputs/DealsBulkUpload.tsx` | Add to CSV template and parsing |
+| `src/components/data-inputs/DealsBulkUpload.tsx` | Add `parseMonthYear` function; update validation regex; update template example |
+| `src/components/data-inputs/ClosingARRBulkUpload.tsx` | Add `parseMonthYear` function; update `parseDate` function for month_year field |
+
+---
+
+### Implementation Details
+
+**1. New Date Parsing Function**
+
+Create a utility function to parse multiple date formats:
+
+```typescript
+const parseMonthYear = (value: string): string | null => {
+  if (!value || value.trim() === "") return null;
+  
+  const trimmed = value.trim();
+  
+  // Format 1: YYYY-MM-DD (existing format)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  
+  // Format 2: MMM-YYYY (e.g., "Jan-2026")
+  const monthMap: Record<string, string> = {
+    'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+    'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+    'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+  };
+  
+  const match = trimmed.match(/^([a-zA-Z]{3})-(\d{4})$/);
+  if (match) {
+    const monthNum = monthMap[match[1].toLowerCase()];
+    if (monthNum) {
+      return `${match[2]}-${monthNum}-01`;
+    }
+  }
+  
+  return null; // Invalid format
+};
+```
+
+**2. Update DealsBulkUpload.tsx Validation**
+
+Replace the current validation:
+```typescript
+// Current (line 255)
+if (!deal.month_year || !deal.month_year.match(/^\d{4}-\d{2}-\d{2}$/)) {
+  errors.push({ row, field: "month_year", message: "Invalid date format. Use YYYY-MM-DD" });
+}
+```
+
+With:
+```typescript
+// New validation
+const parsedDate = parseMonthYear(deal.month_year);
+if (!parsedDate) {
+  errors.push({ row, field: "month_year", message: "Invalid date format. Use MMM-YYYY (e.g., Jan-2026)" });
+} else if (!isMonthInFiscalYear(parsedDate)) {
+  errors.push({ row, field: "month_year", message: `Month must be within fiscal year ${selectedYear}` });
+}
+```
+
+**3. Update CSV Template**
+
+Change the example row from:
+```
+"2026-01-01"
+```
+To:
+```
+"Jan-2026"
+```
+
+**4. Update Alert Message**
+
+Change from:
+```
+All deals must have a month_year within FY 2026 (Jan-Dec 2026).
+```
+To:
+```
+All deals must have a month_year (e.g., Jan-2026) within FY 2026.
+```
+
+---
+
+### Backward Compatibility
+
+The solution maintains backward compatibility:
+- `YYYY-MM-DD` format still works (for existing CSV files)
+- `MMM-YYYY` format now also works (user-friendly)
+- Both formats are parsed and converted to the database format before storage
+
+---
+
+### Summary of Changes
+
+| Change | Deals Bulk Upload | Closing ARR Bulk Upload |
+|--------|-------------------|-------------------------|
+| Add `parseMonthYear` function | ✅ | ✅ |
+| Update validation logic | ✅ | ✅ |
+| Update template example | ✅ | ✅ (if applicable) |
+| Update help text/alert | ✅ | ✅ |
 
