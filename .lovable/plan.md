@@ -1,205 +1,205 @@
 
 
-## Fix Three Critical Issues: Multi-Participant Attribution, Multiplier Logic, and Commission Display
+## Fix Three Issues: Multiplier Logic, Perpetual License Source, and CR/ER Aggregation
 
 ### Issue Analysis
 
-I've investigated all three issues and found the root causes:
+Based on my investigation, here are the **root causes** of each issue:
 
 ---
 
-### Issue 1: Multi-Participant Deal Attribution Not Working
+### Issue 1: Multiplier Showing 1.0x Instead of 1.6x for 132.2% Achievement
 
-**Root Cause:** The `useIncentiveAuditData.ts` hook only aggregates deals for the **primary sales rep** (`sales_rep_employee_id`), ignoring all other participants.
+**Root Cause:** The `plan_metrics` table has `logic_type = "Linear"` for all Farmer plan metrics, but the compensation engine treats "Linear" as a pass-through (returns 1.0 multiplier) because it's designed for direct achievement without multipliers.
 
-**Current Code (Lines 125-139):**
+**Database Evidence:**
+| Metric | Logic Type | Multiplier Grids |
+|--------|-----------|------------------|
+| New Software Booking ARR | **Linear** | 1.0x (0-100%), 1.4x (100-120%), 1.6x (120-999%) |
+| Closing ARR | **Linear** | 0.0x (0-85%), 0.8x (85-95%), 1.0x (95-100%), 1.2x (100%+) |
+
+**Problem in compensationEngine.ts (Line 30-32):**
 ```typescript
-// 7. Fetch deals actuals (New Software Booking ARR)
-const { data: deals } = await supabase
-  .from("deals")
-  .select("sales_rep_employee_id, new_software_booking_arr_usd")  // ← Only fetches sales_rep
-  .in("sales_rep_employee_id", employeeIds)  // ← Only filters by sales_rep
-  ...
-
-// Aggregate deals by employee
-const dealsActualMap = new Map<string, number>();
-(deals || []).forEach(deal => {
-  if (deal.sales_rep_employee_id) {  // ← Only credits sales_rep
-    const current = dealsActualMap.get(deal.sales_rep_employee_id) || 0;
-    dealsActualMap.set(deal.sales_rep_employee_id, current + (deal.new_software_booking_arr_usd || 0));
-  }
-});
-```
-
-**Data Exists:** The deals table has data for all 8 participant roles:
-| Role | Example Employee IDs |
-|------|---------------------|
-| sales_rep_employee_id | DU0001, SA0001 |
-| sales_head_employee_id | DU0002, SA0002 |
-| sales_engineering_employee_id | IN0001 |
-| sales_engineering_head_employee_id | IN0004 |
-| product_specialist_employee_id | MY0001 |
-| product_specialist_head_employee_id | AF0001 |
-| solution_manager_employee_id | IN0005 |
-| solution_manager_head_employee_id | MY0010 |
-
-**Fix:** Update the actuals aggregation to credit ALL participant roles, not just the sales rep.
-
----
-
-### Issue 2: 1.6x Multiplier Not Applied for >120% Achievement
-
-**Root Cause:** Bug in the `getMultiplierFromGrid` function in `compensationEngine.ts` (Line 39).
-
-**Current Code:**
-```typescript
-// Line 38-42
-for (const grid of sortedGrids) {
-  if (achievementPercent >= grid.min_pct && achievementPercent < grid.max_pct) {  // ← BUG: uses < instead of <=
-    return grid.multiplier_value;
-  }
+// Handle Linear logic - no multipliers, direct achievement
+if (metric.logic_type === "Linear" || grids.length === 0) {
+  return 1.0;  // ← This short-circuits before checking grids!
 }
 ```
 
-**Problem:** When achievement is exactly at a boundary (e.g., 120%), the condition `achievementPercent < grid.max_pct` fails for the 100-120% tier, so it falls through to the >120% tier incorrectly, but the real issue is the opposite - for values like 121%, it correctly hits the 120-999 tier.
+The logic_type is "Linear" but there ARE multiplier grids defined. The code is incorrectly returning 1.0x before it ever checks the grids.
 
-**Database Configuration (Farmer - New Software Booking ARR):**
-| Min % | Max % | Multiplier |
-|-------|-------|------------|
-| 0 | 100 | 1.00x |
-| 100 | 120 | 1.40x |
-| 120 | 999 | 1.60x |
-
-The configuration is correct. Let me verify the actual calculation by checking if the achievement percentage is being calculated correctly in the first place. The issue may be that targets or actuals are not properly set.
-
-**Additional Investigation Needed:** The multiplier logic appears correct. The issue may be:
-1. Targets not set correctly in `performance_targets` table
-2. Achievement calculation showing 0% because target = 0
+**Fix:** Change the condition to only skip multiplier lookup if `logic_type === "Linear" AND grids.length === 0`:
+```typescript
+// Handle Linear logic with no grids - no multipliers, direct achievement
+if (metric.logic_type === "Linear" && grids.length === 0) {
+  return 1.0;
+}
+```
 
 ---
 
-### Issue 3: Commission Calculations Not Visible
+### Issue 2: Perpetual License Deal Value Showing Incorrect Data
 
-**Root Cause:** There is **no UI** to display commission calculations. The `plan_commissions` table has data, and deals have the relevant commission columns (managed_services_usd, implementation_usd, cr_usd, er_usd, tcv_usd), but:
+**Root Cause:** There is **no dedicated `perpetual_license_usd` column** in the deals table. The current code is using `tcv_usd` (Total Contract Value) as a proxy when `new_software_booking_arr_usd > 0`, which is incorrect.
 
-1. The Incentive Audit report only shows **Variable Pay** calculations
-2. There is no calculation logic for commissions in the audit hook
-3. No display section for commission payouts
+**Current Logic (useIncentiveAuditData.ts, Lines 355-360):**
+```typescript
+// Handle Perpetual License separately - check if deal qualifies
+// (tcv_usd when it's a software deal, not managed services)
+if (deal.tcv_usd && deal.tcv_usd > 0 && (deal.new_software_booking_arr_usd || 0) > 0) {
+  const current = aggregatedValues.get('Perpetual License') || 0;
+  aggregatedValues.set('Perpetual License', current + (deal.tcv_usd || 0));
+}
+```
 
-**Database Configuration (Farmer Plan - plan_id: ed01c7a6-...):**
-| Commission Type | Rate | Min Threshold |
-|-----------------|------|---------------|
-| Managed Services | 1.5% | None |
-| Perpetual License | 4.0% | $50,000 |
-| Implementation | 1.0% | None |
-| CR/ER | 1.0% | None |
+**Why it's wrong:** 
+- TCV (Total Contract Value) includes ALL deal components (ARR, implementation, managed services, etc.)
+- For "Farming Sales Rep" the TCV is $4,223,732 which is the sum of ALL their deals' TCV values
+- Perpetual License should be a specific license type deal, not derived from TCV
+
+**Solution Options:**
+1. **Option A (Recommended):** Add a new column `perpetual_license_usd` to the deals table for explicit capture
+2. **Option B:** Use a flag (`eligible_for_perpetual_incentive` already exists in schema!) combined with a value column
+
+The deals table already has `eligible_for_perpetual_incentive` boolean field. We should:
+1. Add `perpetual_license_usd` column for the actual value
+2. Update the bulk upload to capture this value
+3. Update the commission logic to use this explicit column
+
+---
+
+### Issue 3: CR/ER Showing Only $50,000 Instead of $110,000
+
+**Root Cause:** The commission aggregation only uses the `cr_usd` column and ignores the `er_usd` column entirely.
+
+**Current Code (useIncentiveAuditData.ts, Lines 336-341):**
+```typescript
+const commissionTypeMappings = [
+  { type: 'Managed Services', field: 'managed_services_usd' as keyof DealRow },
+  { type: 'Implementation', field: 'implementation_usd' as keyof DealRow },
+  { type: 'CR/ER', field: 'cr_usd' as keyof DealRow },  // ← Only uses cr_usd!
+  // Perpetual License uses tcv_usd...
+];
+```
+
+**Database Evidence:**
+| Deal | CR_USD | ER_USD | Total Should Be |
+|------|--------|--------|-----------------|
+| Deal 1 | $50,000 | $0 | $50,000 |
+| Deal 2 | $0 | $60,000 | $60,000 |
+| **Total** | $50,000 | $60,000 | **$110,000** |
+
+**Fix:** CR/ER commission type needs to aggregate BOTH `cr_usd` AND `er_usd` columns.
 
 ---
 
 ### Implementation Plan
 
-#### Step 1: Fix Multi-Participant Attribution
+#### Step 1: Fix Multiplier Logic Bug
 
-**Files to Modify:** `src/hooks/useIncentiveAuditData.ts`, `src/hooks/useUserActuals.ts`
+**File:** `src/lib/compensationEngine.ts`
 
-**Changes:**
-- Fetch ALL participant role columns from deals table
-- Aggregate deal values to ALL participants (full credit, not split)
-- Update both the Incentive Audit hook and the Dashboard's user actuals hook
+**Change Lines 29-32:**
+```typescript
+// BEFORE:
+if (metric.logic_type === "Linear" || grids.length === 0) {
+  return 1.0;
+}
+
+// AFTER:
+// Only skip multiplier lookup if Linear AND no grids defined
+if (metric.logic_type === "Linear" && grids.length === 0) {
+  return 1.0;
+}
+```
+
+**Impact:** The 132.2% achievement will now correctly look up the multiplier grid and return 1.6x instead of 1.0x.
+
+---
+
+#### Step 2: Add Perpetual License USD Column
+
+**Database Migration:**
+```sql
+-- Add perpetual_license_usd column to deals table
+ALTER TABLE deals ADD COLUMN perpetual_license_usd numeric DEFAULT 0;
+
+-- Add comment for documentation
+COMMENT ON COLUMN deals.perpetual_license_usd IS 'Perpetual license deal value in USD for commission calculation';
+```
+
+**Files to Update:**
+1. `src/components/data-inputs/DealsBulkUpload.tsx` - Add column mapping for bulk upload
+2. `src/components/data-inputs/DealFormDialog.tsx` - Add input field for manual entry
+3. `src/hooks/useIncentiveAuditData.ts` - Use new column for Perpetual License commission
+4. `src/integrations/supabase/types.ts` - Will auto-update with migration
+
+---
+
+#### Step 3: Fix CR/ER Aggregation to Include ER
+
+**File:** `src/hooks/useIncentiveAuditData.ts`
+
+**Change the aggregation logic to combine CR and ER:**
 
 ```typescript
-// New query for deals
-const { data: deals } = await supabase
-  .from("deals")
-  .select(`
-    new_software_booking_arr_usd,
-    sales_rep_employee_id,
-    sales_head_employee_id,
-    sales_engineering_employee_id,
-    sales_engineering_head_employee_id,
-    product_specialist_employee_id,
-    product_specialist_head_employee_id,
-    solution_manager_employee_id,
-    solution_manager_head_employee_id
-  `)
-  .gte("month_year", fiscalYearStart)
-  .lte("month_year", fiscalYearEnd);
+// BEFORE (Lines 346-353):
+commissionTypeMappings.forEach(({ type, field }) => {
+  const value = deal[field] as number | null;
+  if (value && value > 0) {
+    const current = aggregatedValues.get(type) || 0;
+    aggregatedValues.set(type, current + value);
+  }
+});
 
-// Aggregate to ALL participant roles
-const participantRoles = [
-  'sales_rep_employee_id',
-  'sales_head_employee_id',
-  'sales_engineering_employee_id',
-  'sales_engineering_head_employee_id',
-  'product_specialist_employee_id',
-  'product_specialist_head_employee_id',
-  'solution_manager_employee_id',
-  'solution_manager_head_employee_id',
-];
-
-(deals || []).forEach(deal => {
-  participantRoles.forEach(role => {
-    const empId = deal[role];
-    if (empId) {
-      const current = dealsActualMap.get(empId) || 0;
-      dealsActualMap.set(empId, current + (deal.new_software_booking_arr_usd || 0));
+// AFTER - Handle CR/ER as a special combined case:
+employeeDeals.forEach(deal => {
+  // Standard commission types
+  const standardMappings = [
+    { type: 'Managed Services', field: 'managed_services_usd' },
+    { type: 'Implementation', field: 'implementation_usd' },
+    { type: 'Perpetual License', field: 'perpetual_license_usd' }, // NEW column
+  ];
+  
+  standardMappings.forEach(({ type, field }) => {
+    const value = deal[field as keyof DealRow] as number | null;
+    if (value && value > 0) {
+      const current = aggregatedValues.get(type) || 0;
+      aggregatedValues.set(type, current + value);
     }
   });
+  
+  // CR/ER is special - combine both columns
+  const crValue = (deal.cr_usd || 0) + (deal.er_usd || 0);
+  if (crValue > 0) {
+    const current = aggregatedValues.get('CR/ER') || 0;
+    aggregatedValues.set('CR/ER', current + crValue);
+  }
 });
-```
-
-#### Step 2: Verify Multiplier Logic
-
-**File to Review/Fix:** `src/lib/compensationEngine.ts`
-
-The multiplier grid logic appears correct. The issue is likely that:
-- Employees don't have `performance_targets` set for "New Software Booking ARR"
-- When target = 0, achievement = 0%, so multiplier = 1.0x
-
-**Verification Query:**
-```sql
-SELECT employee_id, metric_type, target_value_usd 
-FROM performance_targets 
-WHERE effective_year = 2026;
-```
-
-If targets are missing, the UI shows 0% achievement regardless of actuals.
-
-#### Step 3: Add Commission Display to Reports
-
-**Files to Modify:** `src/hooks/useIncentiveAuditData.ts`, `src/pages/Reports.tsx`
-
-**Changes:**
-1. Create new commission calculation in the audit data hook
-2. Add commission columns to the Incentive Audit UI
-3. Calculate commission payouts using the formula: `TCV * Rate` (with holdback split)
-
-**New Interface:**
-```typescript
-interface IncentiveAuditRow {
-  // ... existing fields
-  commissions: {
-    commissionType: string;
-    dealValue: number;
-    rate: number;
-    grossCommission: number;
-    immediatePayout: number;  // 75%
-    holdback: number;         // 25%
-  }[];
-  totalCommission: number;
-}
 ```
 
 ---
 
-### Files to Create/Modify
+### Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/hooks/useIncentiveAuditData.ts` | Add multi-participant attribution, add commission calculations |
-| `src/hooks/useUserActuals.ts` | Add multi-participant attribution for Dashboard |
-| `src/pages/Reports.tsx` | Add commission display section to Incentive Audit tab |
-| `src/lib/compensationEngine.ts` | Review and potentially fix multiplier boundary logic |
+| `src/lib/compensationEngine.ts` | Fix multiplier logic condition (Line 30) |
+| Database migration | Add `perpetual_license_usd` column |
+| `src/hooks/useIncentiveAuditData.ts` | Fix CR/ER aggregation, use new perpetual_license_usd column |
+| `src/components/data-inputs/DealsBulkUpload.tsx` | Add perpetual_license_usd column mapping |
+| `src/components/data-inputs/DealFormDialog.tsx` | Add perpetual license input field |
+| `src/components/data-inputs/DealsTable.tsx` | Display perpetual license column |
+
+---
+
+### Expected Results After Fix
+
+| Issue | Before | After |
+|-------|--------|-------|
+| 1. Multiplier for 132.2% | 1.00x | **1.60x** |
+| 2. Perpetual License source | Derived from TCV (incorrect) | Explicit `perpetual_license_usd` column |
+| 3. CR/ER total | $50,000 (only CR) | **$110,000** (CR + ER) |
 
 ---
 
@@ -207,50 +207,15 @@ interface IncentiveAuditRow {
 
 ```text
 deals table
-├── sales_rep_employee_id ─────────────┐
-├── sales_head_employee_id ────────────┤
-├── sales_engineering_employee_id ─────┤
-├── sales_engineering_head_employee_id ┤
-├── product_specialist_employee_id ────┤   ALL credited with
-├── product_specialist_head_employee_id┼─→ new_software_booking_arr_usd
-├── solution_manager_employee_id ──────┤
-└── solution_manager_head_employee_id ─┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│         useIncentiveAuditData.ts            │
-│                                             │
-│  Variable Pay:                              │
-│  ├── Achievement = Actual / Target          │
-│  ├── Multiplier from multiplier_grids       │
-│  └── Payout = Achievement × Allocation × M  │
-│                                             │
-│  Commissions:                               │
-│  ├── Managed Services: TCV × 1.5%           │
-│  ├── Perpetual License: TCV × 4% (if >$50k) │
-│  ├── Implementation: TCV × 1%               │
-│  └── CR/ER: TCV × 1%                        │
-└─────────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│         Incentive Audit Report              │
-│                                             │
-│  [Variable Pay Section]                     │
-│  Employee | Metric | Target | Actual | %    │
-│                                             │
-│  [Commission Section] ← NEW                 │
-│  Employee | Type | Deal Value | Rate | Paid │
-└─────────────────────────────────────────────┘
+│
+├── cr_usd ─────────────┐
+│                       ├──→ CR/ER Commission = (cr_usd + er_usd) × rate
+├── er_usd ─────────────┘
+│
+├── perpetual_license_usd ──→ Perpetual License Commission (NEW)
+│
+├── managed_services_usd ───→ Managed Services Commission
+│
+└── implementation_usd ─────→ Implementation Commission
 ```
-
----
-
-### Summary
-
-| Issue | Root Cause | Fix |
-|-------|------------|-----|
-| 1. Multi-participant not counted | Hook only queries `sales_rep_employee_id` | Query all 8 participant columns and credit each |
-| 2. 1.6x multiplier not applied | Likely missing performance targets (target=0 → 0% achievement) | Verify targets exist; fix multiplier boundary logic if needed |
-| 3. Commission not visible | No UI or calculation logic for commissions | Add commission calculations to audit hook and display in Reports |
 
