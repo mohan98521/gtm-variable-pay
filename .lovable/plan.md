@@ -1,101 +1,96 @@
 
 
-## Auto-Populate Effective Dates from Employee Database
+## Prevent Overlapping Plan Assignments
 
 ### Problem Summary
 
-The Plan Assignment dialog currently defaults effective dates to the fiscal year boundaries (Jan 1 - Dec 31). The user wants these dates to be automatically populated from the employee's actual employment dates:
+The system currently allows assigning the same employee to multiple compensation plans with overlapping date ranges. This creates data integrity issues since an employee should only have one active compensation plan at any given time.
 
-- **Effective Start Date** → Employee's Date of Joining (`date_of_hire`)
-- **Effective End Date** → Employee's Last Working Day (`departure_date`) if set, otherwise Dec 31 of fiscal year
-
-Both dates should remain editable so admins can adjust them before confirming the assignment. Additionally, when an employee's departure date is updated later in the system, it should automatically reflect in future assignment workflows.
-
----
-
-### Current Behavior vs Proposed Behavior
-
-| Field | Current Logic | New Logic |
-|-------|---------------|-----------|
-| Effective Start Date | Always Jan 1 of fiscal year | Use employee's `date_of_hire` if available; fall back to Jan 1 |
-| Effective End Date | Always Dec 31 of fiscal year | Use employee's `departure_date` if set; fall back to Dec 31 |
+**Example from current data:**
+- "Farming Sales Rep" (DU0001) has two overlapping assignments:
+  - Sales Engineering: Jan 2024 - Dec 2026
+  - Farmer: Jan 2026 - Dec 2026
+  - **Overlap period:** Jan 2026 - Dec 2026 (12 months of conflict)
 
 ---
 
 ### Solution Overview
 
-#### 1. Update Employee Interface in PlanAssignmentDialog
-
-Add the missing date fields to the Employee interface:
-
-```text
-interface Employee {
-  // ... existing fields
-  date_of_hire?: string | null;    // NEW - e.g., "2024-03-15"
-  departure_date?: string | null;  // NEW - e.g., "2025-06-30"
-}
-```
-
-#### 2. Update Date Auto-Population Logic
-
-Modify the form initialization to use employee dates:
-
-**Current logic (lines 151-153):**
-```text
-const startDate = new Date(selectedYear, 0, 1);     // Always Jan 1
-const endDate = new Date(selectedYear, 11, 31);    // Always Dec 31
-```
-
-**New logic:**
-```text
-// Use employee's date of hire if available, otherwise default to Jan 1
-const startDate = employee.date_of_hire 
-  ? new Date(employee.date_of_hire) 
-  : new Date(selectedYear, 0, 1);
-
-// Use employee's departure date if available, otherwise default to Dec 31
-const endDate = employee.departure_date 
-  ? new Date(employee.departure_date) 
-  : new Date(selectedYear, 11, 31);
-```
-
-#### 3. Fix Calendar Interactivity
-
-Add `pointer-events-auto` class to Calendar components to ensure they work properly inside the dialog popover (per Shadcn datepicker guidelines).
+Add validation in the Plan Assignment workflow to:
+1. **Check for overlapping assignments** before creating a new assignment
+2. **Show a clear error message** if an overlap is detected
+3. **Prevent rapid double-clicks** that could create duplicate records
+4. **Apply validation on updates** as well to prevent creating overlaps when editing
 
 ---
 
-### Edge Cases Handled
+### Implementation Details
 
-| Scenario | Behavior |
-|----------|----------|
-| Employee has `date_of_hire` set | Use that date as Effective Start Date |
-| Employee has no `date_of_hire` (null) | Fall back to January 1 of fiscal year |
-| Employee has `departure_date` set | Use that date as Effective End Date |
-| Employee has no `departure_date` (null) | Fall back to December 31 of fiscal year |
-| Editing existing assignment | Use the saved effective dates (no change to existing logic) |
-| Date of hire is in different year | Use actual date - admin can adjust if needed |
+#### 1. Add Overlap Check Function
+
+Create a new function in `usePlanAssignments.ts` to check for existing assignments with overlapping date ranges:
+
+```text
+async function checkOverlappingAssignments(
+  userId: string,
+  startDate: string,
+  endDate: string,
+  excludeAssignmentId?: string  // For edit mode, exclude current assignment
+)
+```
+
+**Logic:**
+Two date ranges overlap if: `range1_start <= range2_end AND range1_end >= range2_start`
+
+The function will query existing assignments for the user and check if any overlap with the proposed dates.
+
+#### 2. Modify Create/Update Mutations
+
+Update both `useCreatePlanAssignment` and `useUpdatePlanAssignment` to:
+1. First query existing assignments for the user
+2. Check for date overlaps with the new/updated dates
+3. Throw an error with a clear message if overlap is detected
+4. Only proceed with insert/update if validation passes
+
+#### 3. Add Client-Side Guard
+
+Add a `useRef` guard to prevent rapid double-clicks that could bypass validation due to timing.
 
 ---
 
-### User Experience Flow
+### Validation Flow
 
-1. Admin opens "Assign to Plan" for an employee
-2. **Effective Start Date** is pre-filled with the employee's Date of Joining (e.g., "March 15, 2024")
-3. **Effective End Date** is pre-filled with:
-   - The departure date if the employee has resigned/is leaving
-   - December 31 of fiscal year for current employees
-4. Admin can modify either date using the calendar picker before confirming
-5. All dates remain fully editable
+```text
+User clicks "Create Assignment"
+         |
+         v
+[Client-side guard - prevent double clicks]
+         |
+         v
+[Query existing assignments for this user from database]
+         |
+         v
+[Check for date overlap with each existing assignment]
+         |
+    +----+----+
+    |         |
+ Overlap    No Overlap
+ Found      Found
+    |         |
+    v         v
+[Show Error] [Proceed with Insert/Update]
+   Toast        |
+    |           v
+ [Stop]    [Success Toast]
+```
 
 ---
 
-### Impact on Future Updates
+### Error Message
 
-When an employee's departure date is updated in the Employee Database (via Edit action):
-- **New assignments** will automatically use the updated departure date as the default end date
-- **Existing assignments** remain unchanged (preserving historical data)
-- Admins can manually update existing assignments if needed through the Plan Builder's "Assigned Employees" section
+When an overlap is detected, display a clear error message:
+
+> "This employee already has a plan assignment during this period: [Plan Name] (Jan 2024 - Dec 2026). Please adjust the effective dates or remove the existing assignment first."
 
 ---
 
@@ -103,53 +98,71 @@ When an employee's departure date is updated in the Employee Database (via Edit 
 
 | File | Changes |
 |------|---------|
-| `src/components/admin/PlanAssignmentDialog.tsx` | Add `date_of_hire` and `departure_date` to Employee interface; update start/end date calculation logic; add `pointer-events-auto` to Calendar components |
+| `src/hooks/usePlanAssignments.ts` | Add overlap check function; update create/update mutations with validation |
+| `src/components/admin/PlanAssignmentDialog.tsx` | Add ref guard for double-click prevention |
 
 ---
 
-### Technical Implementation Details
+### Technical Implementation
 
-**Changes to PlanAssignmentDialog.tsx:**
+**usePlanAssignments.ts changes:**
 
-1. **Employee Interface (around line 74)** - Add new fields:
-   - `date_of_hire?: string | null;`
-   - `departure_date?: string | null;`
+1. **Add helper function** to check date range overlap:
+   ```text
+   function datesOverlap(start1: string, end1: string, start2: string, end2: string): boolean
+   ```
 
-2. **Form Initialization (lines 151-153)** - Smart date calculation:
-   - Start date: Use `date_of_hire` or fall back to Jan 1
-   - End date: Use `departure_date` or fall back to Dec 31
+2. **Update useCreatePlanAssignment mutation** to:
+   - Fetch existing assignments for the user before inserting
+   - Check each assignment for overlap with proposed dates
+   - Throw error with details if overlap found
 
-3. **Calendar Components (lines 299-305 and 334-340)** - Add interactivity fix:
-   - Add `className="pointer-events-auto"` to both Calendar components
+3. **Update useUpdatePlanAssignment mutation** to:
+   - Fetch existing assignments excluding the current one being edited
+   - Check for overlaps with the new dates
+   - Throw error if overlap found
+
+**PlanAssignmentDialog.tsx changes:**
+
+1. Add `actionInProgressRef` to prevent rapid double-clicks:
+   ```text
+   const actionInProgressRef = useRef(false);
+   ```
+
+2. Wrap `onSubmit` to check the ref before proceeding
 
 ---
 
-### Data Flow
+### Edge Cases Handled
 
-```text
-employees table                    PlanAssignmentDialog Form
------------------                  ------------------------
-date_of_hire (e.g., "2024-03-15")  ────────>  Effective Start Date
-departure_date (e.g., "2025-06-30") ───────>  Effective End Date
-
-If date_of_hire is NULL   ────────────────>  Falls back to Jan 1, [year]
-If departure_date is NULL ────────────────>  Falls back to Dec 31, [year]
-```
+| Scenario | Behavior |
+|----------|----------|
+| Same employee, different plans, overlapping dates | Error: "Employee already has assignment during this period" |
+| Same employee, same plan, overlapping dates | Error (prevents duplicate assignments) |
+| Adjacent dates (no gap, no overlap) | Allowed - Jan-Mar and Apr-Dec are valid |
+| Editing existing assignment | Excludes current assignment from overlap check |
+| Rapid double-click on submit | Blocked by ref guard |
+| Network delay causing stale state | Fresh database query ensures current data |
 
 ---
 
-### No Database Changes Required
+### User Experience
 
-Both `date_of_hire` and `departure_date` already exist in the `employees` table and are included in the employee data passed from `EmployeeAccounts.tsx`. This change only requires updating the dialog component to use these existing fields.
+1. Admin opens Plan Assignment dialog
+2. Selects plan and dates
+3. Clicks "Create Assignment"
+4. System checks for overlaps against fresh database data
+5. If overlap found: Clear error message with conflicting plan details
+6. If no overlap: Assignment created successfully
 
 ---
 
 ### Summary
 
-This enhancement:
-1. Auto-populates **Effective Start Date** from the employee's Date of Joining
-2. Auto-populates **Effective End Date** from the employee's Last Working Day (if set)
-3. Keeps both dates editable for admin adjustments
-4. Ensures future assignments automatically pick up updated departure dates
-5. Fixes calendar interactivity inside the dialog
+This solution implements robust validation to prevent overlapping plan assignments:
+
+- **Database-first validation**: Queries fresh data before each operation
+- **Clear error messages**: Shows which existing plan conflicts
+- **Prevents duplicates**: Covers both create and update scenarios
+- **Double-click protection**: Ref guard prevents race conditions
 
