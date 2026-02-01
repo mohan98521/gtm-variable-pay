@@ -325,6 +325,7 @@ export type Database = {
           month_year: string
           new_software_booking_arr_usd: number | null
           notes: string | null
+          perpetual_license_usd: number | null
           product: string
           product_specialist_employee_id: string | null
           product_specialist_head_employee_id: string | null
@@ -370,6 +371,7 @@ export type Database = {
           month_year: string
           new_software_booking_arr_usd?: number | null
           notes?: string | null
+          perpetual_license_usd?: number | null
           product: string
           product_specialist_employee_id?: string | null
           product_specialist_head_employee_id?: string | null
@@ -415,6 +417,7 @@ export type Database = {
           month_year?: string
           new_software_booking_arr_usd?: number | null
           notes?: string | null
+          perpetual_license_usd?: number | null
           product?: string
           product_specialist_employee_id?: string | null
           product_specialist_head_employee_id?: string | null

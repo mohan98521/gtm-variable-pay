@@ -44,6 +44,7 @@ interface ParsedDeal {
   cr_usd?: number;
   er_usd?: number;
   tcv_usd?: number;
+  perpetual_license_usd?: number;
   sales_rep_id?: string;
   sales_head_id?: string;
   sales_engineering_id?: string;
@@ -82,6 +83,7 @@ const CSV_TEMPLATE_HEADERS = [
   "cr_usd",
   "er_usd",
   "tcv_usd",
+  "perpetual_license_usd",
   "sales_rep_id",
   "sales_head_id",
   "sales_engineering_id",
@@ -145,6 +147,7 @@ const generateCSVTemplate = (): string => {
     "0",
     "0",
     "250000",
+    "0",
     "EMP001",
     "EMP002",
     "",
@@ -224,6 +227,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         cr_usd: deal.cr_usd ? parseFloat(deal.cr_usd) : undefined,
         er_usd: deal.er_usd ? parseFloat(deal.er_usd) : undefined,
         tcv_usd: deal.tcv_usd ? parseFloat(deal.tcv_usd) : undefined,
+        perpetual_license_usd: deal.perpetual_license_usd ? parseFloat(deal.perpetual_license_usd) : undefined,
         sales_rep_id: deal.sales_rep_id || undefined,
         sales_head_id: deal.sales_head_id || undefined,
         sales_engineering_id: deal.sales_engineering_id || undefined,
@@ -282,6 +286,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       cr_usd: deal.cr_usd ? parseFloat(deal.cr_usd) : undefined,
       er_usd: deal.er_usd ? parseFloat(deal.er_usd) : undefined,
       tcv_usd: deal.tcv_usd ? parseFloat(deal.tcv_usd) : undefined,
+      perpetual_license_usd: deal.perpetual_license_usd ? parseFloat(deal.perpetual_license_usd) : undefined,
       sales_rep_id: deal.sales_rep_id || undefined,
       sales_head_id: deal.sales_head_id || undefined,
       sales_engineering_id: deal.sales_engineering_id || undefined,
@@ -455,6 +460,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
           cr_usd: deal.cr_usd || 0,
           er_usd: deal.er_usd || 0,
           tcv_usd: deal.tcv_usd || 0,
+          perpetual_license_usd: deal.perpetual_license_usd || 0,
           sales_rep_employee_id: deal.sales_rep_id || null,
           sales_rep_name: getEmployeeName(deal.sales_rep_id),
           sales_head_employee_id: deal.sales_head_id || null,

@@ -103,6 +103,7 @@ export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
       { key: "cr_usd", header: "CR (USD)" },
       { key: "er_usd", header: "ER (USD)" },
       { key: "implementation_usd", header: "Implementation (USD)" },
+      { key: "perpetual_license_usd", header: "Perpetual License (USD)" },
       { key: "gp_margin_percent", header: "GP Margin %" },
       { key: "status", header: "Status" },
       { key: "sales_rep_name", header: "Sales Rep Name" },

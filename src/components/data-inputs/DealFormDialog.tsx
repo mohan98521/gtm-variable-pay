@@ -63,6 +63,7 @@ const dealFormSchema = z.object({
   cr_usd: z.coerce.number().min(0).optional(),
   er_usd: z.coerce.number().min(0).optional(),
   tcv_usd: z.coerce.number().min(0).optional(),
+  perpetual_license_usd: z.coerce.number().min(0).optional(),
   sales_rep_employee_id: z.string().optional(),
   sales_head_employee_id: z.string().optional(),
   sales_engineering_employee_id: z.string().optional(),
@@ -158,6 +159,7 @@ export function DealFormDialog({
       cr_usd: 0,
       er_usd: 0,
       tcv_usd: 0,
+      perpetual_license_usd: 0,
       sales_rep_employee_id: "",
       sales_head_employee_id: "",
       sales_engineering_employee_id: "",
@@ -200,6 +202,7 @@ export function DealFormDialog({
           cr_usd: deal.cr_usd || 0,
           er_usd: deal.er_usd || 0,
           tcv_usd: deal.tcv_usd || 0,
+          perpetual_license_usd: (deal as any).perpetual_license_usd || 0,
           sales_rep_employee_id: deal.sales_rep_employee_id || "",
           sales_head_employee_id: deal.sales_head_employee_id || "",
           sales_engineering_employee_id: deal.sales_engineering_employee_id || "",
@@ -241,6 +244,7 @@ export function DealFormDialog({
           cr_usd: 0,
           er_usd: 0,
           tcv_usd: 0,
+          perpetual_license_usd: 0,
           sales_rep_employee_id: "",
           sales_head_employee_id: "",
           sales_engineering_employee_id: "",
@@ -306,6 +310,7 @@ export function DealFormDialog({
         cr_usd: values.cr_usd,
         er_usd: values.er_usd,
         tcv_usd: values.tcv_usd,
+        perpetual_license_usd: values.perpetual_license_usd,
         sales_rep_employee_id: values.sales_rep_employee_id || undefined,
         sales_rep_name: salesRepName || undefined,
         sales_head_employee_id: values.sales_head_employee_id || undefined,
@@ -663,6 +668,19 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>ER (Enhancement Request)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.01" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="perpetual_license_usd"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Perpetual License</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" step="0.01" {...field} value={field.value ?? ""} />
                       </FormControl>

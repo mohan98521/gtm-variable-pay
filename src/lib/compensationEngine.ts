@@ -26,8 +26,9 @@ export function getMultiplierFromGrid(
     }
   }
   
-  // Handle Linear logic - no multipliers, direct achievement
-  if (metric.logic_type === "Linear" || grids.length === 0) {
+  // Handle Linear logic with no grids - no multipliers, direct achievement
+  // Only skip multiplier lookup if Linear AND no grids defined
+  if (metric.logic_type === "Linear" && grids.length === 0) {
     return 1.0;
   }
   

@@ -70,6 +70,7 @@ interface DealRow {
   cr_usd: number | null;
   er_usd: number | null;
   tcv_usd: number | null;
+  perpetual_license_usd: number | null;
   sales_rep_employee_id: string | null;
   sales_head_employee_id: string | null;
   sales_engineering_employee_id: string | null;
@@ -204,6 +205,7 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
           cr_usd,
           er_usd,
           tcv_usd,
+          perpetual_license_usd,
           sales_rep_employee_id,
           sales_head_employee_id,
           sales_engineering_employee_id,
@@ -333,18 +335,19 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         let totalCommissionHoldback = 0;
 
         // Calculate commissions for each deal type
-        const commissionTypeMappings = [
+        // Standard commission type mappings (excluding CR/ER which needs special handling)
+        const standardMappings = [
           { type: 'Managed Services', field: 'managed_services_usd' as keyof DealRow },
           { type: 'Implementation', field: 'implementation_usd' as keyof DealRow },
-          { type: 'CR/ER', field: 'cr_usd' as keyof DealRow },
-          // Perpetual License uses tcv_usd when new_software_booking_arr is 0 (subscription-based)
+          { type: 'Perpetual License', field: 'perpetual_license_usd' as keyof DealRow },
         ];
 
         // Aggregate deal values by commission type
         const aggregatedValues = new Map<string, number>();
         
         employeeDeals.forEach(deal => {
-          commissionTypeMappings.forEach(({ type, field }) => {
+          // Standard commission types
+          standardMappings.forEach(({ type, field }) => {
             const value = deal[field] as number | null;
             if (value && value > 0) {
               const current = aggregatedValues.get(type) || 0;
@@ -352,11 +355,11 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
             }
           });
           
-          // Handle Perpetual License separately - check if deal qualifies
-          // (tcv_usd when it's a software deal, not managed services)
-          if (deal.tcv_usd && deal.tcv_usd > 0 && (deal.new_software_booking_arr_usd || 0) > 0) {
-            const current = aggregatedValues.get('Perpetual License') || 0;
-            aggregatedValues.set('Perpetual License', current + (deal.tcv_usd || 0));
+          // CR/ER is special - combine both cr_usd and er_usd columns
+          const crErValue = (deal.cr_usd || 0) + (deal.er_usd || 0);
+          if (crErValue > 0) {
+            const current = aggregatedValues.get('CR/ER') || 0;
+            aggregatedValues.set('CR/ER', current + crErValue);
           }
         });
 
