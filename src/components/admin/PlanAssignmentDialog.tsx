@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -112,6 +112,7 @@ export function PlanAssignmentDialog({
   const updateMutation = useUpdatePlanAssignment();
   
   const [hasNoAuthAccount, setHasNoAuthAccount] = useState(false);
+  const actionInProgressRef = useRef(false);
   
   const isEditing = !!existingAssignment;
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -180,10 +181,15 @@ export function PlanAssignmentDialog({
 
   const onSubmit = async (values: FormValues) => {
     if (!employee) return;
+    
+    // Prevent double-clicks
+    if (actionInProgressRef.current) return;
+    actionInProgressRef.current = true;
 
-    // Use employee.id as user_id (the UUID from employees table)
-    // This assumes employees table id is used in user_targets
-    const userId = employee.id;
+    try {
+      // Use employee.id as user_id (the UUID from employees table)
+      // This assumes employees table id is used in user_targets
+      const userId = employee.id;
 
     const payload = {
       user_id: userId,
@@ -200,13 +206,16 @@ export function PlanAssignmentDialog({
       ote_usd: values.ote_usd || null,
     };
 
-    if (isEditing && existingAssignment) {
-      await updateMutation.mutateAsync({ ...payload, id: existingAssignment.id });
-    } else {
-      await createMutation.mutateAsync(payload);
-    }
+      if (isEditing && existingAssignment) {
+        await updateMutation.mutateAsync({ ...payload, id: existingAssignment.id });
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
 
-    onOpenChange(false);
+      onOpenChange(false);
+    } finally {
+      actionInProgressRef.current = false;
+    }
   };
 
   return (

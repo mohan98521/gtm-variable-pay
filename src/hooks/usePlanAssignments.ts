@@ -1,6 +1,60 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { format } from "date-fns";
+
+// Helper function to check if two date ranges overlap
+function datesOverlap(start1: string, end1: string, start2: string, end2: string): boolean {
+  return start1 <= end2 && end1 >= start2;
+}
+
+// Check for overlapping assignments for a user
+async function checkOverlappingAssignments(
+  userId: string,
+  startDate: string,
+  endDate: string,
+  excludeAssignmentId?: string
+): Promise<{ hasOverlap: boolean; conflictingPlan?: { name: string; startDate: string; endDate: string } }> {
+  // Fetch all existing assignments for this user
+  const { data: assignments, error } = await supabase
+    .from("user_targets")
+    .select(`
+      id,
+      effective_start_date,
+      effective_end_date,
+      comp_plans:plan_id (
+        name
+      )
+    `)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+  if (!assignments || assignments.length === 0) {
+    return { hasOverlap: false };
+  }
+
+  // Check each assignment for overlap
+  for (const assignment of assignments) {
+    // Skip the current assignment when editing
+    if (excludeAssignmentId && assignment.id === excludeAssignmentId) {
+      continue;
+    }
+
+    if (datesOverlap(startDate, endDate, assignment.effective_start_date, assignment.effective_end_date)) {
+      const planName = (assignment.comp_plans as any)?.name || "Unknown Plan";
+      return {
+        hasOverlap: true,
+        conflictingPlan: {
+          name: planName,
+          startDate: assignment.effective_start_date,
+          endDate: assignment.effective_end_date,
+        },
+      };
+    }
+  }
+
+  return { hasOverlap: false };
+}
 
 export interface PlanAssignment {
   id: string;
@@ -134,6 +188,22 @@ export function useCreatePlanAssignment() {
 
   return useMutation({
     mutationFn: async (input: CreatePlanAssignmentInput) => {
+      // Check for overlapping assignments before inserting
+      const overlapCheck = await checkOverlappingAssignments(
+        input.user_id,
+        input.effective_start_date,
+        input.effective_end_date
+      );
+
+      if (overlapCheck.hasOverlap && overlapCheck.conflictingPlan) {
+        const { name, startDate, endDate } = overlapCheck.conflictingPlan;
+        const formattedStart = format(new Date(startDate), "MMM yyyy");
+        const formattedEnd = format(new Date(endDate), "MMM yyyy");
+        throw new Error(
+          `This employee already has a plan assignment during this period: ${name} (${formattedStart} - ${formattedEnd}). Please adjust the effective dates or remove the existing assignment first.`
+        );
+      }
+
       const { data, error } = await supabase
         .from("user_targets")
         .insert({
@@ -174,6 +244,23 @@ export function useUpdatePlanAssignment() {
 
   return useMutation({
     mutationFn: async (input: CreatePlanAssignmentInput & { id: string }) => {
+      // Check for overlapping assignments before updating (exclude current assignment)
+      const overlapCheck = await checkOverlappingAssignments(
+        input.user_id,
+        input.effective_start_date,
+        input.effective_end_date,
+        input.id // Exclude current assignment from overlap check
+      );
+
+      if (overlapCheck.hasOverlap && overlapCheck.conflictingPlan) {
+        const { name, startDate, endDate } = overlapCheck.conflictingPlan;
+        const formattedStart = format(new Date(startDate), "MMM yyyy");
+        const formattedEnd = format(new Date(endDate), "MMM yyyy");
+        throw new Error(
+          `This employee already has a plan assignment during this period: ${name} (${formattedStart} - ${formattedEnd}). Please adjust the effective dates or remove the existing assignment first.`
+        );
+      }
+
       const { data, error } = await supabase
         .from("user_targets")
         .update({
