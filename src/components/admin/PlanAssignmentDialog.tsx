@@ -46,6 +46,7 @@ const formSchema = z.object({
   currency: z.string().min(1, "Currency is required"),
   tfp_local_currency: z.coerce.number().min(0).optional(),
   target_bonus_percent: z.coerce.number().min(0).max(100).optional(),
+  tvp_local_currency: z.coerce.number().min(0).optional(),
   ote_local_currency: z.coerce.number().min(0).optional(),
   tfp_usd: z.coerce.number().min(0).optional(),
   target_bonus_usd: z.coerce.number().min(0).optional(),
@@ -66,6 +67,8 @@ interface Employee {
   tfp_local_currency?: number | null;
   tfp_usd?: number | null;
   target_bonus_percent?: number | null;
+  tvp_local_currency?: number | null;
+  tvp_usd?: number | null;
   ote_local_currency?: number | null;
   ote_usd?: number | null;
   auth_user_id?: string | null;
@@ -118,6 +121,7 @@ export function PlanAssignmentDialog({
       currency: "USD",
       tfp_local_currency: 0,
       target_bonus_percent: 0,
+      tvp_local_currency: 0,
       ote_local_currency: 0,
       tfp_usd: 0,
       target_bonus_usd: 0,
@@ -155,9 +159,10 @@ export function PlanAssignmentDialog({
         currency: employee.local_currency || "USD",
         tfp_local_currency: employee.tfp_local_currency ?? 0,
         target_bonus_percent: employee.target_bonus_percent ?? 0,
+        tvp_local_currency: employee.tvp_local_currency ?? 0,
         ote_local_currency: employee.ote_local_currency ?? 0,
         tfp_usd: employee.tfp_usd ?? 0,
-        target_bonus_usd: 0,
+        target_bonus_usd: employee.tvp_usd ?? 0,
         ote_usd: employee.ote_usd ?? 0,
       });
 
@@ -372,7 +377,7 @@ export function PlanAssignmentDialog({
             {/* Compensation Values - Local Currency */}
             <div className="space-y-4">
               <h4 className="text-sm font-medium text-foreground">Local Currency Values</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="tfp_local_currency"
@@ -395,6 +400,20 @@ export function PlanAssignmentDialog({
                       <FormLabel>Target Bonus %</FormLabel>
                       <FormControl>
                         <Input type="number" step="0.1" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="tvp_local_currency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>TVP (Local)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
