@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Copy } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Copy, Target } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -32,6 +32,7 @@ import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
 import { RoleManagement } from "@/components/admin/RoleManagement";
 import { BulkUpload } from "@/components/admin/BulkUpload";
 import { PermissionsManagement } from "@/components/admin/PermissionsManagement";
+import { PerformanceTargetsManagement } from "@/components/admin/PerformanceTargetsManagement";
 import { CompPlanFormDialog } from "@/components/admin/CompPlanFormDialog";
 import { CompPlanDetailsDialog } from "@/components/admin/CompPlanDetailsDialog";
 import { CopyPlansDialog } from "@/components/admin/CopyPlansDialog";
@@ -208,6 +209,12 @@ export default function Admin() {
               <TabsTrigger value="bulk-upload" className="gap-2">
                 <Upload className="h-4 w-4" />
                 Bulk Upload
+              </TabsTrigger>
+            )}
+            {canAccessTab("tab:performance_targets") && (
+              <TabsTrigger value="performance-targets" className="gap-2">
+                <Target className="h-4 w-4" />
+                Performance Targets
               </TabsTrigger>
             )}
             {canAccessTab("tab:role_management") && (
@@ -426,6 +433,13 @@ export default function Admin() {
           {canAccessTab("tab:role_management") && (
             <TabsContent value="roles">
               <RoleManagement />
+            </TabsContent>
+          )}
+
+          {/* Performance Targets Tab */}
+          {canAccessTab("tab:performance_targets") && (
+            <TabsContent value="performance-targets">
+              <PerformanceTargetsManagement />
             </TabsContent>
           )}
 
