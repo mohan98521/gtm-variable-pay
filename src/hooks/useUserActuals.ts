@@ -2,6 +2,18 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 
+// All 8 participant role columns in the deals table
+const PARTICIPANT_ROLES = [
+  'sales_rep_employee_id',
+  'sales_head_employee_id',
+  'sales_engineering_employee_id',
+  'sales_engineering_head_employee_id',
+  'product_specialist_employee_id',
+  'product_specialist_head_employee_id',
+  'solution_manager_employee_id',
+  'solution_manager_head_employee_id',
+] as const;
+
 export interface MonthlyActual {
   month: string;
   value: number;
@@ -19,9 +31,23 @@ export interface UserActualsResult {
   error: Error | null;
 }
 
+interface DealRow {
+  month_year: string;
+  new_software_booking_arr_usd: number | null;
+  sales_rep_employee_id: string | null;
+  sales_head_employee_id: string | null;
+  sales_engineering_employee_id: string | null;
+  sales_engineering_head_employee_id: string | null;
+  product_specialist_employee_id: string | null;
+  product_specialist_head_employee_id: string | null;
+  solution_manager_employee_id: string | null;
+  solution_manager_head_employee_id: string | null;
+}
+
 /**
  * Fetch real actuals for the current user from deals and closing_arr_actuals tables
  * Aggregates by metric type and month for dashboard display
+ * Supports multi-participant attribution - credits all 8 participant roles
  */
 export function useUserActuals() {
   const { selectedYear } = useFiscalYear();
@@ -44,17 +70,42 @@ export function useUserActuals() {
       const fiscalYearStart = `${selectedYear}-01-01`;
       const fiscalYearEnd = `${selectedYear}-12-31`;
       const employeeId = profile.employee_id;
-      // Fetch deals for New Software Booking ARR (grouped by month)
+      
+      // Fetch ALL deals with all participant role columns
+      // We need to check if current user is ANY participant
       const { data: deals, error: dealsError } = await supabase
         .from("deals")
-        .select("month_year, new_software_booking_arr_usd")
-        .eq("sales_rep_employee_id", employeeId)
+        .select(`
+          month_year,
+          new_software_booking_arr_usd,
+          sales_rep_employee_id,
+          sales_head_employee_id,
+          sales_engineering_employee_id,
+          sales_engineering_head_employee_id,
+          product_specialist_employee_id,
+          product_specialist_head_employee_id,
+          solution_manager_employee_id,
+          solution_manager_head_employee_id
+        `)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
 
       if (dealsError) throw dealsError;
 
-      // Fetch closing ARR actuals (grouped by month)
+      // Filter deals where current employee is ANY participant and aggregate
+      const newBookingByMonth = new Map<string, number>();
+      (deals || []).forEach((deal: DealRow) => {
+        // Check if current employee is ANY participant in this deal
+        const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
+        
+        if (isParticipant) {
+          const monthKey = deal.month_year?.substring(0, 7) || ""; // YYYY-MM
+          const current = newBookingByMonth.get(monthKey) || 0;
+          newBookingByMonth.set(monthKey, current + (deal.new_software_booking_arr_usd || 0));
+        }
+      });
+
+      // Fetch closing ARR actuals (only has sales_rep_employee_id)
       const { data: closingArr, error: closingError } = await supabase
         .from("closing_arr_actuals")
         .select("month_year, closing_arr")
@@ -63,14 +114,6 @@ export function useUserActuals() {
         .lte("month_year", fiscalYearEnd);
 
       if (closingError) throw closingError;
-
-      // Aggregate New Software Booking ARR by month
-      const newBookingByMonth = new Map<string, number>();
-      (deals || []).forEach((deal) => {
-        const monthKey = deal.month_year?.substring(0, 7) || ""; // YYYY-MM
-        const current = newBookingByMonth.get(monthKey) || 0;
-        newBookingByMonth.set(monthKey, current + (deal.new_software_booking_arr_usd || 0));
-      });
 
       // Aggregate Closing ARR by month
       const closingByMonth = new Map<string, number>();
@@ -110,9 +153,9 @@ export function useUserActuals() {
     },
   });
 }
-
 /**
  * Fetch actuals for a specific employee (admin use)
+ * Supports multi-participant attribution
  */
 export function useEmployeeActuals(employeeId: string | undefined, fiscalYear: number = 2026) {
   return useQuery({
@@ -123,13 +166,31 @@ export function useEmployeeActuals(employeeId: string | undefined, fiscalYear: n
       const fiscalYearStart = `${fiscalYear}-01-01`;
       const fiscalYearEnd = `${fiscalYear}-12-31`;
 
-      // Fetch deals for New Software Booking ARR
+      // Fetch ALL deals with all participant role columns
       const { data: deals } = await supabase
         .from("deals")
-        .select("month_year, new_software_booking_arr_usd")
-        .eq("sales_rep_employee_id", employeeId)
+        .select(`
+          new_software_booking_arr_usd,
+          sales_rep_employee_id,
+          sales_head_employee_id,
+          sales_engineering_employee_id,
+          sales_engineering_head_employee_id,
+          product_specialist_employee_id,
+          product_specialist_head_employee_id,
+          solution_manager_employee_id,
+          solution_manager_head_employee_id
+        `)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
+
+      // Filter and aggregate deals where employee is ANY participant
+      let newBookingYtd = 0;
+      (deals || []).forEach((deal: any) => {
+        const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
+        if (isParticipant) {
+          newBookingYtd += deal.new_software_booking_arr_usd || 0;
+        }
+      });
 
       // Fetch closing ARR actuals
       const { data: closingArr } = await supabase
@@ -140,7 +201,6 @@ export function useEmployeeActuals(employeeId: string | undefined, fiscalYear: n
         .lte("month_year", fiscalYearEnd);
 
       // Calculate YTD totals
-      const newBookingYtd = (deals || []).reduce((sum, d) => sum + (d.new_software_booking_arr_usd || 0), 0);
       const closingYtd = (closingArr || []).reduce((sum, a) => sum + (a.closing_arr || 0), 0);
 
       return {

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2 } from "lucide-react";
+import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -330,11 +330,13 @@ export default function Reports() {
   const exportIncentiveAudit = () => {
     const exportData: any[] = [];
     filteredAuditData.forEach((row) => {
+      // Export variable pay metrics
       row.metrics.forEach((metric) => {
         exportData.push({
           employee_name: row.employeeName,
           plan_name: row.planName,
           sales_function: row.salesFunction || "",
+          type: "Variable Pay",
           metric_name: metric.metricName,
           target: metric.target,
           actual: metric.actual,
@@ -343,12 +345,31 @@ export default function Reports() {
           multiplier: metric.multiplier.toFixed(2),
           allocation: metric.allocation.toFixed(2),
           payout: metric.payout.toFixed(2),
+          holdback: "-",
+        });
+      });
+      // Export commissions
+      (row.commissions || []).forEach((comm) => {
+        exportData.push({
+          employee_name: row.employeeName,
+          plan_name: row.planName,
+          sales_function: row.salesFunction || "",
+          type: "Commission",
+          metric_name: comm.commissionType,
+          target: "-",
+          actual: comm.dealValue.toFixed(2),
+          achievement_pct: "-",
+          logic_type: "-",
+          multiplier: (comm.rate / 100).toFixed(4),
+          allocation: "-",
+          payout: comm.immediatePayout.toFixed(2),
+          holdback: comm.holdback.toFixed(2),
         });
       });
     });
     exportToCSV(exportData, "incentive_audit", [
-      "employee_name", "plan_name", "sales_function", "metric_name", "target", 
-      "actual", "achievement_pct", "logic_type", "multiplier", "allocation", "payout"
+      "employee_name", "plan_name", "sales_function", "type", "metric_name", "target", 
+      "actual", "achievement_pct", "logic_type", "multiplier", "allocation", "payout", "holdback"
     ]);
   };
 
@@ -527,14 +548,14 @@ export default function Reports() {
             </Card>
           </TabsContent>
 
-          {/* Tab 3: Incentive Audit - Now Database-Driven */}
+          {/* Tab 3: Incentive Audit - Now Database-Driven with Commission */}
           <TabsContent value="audit">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Incentive Audit</CardTitle>
                   <CardDescription>
-                    Database-driven calculation: (Actual / Target) × Multiplier × Allocation = Payout
+                    Variable Pay: (Actual / Target) × Multiplier × Allocation = Payout | Commission: Deal Value × Rate (75% Paid / 25% Holdback)
                   </CardDescription>
                 </div>
                 <Button onClick={exportIncentiveAudit} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
@@ -542,78 +563,193 @@ export default function Reports() {
                   Export CSV
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-6">
                 {auditLoading ? (
                   <div className="flex justify-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   </div>
                 ) : (
-                  <ScrollArea className="w-full whitespace-nowrap">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                          <TableHead className="text-white font-semibold">Name</TableHead>
-                          <TableHead className="text-white font-semibold">Plan</TableHead>
-                          <TableHead className="text-white font-semibold">Metric</TableHead>
-                          <TableHead className="text-white font-semibold text-right">Target</TableHead>
-                          <TableHead className="text-white font-semibold text-right">Actual</TableHead>
-                          <TableHead className="text-white font-semibold text-right">Achievement</TableHead>
-                          <TableHead className="text-white font-semibold text-right">Multiplier</TableHead>
-                          <TableHead className="text-white font-semibold text-right">Allocation</TableHead>
-                          <TableHead className="text-white font-semibold text-right">Payout</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredAuditData.flatMap((row) => 
-                          row.metrics.map((metric, idx) => (
-                            <TableRow key={`${row.employeeId}-${metric.metricName}`} className="data-row">
-                              {idx === 0 ? (
-                                <TableCell className="font-medium" rowSpan={row.metrics.length}>
-                                  {row.employeeName}
+                  <>
+                    {/* Variable Pay Section */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <Calculator className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
+                        Variable Pay
+                      </h3>
+                      <ScrollArea className="w-full whitespace-nowrap">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                              <TableHead className="text-white font-semibold">Name</TableHead>
+                              <TableHead className="text-white font-semibold">Plan</TableHead>
+                              <TableHead className="text-white font-semibold">Metric</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Target</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Actual</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Achievement</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Multiplier</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Allocation</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Payout</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredAuditData.flatMap((row) => 
+                              row.metrics.map((metric, idx) => (
+                                <TableRow key={`${row.employeeId}-${metric.metricName}`} className="data-row">
+                                  {idx === 0 ? (
+                                    <TableCell className="font-medium" rowSpan={row.metrics.length}>
+                                      {row.employeeName}
+                                    </TableCell>
+                                  ) : null}
+                                  {idx === 0 ? (
+                                    <TableCell rowSpan={row.metrics.length}>{row.planName}</TableCell>
+                                  ) : null}
+                                  <TableCell>
+                                    {metric.metricName}
+                                    {metric.isGated && (
+                                      <span className="ml-1 text-xs text-warning">(Gate: {metric.gateThreshold}%)</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right">${metric.target.toLocaleString()}</TableCell>
+                                  <TableCell className="text-right">${metric.actual.toLocaleString()}</TableCell>
+                                  <TableCell className="text-right">
+                                    <span className={
+                                      metric.achievementPct >= 100 ? "text-success" : 
+                                      metric.achievementPct >= 85 ? "text-warning" : "text-destructive"
+                                    }>
+                                      {metric.achievementPct.toFixed(1)}%
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">{metric.multiplier.toFixed(2)}x</TableCell>
+                                  <TableCell className="text-right">${metric.allocation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                                  <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                                    ${metric.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                            {/* Total row per employee */}
+                            {filteredAuditData.map((row) => (
+                              <TableRow key={`${row.employeeId}-vp-total`} className="bg-muted/50 font-semibold">
+                                <TableCell colSpan={8} className="text-right">
+                                  Variable Pay Total for {row.employeeName}:
                                 </TableCell>
-                              ) : null}
-                              {idx === 0 ? (
-                                <TableCell rowSpan={row.metrics.length}>{row.planName}</TableCell>
-                              ) : null}
-                              <TableCell>
-                                {metric.metricName}
-                                {metric.isGated && (
-                                  <span className="ml-1 text-xs text-warning">(Gate: {metric.gateThreshold}%)</span>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right">${metric.target.toLocaleString()}</TableCell>
-                              <TableCell className="text-right">${metric.actual.toLocaleString()}</TableCell>
+                                <TableCell className="text-right text-[hsl(var(--azentio-teal))]">
+                                  ${row.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <ScrollBar orientation="horizontal" />
+                      </ScrollArea>
+                    </div>
+
+                    {/* Commission Section */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <Percent className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
+                        Commission Payouts
+                      </h3>
+                      <ScrollArea className="w-full whitespace-nowrap">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                              <TableHead className="text-white font-semibold">Name</TableHead>
+                              <TableHead className="text-white font-semibold">Plan</TableHead>
+                              <TableHead className="text-white font-semibold">Commission Type</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Deal Value</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Rate</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Gross</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Paid (75%)</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Holdback (25%)</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredAuditData.filter(row => (row.commissions || []).length > 0).flatMap((row) => 
+                              (row.commissions || []).map((comm, idx) => (
+                                <TableRow key={`${row.employeeId}-comm-${comm.commissionType}`} className="data-row">
+                                  {idx === 0 ? (
+                                    <TableCell className="font-medium" rowSpan={row.commissions.length}>
+                                      {row.employeeName}
+                                    </TableCell>
+                                  ) : null}
+                                  {idx === 0 ? (
+                                    <TableCell rowSpan={row.commissions.length}>{row.planName}</TableCell>
+                                  ) : null}
+                                  <TableCell>{comm.commissionType}</TableCell>
+                                  <TableCell className="text-right">${comm.dealValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                                  <TableCell className="text-right">{comm.rate}%</TableCell>
+                                  <TableCell className="text-right">${comm.grossCommission.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                                  <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                                    ${comm.immediatePayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </TableCell>
+                                  <TableCell className="text-right text-warning">
+                                    ${comm.holdback.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                            {/* Commission totals per employee */}
+                            {filteredAuditData.filter(row => (row.commissions || []).length > 0).map((row) => (
+                              <TableRow key={`${row.employeeId}-comm-total`} className="bg-muted/50 font-semibold">
+                                <TableCell colSpan={5} className="text-right">
+                                  Commission Total for {row.employeeName}:
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  ${(row.totalCommissionGross || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </TableCell>
+                                <TableCell className="text-right text-[hsl(var(--azentio-teal))]">
+                                  ${(row.totalCommissionPaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </TableCell>
+                                <TableCell className="text-right text-warning">
+                                  ${(row.totalCommissionHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <ScrollBar orientation="horizontal" />
+                      </ScrollArea>
+                      {filteredAuditData.filter(row => (row.commissions || []).length > 0).length === 0 && (
+                        <p className="text-center text-muted-foreground py-4">No commission data found</p>
+                      )}
+                    </div>
+
+                    {/* Grand Total Section */}
+                    <div className="border-t pt-4">
+                      <h3 className="text-lg font-semibold mb-3">Grand Total by Employee</h3>
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                            <TableHead className="text-white font-semibold">Name</TableHead>
+                            <TableHead className="text-white font-semibold text-right">Variable Pay</TableHead>
+                            <TableHead className="text-white font-semibold text-right">Commission (Paid)</TableHead>
+                            <TableHead className="text-white font-semibold text-right">Commission (Holdback)</TableHead>
+                            <TableHead className="text-white font-semibold text-right">Total Payout</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredAuditData.map((row) => (
+                            <TableRow key={`${row.employeeId}-grand`} className="data-row">
+                              <TableCell className="font-medium">{row.employeeName}</TableCell>
                               <TableCell className="text-right">
-                                <span className={
-                                  metric.achievementPct >= 100 ? "text-success" : 
-                                  metric.achievementPct >= 85 ? "text-warning" : "text-destructive"
-                                }>
-                                  {metric.achievementPct.toFixed(1)}%
-                                </span>
+                                ${row.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </TableCell>
-                              <TableCell className="text-right">{metric.multiplier.toFixed(2)}x</TableCell>
-                              <TableCell className="text-right">${metric.allocation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                              <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
-                                ${metric.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              <TableCell className="text-right">
+                                ${(row.totalCommissionPaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </TableCell>
+                              <TableCell className="text-right text-warning">
+                                ${(row.totalCommissionHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </TableCell>
+                              <TableCell className="text-right font-bold text-[hsl(var(--azentio-teal))]">
+                                ${(row.totalPayout + (row.totalCommissionPaid || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </TableCell>
                             </TableRow>
-                          ))
-                        )}
-                        {/* Total row per employee */}
-                        {filteredAuditData.map((row) => (
-                          <TableRow key={`${row.employeeId}-total`} className="bg-muted/50 font-semibold">
-                            <TableCell colSpan={8} className="text-right">
-                              Total for {row.employeeName}:
-                            </TableCell>
-                            <TableCell className="text-right text-[hsl(var(--azentio-teal))]">
-                              ${row.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 )}
                 {!auditLoading && filteredAuditData.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">No incentive data found</p>
