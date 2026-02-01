@@ -44,9 +44,12 @@ import {
   UserX,
   UserCheck,
   Plus,
-  LogIn
+  LogIn,
+  Target
 } from "lucide-react";
 import { EmployeeFormDialog, EmployeeFormData } from "./EmployeeFormDialog";
+import { PlanAssignmentDialog } from "./PlanAssignmentDialog";
+import { EmployeeAssignmentsPopover } from "./EmployeeAssignmentsPopover";
 
 interface Employee {
   id: string;
@@ -88,8 +91,28 @@ export function EmployeeAccounts() {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [deactivatingEmployee, setDeactivatingEmployee] = useState<Employee | null>(null);
   const [impersonatingEmployee, setImpersonatingEmployee] = useState<Employee | null>(null);
+  const [assigningEmployee, setAssigningEmployee] = useState<Employee | null>(null);
   const [activeTab, setActiveTab] = useState("active");
   const queryClient = useQueryClient();
+
+  // Fetch assignment counts for all employees
+  const { data: assignmentCounts = {} } = useQuery({
+    queryKey: ["employee-assignment-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_targets")
+        .select("user_id");
+      
+      if (error) throw error;
+      
+      // Count assignments per user
+      const counts: Record<string, number> = {};
+      data?.forEach((target) => {
+        counts[target.user_id] = (counts[target.user_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
 
   // Fetch all employees (both active and inactive)
   const { data: allEmployees, isLoading } = useQuery({
@@ -512,6 +535,7 @@ export function EmployeeAccounts() {
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Sales Function</TableHead>
+                    <TableHead>Plans</TableHead>
                     <TableHead>Account Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -528,6 +552,12 @@ export function EmployeeAccounts() {
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <EmployeeAssignmentsPopover
+                          employee={employee}
+                          assignmentCount={assignmentCounts[employee.id] || 0}
+                        />
                       </TableCell>
                       <TableCell>
                         {employee.auth_user_id ? (
@@ -571,6 +601,10 @@ export function EmployeeAccounts() {
                                 Login As
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem onClick={() => setAssigningEmployee(employee)}>
+                              <Target className="h-4 w-4 mr-2" />
+                              Assign to Plan
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               onClick={() => setDeactivatingEmployee(employee)}
@@ -595,7 +629,7 @@ export function EmployeeAccounts() {
                   ))}
                   {filteredEmployees?.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         No employees found matching your search.
                       </TableCell>
                     </TableRow>
@@ -693,6 +727,13 @@ export function EmployeeAccounts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Plan Assignment Dialog */}
+      <PlanAssignmentDialog
+        open={!!assigningEmployee}
+        onOpenChange={(open) => !open && setAssigningEmployee(null)}
+        employee={assigningEmployee}
+      />
     </div>
   );
 }

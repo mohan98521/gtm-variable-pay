@@ -48,6 +48,7 @@ import { MetricFormDialog, PlanMetric } from "@/components/admin/MetricFormDialo
 import { MultiplierGridEditor } from "@/components/admin/MultiplierGridEditor";
 import { PlanCommissionEditor } from "@/components/admin/PlanCommissionEditor";
 import { usePlanCommissions } from "@/hooks/usePlanCommissions";
+import { AssignedEmployeesCard } from "@/components/admin/AssignedEmployeesCard";
 
 interface MultiplierGrid {
   id: string;
@@ -493,6 +494,9 @@ export default function PlanBuilder() {
 
         {/* Commission Structure Section */}
         <PlanCommissionEditor planId={planId!} />
+
+        {/* Assigned Employees Section */}
+        <AssignedEmployeesCard planId={planId!} planName={plan.name} />
       </div>
 
       {/* Add/Edit Metric Dialog */}
