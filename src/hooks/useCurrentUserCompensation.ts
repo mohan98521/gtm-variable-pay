@@ -6,6 +6,8 @@ import { PlanMetric, MultiplierGrid } from "./usePlanMetrics";
 
 // Map employee sales_function to plan name
 const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
+  "Farming": "Farmer",
+  "Hunting": "Hunter",
   "Farmer": "Farmer",
   "Hunter": "Hunter",
   "Farmer - Retain": "Farmer Retain",
@@ -14,6 +16,8 @@ const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
   "CSM": "CSM",
   "Sales Engineering": "Sales Engineering",
   "SE": "Sales Engineering",
+  "Solution Architect": "Product Specialist or Solution Architect",
+  "Solution Manager": "Product Specialist or Solution Architect",
 };
 
 // Participant roles for deal attribution
@@ -44,6 +48,16 @@ export interface MetricCompensation {
   multiplierGrids: MultiplierGrid[];
 }
 
+export interface CommissionCompensation {
+  commissionType: string;
+  dealValue: number;
+  rate: number;
+  minThreshold: number | null;
+  grossPayout: number;
+  amountPaid: number;      // 75%
+  holdback: number;        // 25%
+}
+
 export interface MonthlyMetricBreakdown {
   month: string;
   monthLabel: string;
@@ -59,11 +73,15 @@ export interface CurrentUserCompensation {
   planName: string;
   fiscalYear: number;
   metrics: MetricCompensation[];
+  commissions: CommissionCompensation[];
   monthlyBreakdown: MonthlyMetricBreakdown[];
   clawbackAmount: number;
   totalEligiblePayout: number;
   totalPaid: number;
   totalHoldback: number;
+  totalCommissionPayout: number;
+  totalCommissionPaid: number;
+  totalCommissionHoldback: number;
   // Raw data for simulator
   planMetrics: PlanMetric[];
 }
@@ -154,7 +172,24 @@ export function useCurrentUserCompensation() {
         }
       }
 
-      // 7. Get actuals from deals table
+      // 7. Get plan commissions (if plan exists)
+      let planCommissions: Array<{
+        commission_type: string;
+        commission_rate_pct: number;
+        min_threshold_usd: number | null;
+      }> = [];
+      
+      if (planId) {
+        const { data: commissions } = await supabase
+          .from("plan_commissions")
+          .select("commission_type, commission_rate_pct, min_threshold_usd")
+          .eq("plan_id", planId)
+          .eq("is_active", true);
+        
+        planCommissions = commissions || [];
+      }
+
+      // 8. Get actuals from deals table with commission fields
       const fiscalYearStart = `${selectedYear}-01-01`;
       const fiscalYearEnd = `${selectedYear}-12-31`;
 
@@ -163,6 +198,11 @@ export function useCurrentUserCompensation() {
         .select(`
           month_year,
           new_software_booking_arr_usd,
+          managed_services_usd,
+          perpetual_license_usd,
+          cr_usd,
+          er_usd,
+          implementation_usd,
           sales_rep_employee_id,
           sales_head_employee_id,
           sales_engineering_employee_id,
@@ -178,6 +218,12 @@ export function useCurrentUserCompensation() {
       // Aggregate actuals by month and metric
       const newBookingByMonth = new Map<string, number>();
       let newBookingYtd = 0;
+      
+      // Commission aggregations
+      let managedServicesYtd = 0;
+      let perpetualLicenseYtd = 0;
+      let crErYtd = 0;
+      let implementationYtd = 0;
 
       (deals || []).forEach((deal: any) => {
         const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
@@ -186,10 +232,16 @@ export function useCurrentUserCompensation() {
           const value = deal.new_software_booking_arr_usd || 0;
           newBookingByMonth.set(monthKey, (newBookingByMonth.get(monthKey) || 0) + value);
           newBookingYtd += value;
+          
+          // Aggregate commission deal values
+          managedServicesYtd += deal.managed_services_usd || 0;
+          perpetualLicenseYtd += deal.perpetual_license_usd || 0;
+          crErYtd += (deal.cr_usd || 0) + (deal.er_usd || 0);
+          implementationYtd += deal.implementation_usd || 0;
         }
       });
 
-      // 8. Get closing ARR actuals
+      // 9. Get closing ARR actuals
       const { data: closingArr } = await supabase
         .from("closing_arr_actuals")
         .select("month_year, closing_arr")
@@ -207,7 +259,7 @@ export function useCurrentUserCompensation() {
         closingYtd += value;
       });
 
-      // 9. Build metrics with calculations
+      // 10. Build metrics with calculations
       const targetBonusUsd = employee.tvp_usd || 0;
 
       // Create actuals map
@@ -285,7 +337,34 @@ export function useCurrentUserCompensation() {
         });
       }
 
-      // 10. Build monthly breakdown
+      // 11. Calculate commission payouts
+      const commissionActualsMap: Record<string, number> = {
+        "Managed Services": managedServicesYtd,
+        "Perpetual License": perpetualLicenseYtd,
+        "CR/ER": crErYtd,
+        "Implementation": implementationYtd,
+      };
+
+      const commissions: CommissionCompensation[] = planCommissions.map(pc => {
+        const dealValue = commissionActualsMap[pc.commission_type] || 0;
+        const rate = pc.commission_rate_pct / 100;
+        const meetsThreshold = !pc.min_threshold_usd || dealValue >= pc.min_threshold_usd;
+        const grossPayout = meetsThreshold ? dealValue * rate : 0;
+        const amountPaid = grossPayout * 0.75;
+        const holdback = grossPayout * 0.25;
+
+        return {
+          commissionType: pc.commission_type,
+          dealValue,
+          rate: pc.commission_rate_pct,
+          minThreshold: pc.min_threshold_usd,
+          grossPayout,
+          amountPaid,
+          holdback,
+        };
+      });
+
+      // 12. Build monthly breakdown
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const allMonths = new Set<string>();
       newBookingByMonth.forEach((_, k) => allMonths.add(k));
@@ -303,10 +382,15 @@ export function useCurrentUserCompensation() {
           };
         });
 
-      // 11. Calculate totals
+      // 13. Calculate totals
       const totalEligiblePayout = metrics.reduce((sum, m) => sum + m.eligiblePayout, 0);
       const totalPaid = metrics.reduce((sum, m) => sum + m.amountPaid, 0);
       const totalHoldback = metrics.reduce((sum, m) => sum + m.holdback, 0);
+      
+      const totalCommissionPayout = commissions.reduce((sum, c) => sum + c.grossPayout, 0);
+      const totalCommissionPaid = commissions.reduce((sum, c) => sum + c.amountPaid, 0);
+      const totalCommissionHoldback = commissions.reduce((sum, c) => sum + c.holdback, 0);
+      
       const clawbackAmount = 0; // TODO: Calculate from monthly_payouts if needed
 
       return {
@@ -317,11 +401,15 @@ export function useCurrentUserCompensation() {
         planName: resolvedPlanName,
         fiscalYear: selectedYear,
         metrics,
+        commissions,
         monthlyBreakdown,
         clawbackAmount,
         totalEligiblePayout,
         totalPaid,
         totalHoldback,
+        totalCommissionPayout,
+        totalCommissionPaid,
+        totalCommissionHoldback,
         planMetrics,
       };
     },
