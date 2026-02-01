@@ -83,6 +83,35 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
     return isNaN(parsed) ? null : parsed;
   };
 
+  // Parse MMM-YYYY (e.g., "Jan-2026") or YYYY-MM-DD format to YYYY-MM-DD
+  const parseMonthYear = (value: string): string | null => {
+    if (!value || value.trim() === "") return null;
+    
+    const trimmed = value.trim();
+    
+    // Format 1: YYYY-MM-DD (existing format)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    
+    // Format 2: MMM-YYYY (e.g., "Jan-2026")
+    const monthMap: Record<string, string> = {
+      'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+      'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+      'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+    };
+    
+    const match = trimmed.match(/^([a-zA-Z]{3})-(\d{4})$/);
+    if (match) {
+      const monthNum = monthMap[match[1].toLowerCase()];
+      if (monthNum) {
+        return `${match[2]}-${monthNum}-01`;
+      }
+    }
+    
+    return null; // Invalid format
+  };
+
   const parseDate = (value: string): string | null => {
     if (!value || value.trim() === "") return null;
     // Try parsing various date formats
@@ -105,17 +134,14 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
     // Validate month_year format and fiscal year
     let monthYear: string | null = null;
     if (row.month_year) {
-      monthYear = parseDate(row.month_year);
+      monthYear = parseMonthYear(row.month_year);
       if (!monthYear) {
-        errors.push("Invalid month_year format");
+        errors.push("Invalid month_year format. Use MMM-YYYY (e.g., Jan-2026)");
       } else {
-        const year = new Date(monthYear).getFullYear();
+        const year = parseInt(monthYear.substring(0, 4), 10);
         if (year !== selectedYear) {
           errors.push(`month_year must be in fiscal year ${selectedYear}`);
         }
-        // Ensure it's the first of the month
-        const date = new Date(monthYear);
-        monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
       }
     }
 

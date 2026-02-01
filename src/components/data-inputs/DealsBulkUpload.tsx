@@ -95,6 +95,35 @@ const CSV_TEMPLATE_HEADERS = [
   "notes",
 ];
 
+// Parse MMM-YYYY (e.g., "Jan-2026") or YYYY-MM-DD format to YYYY-MM-DD
+const parseMonthYear = (value: string): string | null => {
+  if (!value || value.trim() === "") return null;
+  
+  const trimmed = value.trim();
+  
+  // Format 1: YYYY-MM-DD (existing format)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  
+  // Format 2: MMM-YYYY (e.g., "Jan-2026")
+  const monthMap: Record<string, string> = {
+    'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+    'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+    'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+  };
+  
+  const match = trimmed.match(/^([a-zA-Z]{3})-(\d{4})$/);
+  if (match) {
+    const monthNum = monthMap[match[1].toLowerCase()];
+    if (monthNum) {
+      return `${match[2]}-${monthNum}-01`;
+    }
+  }
+  
+  return null; // Invalid format
+};
+
 const generateCSVTemplate = (): string => {
   const headers = CSV_TEMPLATE_HEADERS.join(",");
   const exampleRow = [
@@ -107,7 +136,7 @@ const generateCSVTemplate = (): string => {
     "Core Banking",
     "amc",
     "25",
-    "2026-01-01",
+    "Jan-2026",
     "100000",
     "50000",
     "25000",
@@ -187,7 +216,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         product: deal.product,
         type_of_proposal: deal.type_of_proposal,
         gp_margin_percent: deal.gp_margin_percent ? parseFloat(deal.gp_margin_percent) : undefined,
-        month_year: deal.month_year,
+        month_year: parseMonthYear(deal.month_year) || deal.month_year,
         first_year_amc_usd: deal.first_year_amc_usd ? parseFloat(deal.first_year_amc_usd) : undefined,
         first_year_subscription_usd: deal.first_year_subscription_usd ? parseFloat(deal.first_year_subscription_usd) : undefined,
         managed_services_usd: deal.managed_services_usd ? parseFloat(deal.managed_services_usd) : undefined,
@@ -252,9 +281,10 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         });
       }
 
-      if (!deal.month_year || !deal.month_year.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        errors.push({ row, field: "month_year", message: "Invalid date format. Use YYYY-MM-DD" });
-      } else if (!isMonthInFiscalYear(deal.month_year)) {
+      const parsedDate = parseMonthYear(deal.month_year);
+      if (!parsedDate) {
+        errors.push({ row, field: "month_year", message: "Invalid date format. Use MMM-YYYY (e.g., Jan-2026)" });
+      } else if (!isMonthInFiscalYear(parsedDate)) {
         errors.push({
           row,
           field: "month_year",
@@ -439,7 +469,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              All deals must have a month_year within FY {selectedYear} (Jan-Dec {selectedYear}).
+              All deals must have a month_year (e.g., Jan-{selectedYear}) within FY {selectedYear}.
             </AlertDescription>
           </Alert>
 
