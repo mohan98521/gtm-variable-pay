@@ -72,6 +72,8 @@ interface Employee {
   ote_local_currency?: number | null;
   ote_usd?: number | null;
   auth_user_id?: string | null;
+  date_of_hire?: string | null;
+  departure_date?: string | null;
 }
 
 interface ExistingAssignment {
@@ -149,8 +151,14 @@ export function PlanAssignmentDialog({
       });
     } else if (employee) {
       // Creating mode - populate from employee data
-      const startDate = new Date(selectedYear, 0, 1);
-      const endDate = new Date(selectedYear, 11, 31);
+      // Use employee's date of hire if available, otherwise default to Jan 1
+      const startDate = employee.date_of_hire 
+        ? new Date(employee.date_of_hire) 
+        : new Date(selectedYear, 0, 1);
+      // Use employee's departure date if available, otherwise default to Dec 31
+      const endDate = employee.departure_date 
+        ? new Date(employee.departure_date) 
+        : new Date(selectedYear, 11, 31);
 
       form.reset({
         plan_id: preselectedPlanId || "",
@@ -301,6 +309,7 @@ export function PlanAssignmentDialog({
                           selected={field.value}
                           onSelect={field.onChange}
                           initialFocus
+                          className="pointer-events-auto"
                         />
                       </PopoverContent>
                     </Popover>
@@ -336,6 +345,7 @@ export function PlanAssignmentDialog({
                           selected={field.value}
                           onSelect={field.onChange}
                           initialFocus
+                          className="pointer-events-auto"
                         />
                       </PopoverContent>
                     </Popover>
