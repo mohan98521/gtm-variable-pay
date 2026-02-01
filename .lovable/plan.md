@@ -1,218 +1,256 @@
 
 
-## Fix Employee ID Linkage Between Profiles and Employees
+## Fix Three Critical Issues: Multi-Participant Attribution, Multiplier Logic, and Commission Display
 
-### Problem Summary
+### Issue Analysis
 
-| Metric | Value |
-|--------|-------|
-| Total profiles | 12 |
-| Profiles with employee_id | 0 |
-| Profiles matchable by email | 11 |
-| Unmatched profile | 1 (mohankumar98521@gmail.com - admin, not in employees table) |
-
-The `profiles.employee_id` column is NULL for all users, which breaks the connection between authenticated users and their performance data in the `deals` and `closing_arr_actuals` tables.
+I've investigated all three issues and found the root causes:
 
 ---
 
-### Solution Overview
+### Issue 1: Multi-Participant Deal Attribution Not Working
 
-1. **One-time data migration** - Update all existing profiles with their matching employee_id from the employees table
-2. **Database trigger enhancement** - Modify the `handle_new_user` trigger to automatically populate employee_id when new profiles are created
-3. **Edge function update** - Ensure the `create-employee-account` function also updates the profile with employee_id if the profile was created by the trigger
+**Root Cause:** The `useIncentiveAuditData.ts` hook only aggregates deals for the **primary sales rep** (`sales_rep_employee_id`), ignoring all other participants.
 
----
-
-### Implementation Steps
-
-#### Step 1: One-Time Data Migration
-
-Run a SQL migration to update all existing profiles where a matching employee exists:
-
-```sql
--- Update existing profiles with employee_id from employees table
-UPDATE profiles p
-SET employee_id = e.employee_id
-FROM employees e
-WHERE LOWER(p.email) = LOWER(e.email)
-  AND p.employee_id IS NULL;
-```
-
-**Expected Result:** 11 profiles updated with their employee_id
-
----
-
-#### Step 2: Enhance the `handle_new_user` Trigger
-
-Modify the existing trigger function to lookup the employee_id when a new profile is created:
-
-```sql
-CREATE OR REPLACE FUNCTION public.handle_new_user()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-DECLARE
-  emp_id text;
-BEGIN
-  -- Look up employee_id from employees table by email
-  SELECT employee_id INTO emp_id
-  FROM public.employees
-  WHERE LOWER(email) = LOWER(NEW.email)
-  LIMIT 1;
-
-  INSERT INTO public.profiles (id, email, full_name, employee_id)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data ->> 'full_name', NEW.email),
-    emp_id  -- Will be NULL if no matching employee found
-  );
-  RETURN NEW;
-END;
-$function$;
-```
-
----
-
-#### Step 3: Update Edge Function (Optional Enhancement)
-
-The `create-employee-account` edge function already handles this correctly in the case where it creates the profile (lines 150-157). However, when the trigger creates the profile first, the employee_id is not set.
-
-Update the edge function to also update existing profiles with the employee_id:
-
-**Current behavior (line 165-167):**
+**Current Code (Lines 125-139):**
 ```typescript
-} else {
-  console.log('Profile already exists for user:', newUserId);
-}
+// 7. Fetch deals actuals (New Software Booking ARR)
+const { data: deals } = await supabase
+  .from("deals")
+  .select("sales_rep_employee_id, new_software_booking_arr_usd")  // ← Only fetches sales_rep
+  .in("sales_rep_employee_id", employeeIds)  // ← Only filters by sales_rep
+  ...
+
+// Aggregate deals by employee
+const dealsActualMap = new Map<string, number>();
+(deals || []).forEach(deal => {
+  if (deal.sales_rep_employee_id) {  // ← Only credits sales_rep
+    const current = dealsActualMap.get(deal.sales_rep_employee_id) || 0;
+    dealsActualMap.set(deal.sales_rep_employee_id, current + (deal.new_software_booking_arr_usd || 0));
+  }
+});
 ```
 
-**Updated behavior:**
-```typescript
-} else {
-  // Profile exists but may not have employee_id, update it
-  const { error: updateProfileError } = await supabaseAdmin
-    .from('profiles')
-    .update({ employee_id: employee_id })
-    .eq('id', newUserId);
+**Data Exists:** The deals table has data for all 8 participant roles:
+| Role | Example Employee IDs |
+|------|---------------------|
+| sales_rep_employee_id | DU0001, SA0001 |
+| sales_head_employee_id | DU0002, SA0002 |
+| sales_engineering_employee_id | IN0001 |
+| sales_engineering_head_employee_id | IN0004 |
+| product_specialist_employee_id | MY0001 |
+| product_specialist_head_employee_id | AF0001 |
+| solution_manager_employee_id | IN0005 |
+| solution_manager_head_employee_id | MY0010 |
 
-  if (updateProfileError) {
-    console.error('Failed to update profile employee_id:', updateProfileError.message);
-  } else {
-    console.log('Updated profile with employee_id for user:', newUserId);
+**Fix:** Update the actuals aggregation to credit ALL participant roles, not just the sales rep.
+
+---
+
+### Issue 2: 1.6x Multiplier Not Applied for >120% Achievement
+
+**Root Cause:** Bug in the `getMultiplierFromGrid` function in `compensationEngine.ts` (Line 39).
+
+**Current Code:**
+```typescript
+// Line 38-42
+for (const grid of sortedGrids) {
+  if (achievementPercent >= grid.min_pct && achievementPercent < grid.max_pct) {  // ← BUG: uses < instead of <=
+    return grid.multiplier_value;
   }
 }
 ```
+
+**Problem:** When achievement is exactly at a boundary (e.g., 120%), the condition `achievementPercent < grid.max_pct` fails for the 100-120% tier, so it falls through to the >120% tier incorrectly, but the real issue is the opposite - for values like 121%, it correctly hits the 120-999 tier.
+
+**Database Configuration (Farmer - New Software Booking ARR):**
+| Min % | Max % | Multiplier |
+|-------|-------|------------|
+| 0 | 100 | 1.00x |
+| 100 | 120 | 1.40x |
+| 120 | 999 | 1.60x |
+
+The configuration is correct. Let me verify the actual calculation by checking if the achievement percentage is being calculated correctly in the first place. The issue may be that targets or actuals are not properly set.
+
+**Additional Investigation Needed:** The multiplier logic appears correct. The issue may be:
+1. Targets not set correctly in `performance_targets` table
+2. Achievement calculation showing 0% because target = 0
+
+---
+
+### Issue 3: Commission Calculations Not Visible
+
+**Root Cause:** There is **no UI** to display commission calculations. The `plan_commissions` table has data, and deals have the relevant commission columns (managed_services_usd, implementation_usd, cr_usd, er_usd, tcv_usd), but:
+
+1. The Incentive Audit report only shows **Variable Pay** calculations
+2. There is no calculation logic for commissions in the audit hook
+3. No display section for commission payouts
+
+**Database Configuration (Farmer Plan - plan_id: ed01c7a6-...):**
+| Commission Type | Rate | Min Threshold |
+|-----------------|------|---------------|
+| Managed Services | 1.5% | None |
+| Perpetual License | 4.0% | $50,000 |
+| Implementation | 1.0% | None |
+| CR/ER | 1.0% | None |
+
+---
+
+### Implementation Plan
+
+#### Step 1: Fix Multi-Participant Attribution
+
+**Files to Modify:** `src/hooks/useIncentiveAuditData.ts`, `src/hooks/useUserActuals.ts`
+
+**Changes:**
+- Fetch ALL participant role columns from deals table
+- Aggregate deal values to ALL participants (full credit, not split)
+- Update both the Incentive Audit hook and the Dashboard's user actuals hook
+
+```typescript
+// New query for deals
+const { data: deals } = await supabase
+  .from("deals")
+  .select(`
+    new_software_booking_arr_usd,
+    sales_rep_employee_id,
+    sales_head_employee_id,
+    sales_engineering_employee_id,
+    sales_engineering_head_employee_id,
+    product_specialist_employee_id,
+    product_specialist_head_employee_id,
+    solution_manager_employee_id,
+    solution_manager_head_employee_id
+  `)
+  .gte("month_year", fiscalYearStart)
+  .lte("month_year", fiscalYearEnd);
+
+// Aggregate to ALL participant roles
+const participantRoles = [
+  'sales_rep_employee_id',
+  'sales_head_employee_id',
+  'sales_engineering_employee_id',
+  'sales_engineering_head_employee_id',
+  'product_specialist_employee_id',
+  'product_specialist_head_employee_id',
+  'solution_manager_employee_id',
+  'solution_manager_head_employee_id',
+];
+
+(deals || []).forEach(deal => {
+  participantRoles.forEach(role => {
+    const empId = deal[role];
+    if (empId) {
+      const current = dealsActualMap.get(empId) || 0;
+      dealsActualMap.set(empId, current + (deal.new_software_booking_arr_usd || 0));
+    }
+  });
+});
+```
+
+#### Step 2: Verify Multiplier Logic
+
+**File to Review/Fix:** `src/lib/compensationEngine.ts`
+
+The multiplier grid logic appears correct. The issue is likely that:
+- Employees don't have `performance_targets` set for "New Software Booking ARR"
+- When target = 0, achievement = 0%, so multiplier = 1.0x
+
+**Verification Query:**
+```sql
+SELECT employee_id, metric_type, target_value_usd 
+FROM performance_targets 
+WHERE effective_year = 2026;
+```
+
+If targets are missing, the UI shows 0% achievement regardless of actuals.
+
+#### Step 3: Add Commission Display to Reports
+
+**Files to Modify:** `src/hooks/useIncentiveAuditData.ts`, `src/pages/Reports.tsx`
+
+**Changes:**
+1. Create new commission calculation in the audit data hook
+2. Add commission columns to the Incentive Audit UI
+3. Calculate commission payouts using the formula: `TCV * Rate` (with holdback split)
+
+**New Interface:**
+```typescript
+interface IncentiveAuditRow {
+  // ... existing fields
+  commissions: {
+    commissionType: string;
+    dealValue: number;
+    rate: number;
+    grossCommission: number;
+    immediatePayout: number;  // 75%
+    holdback: number;         // 25%
+  }[];
+  totalCommission: number;
+}
+```
+
+---
+
+### Files to Create/Modify
+
+| File | Changes |
+|------|---------|
+| `src/hooks/useIncentiveAuditData.ts` | Add multi-participant attribution, add commission calculations |
+| `src/hooks/useUserActuals.ts` | Add multi-participant attribution for Dashboard |
+| `src/pages/Reports.tsx` | Add commission display section to Incentive Audit tab |
+| `src/lib/compensationEngine.ts` | Review and potentially fix multiplier boundary logic |
 
 ---
 
 ### Data Flow After Fix
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                    NEW USER REGISTRATION                             │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│          auth.users INSERT triggers handle_new_user()               │
-│                                                                      │
-│   1. Lookup employee_id from employees table by email                │
-│   2. Insert into profiles with employee_id populated                 │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    profiles table                                    │
-│                                                                      │
-│   id (auth.users.id) ──── employee_id (from employees table)        │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Data Queries Now Work                             │
-│                                                                      │
-│   profiles.employee_id = deals.sales_rep_employee_id                 │
-│   profiles.employee_id = closing_arr_actuals.sales_rep_employee_id   │
-│   profiles.employee_id = performance_targets.employee_id             │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| Database migration | Update existing profiles + enhance trigger |
-| `supabase/functions/create-employee-account/index.ts` | Update existing profiles with employee_id |
-
----
-
-### Technical Details
-
-**Migration SQL (combined):**
-
-```sql
--- Step 1: Update existing profiles with employee_id
-UPDATE profiles p
-SET employee_id = e.employee_id
-FROM employees e
-WHERE LOWER(p.email) = LOWER(e.email)
-  AND p.employee_id IS NULL;
-
--- Step 2: Replace the handle_new_user trigger function
-CREATE OR REPLACE FUNCTION public.handle_new_user()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-DECLARE
-  emp_id text;
-BEGIN
-  -- Look up employee_id from employees table by email
-  SELECT employee_id INTO emp_id
-  FROM public.employees
-  WHERE LOWER(email) = LOWER(NEW.email)
-  LIMIT 1;
-
-  INSERT INTO public.profiles (id, email, full_name, employee_id)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data ->> 'full_name', NEW.email),
-    emp_id
-  );
-  RETURN NEW;
-END;
-$function$;
-```
-
----
-
-### Verification
-
-After implementation, this query should show all profiles with their employee_id populated:
-
-```sql
-SELECT p.email, p.employee_id, e.full_name
-FROM profiles p
-LEFT JOIN employees e ON p.employee_id = e.employee_id
-ORDER BY p.email;
+deals table
+├── sales_rep_employee_id ─────────────┐
+├── sales_head_employee_id ────────────┤
+├── sales_engineering_employee_id ─────┤
+├── sales_engineering_head_employee_id ┤
+├── product_specialist_employee_id ────┤   ALL credited with
+├── product_specialist_head_employee_id┼─→ new_software_booking_arr_usd
+├── solution_manager_employee_id ──────┤
+└── solution_manager_head_employee_id ─┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────┐
+│         useIncentiveAuditData.ts            │
+│                                             │
+│  Variable Pay:                              │
+│  ├── Achievement = Actual / Target          │
+│  ├── Multiplier from multiplier_grids       │
+│  └── Payout = Achievement × Allocation × M  │
+│                                             │
+│  Commissions:                               │
+│  ├── Managed Services: TCV × 1.5%           │
+│  ├── Perpetual License: TCV × 4% (if >$50k) │
+│  ├── Implementation: TCV × 1%               │
+│  └── CR/ER: TCV × 1%                        │
+└─────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────┐
+│         Incentive Audit Report              │
+│                                             │
+│  [Variable Pay Section]                     │
+│  Employee | Metric | Target | Actual | %    │
+│                                             │
+│  [Commission Section] ← NEW                 │
+│  Employee | Type | Deal Value | Rate | Paid │
+└─────────────────────────────────────────────┘
 ```
 
 ---
 
 ### Summary
 
-| Step | Action | Impact |
-|------|--------|--------|
-| 1 | Run data migration | 11 existing profiles get employee_id |
-| 2 | Update trigger function | Future signups auto-populate employee_id |
-| 3 | Update edge function | Handles edge case where profile created by trigger |
-
-After this fix, the Dashboard and Incentive Audit will correctly display real actuals from the deals and closing_arr_actuals tables.
+| Issue | Root Cause | Fix |
+|-------|------------|-----|
+| 1. Multi-participant not counted | Hook only queries `sales_rep_employee_id` | Query all 8 participant columns and credit each |
+| 2. 1.6x multiplier not applied | Likely missing performance targets (target=0 → 0% achievement) | Verify targets exist; fix multiplier boundary logic if needed |
+| 3. Commission not visible | No UI or calculation logic for commissions | Add commission calculations to audit hook and display in Reports |
 
