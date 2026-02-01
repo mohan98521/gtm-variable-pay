@@ -6,7 +6,33 @@ import {
   VariablePayResult,
   MetricActual 
 } from "@/lib/compensationEngine";
+import { 
+  calculateDealCommission, 
+  getCommissionForType,
+  PlanCommission as CommissionType
+} from "@/lib/commissions";
 import { PlanMetric, MultiplierGrid } from "@/hooks/usePlanMetrics";
+
+// All 8 participant role columns in the deals table
+const PARTICIPANT_ROLES = [
+  'sales_rep_employee_id',
+  'sales_head_employee_id',
+  'sales_engineering_employee_id',
+  'sales_engineering_head_employee_id',
+  'product_specialist_employee_id',
+  'product_specialist_head_employee_id',
+  'solution_manager_employee_id',
+  'solution_manager_head_employee_id',
+] as const;
+
+export interface CommissionDetail {
+  commissionType: string;
+  dealValue: number;
+  rate: number;
+  grossCommission: number;
+  immediatePayout: number;
+  holdback: number;
+}
 
 export interface IncentiveAuditRow {
   employeeId: string;
@@ -30,11 +56,42 @@ export interface IncentiveAuditRow {
     gateThreshold: number | null;
   }[];
   totalPayout: number;
+  // Commission fields
+  commissions: CommissionDetail[];
+  totalCommissionGross: number;
+  totalCommissionPaid: number;
+  totalCommissionHoldback: number;
+}
+
+interface DealRow {
+  new_software_booking_arr_usd: number | null;
+  managed_services_usd: number | null;
+  implementation_usd: number | null;
+  cr_usd: number | null;
+  er_usd: number | null;
+  tcv_usd: number | null;
+  sales_rep_employee_id: string | null;
+  sales_head_employee_id: string | null;
+  sales_engineering_employee_id: string | null;
+  sales_engineering_head_employee_id: string | null;
+  product_specialist_employee_id: string | null;
+  product_specialist_head_employee_id: string | null;
+  solution_manager_employee_id: string | null;
+  solution_manager_head_employee_id: string | null;
+}
+
+interface PlanCommissionRow {
+  id: string;
+  plan_id: string;
+  commission_type: string;
+  commission_rate_pct: number;
+  min_threshold_usd: number | null;
+  is_active: boolean;
 }
 
 /**
  * Fetch and calculate incentive audit data for all employees
- * Uses the database-driven compensation engine
+ * Uses the database-driven compensation engine with multi-participant attribution
  */
 export function useIncentiveAuditData(fiscalYear: number = 2026) {
   return useQuery({
@@ -91,7 +148,23 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         allGrids = grids || [];
       }
 
-      // 5. Build metrics map with grids
+      // 5. Fetch all plan commissions
+      const { data: allCommissions, error: commissionsError } = await supabase
+        .from("plan_commissions")
+        .select("*")
+        .in("plan_id", planIds);
+
+      if (commissionsError) throw commissionsError;
+
+      // Build commissions map by plan_id
+      const commissionsMap = new Map<string, PlanCommissionRow[]>();
+      (allCommissions || []).forEach(comm => {
+        const planCommissions = commissionsMap.get(comm.plan_id) || [];
+        planCommissions.push(comm);
+        commissionsMap.set(comm.plan_id, planCommissions);
+      });
+
+      // 5b. Build metrics map with grids
       const metricsMap = new Map<string, PlanMetric[]>();
       (allMetrics || []).forEach(metric => {
         const planMetrics = metricsMap.get(metric.plan_id) || [];
@@ -121,32 +194,60 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         targetMap.set(pt.employee_id, empTargets);
       });
 
-      // 7. Fetch deals actuals (New Software Booking ARR)
+      // 7. Fetch deals with ALL participant role columns for multi-participant attribution
       const { data: deals } = await supabase
         .from("deals")
-        .select("sales_rep_employee_id, new_software_booking_arr_usd")
-        .in("sales_rep_employee_id", employeeIds)
+        .select(`
+          new_software_booking_arr_usd,
+          managed_services_usd,
+          implementation_usd,
+          cr_usd,
+          er_usd,
+          tcv_usd,
+          sales_rep_employee_id,
+          sales_head_employee_id,
+          sales_engineering_employee_id,
+          sales_engineering_head_employee_id,
+          product_specialist_employee_id,
+          product_specialist_head_employee_id,
+          solution_manager_employee_id,
+          solution_manager_head_employee_id
+        `)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
 
-      // Aggregate deals by employee
+      // Aggregate deals by employee - credit ALL participant roles with the full value
       const dealsActualMap = new Map<string, number>();
-      (deals || []).forEach(deal => {
-        if (deal.sales_rep_employee_id) {
-          const current = dealsActualMap.get(deal.sales_rep_employee_id) || 0;
-          dealsActualMap.set(deal.sales_rep_employee_id, current + (deal.new_software_booking_arr_usd || 0));
-        }
+      const dealsByEmployee = new Map<string, DealRow[]>();
+      
+      (deals || []).forEach((deal: DealRow) => {
+        // Credit each participant role with the deal's new_software_booking_arr_usd
+        PARTICIPANT_ROLES.forEach(role => {
+          const empId = deal[role];
+          if (empId) {
+            // Aggregate for variable pay (New Software Booking ARR)
+            const current = dealsActualMap.get(empId) || 0;
+            dealsActualMap.set(empId, current + (deal.new_software_booking_arr_usd || 0));
+            
+            // Store full deal for commission calculation
+            const empDeals = dealsByEmployee.get(empId) || [];
+            // Avoid duplicates - only add if this employee hasn't been credited for this deal yet
+            if (!empDeals.includes(deal)) {
+              empDeals.push(deal);
+              dealsByEmployee.set(empId, empDeals);
+            }
+          }
+        });
       });
 
-      // 8. Fetch closing ARR actuals
+      // 8. Fetch closing ARR actuals - also with multi-participant attribution
       const { data: closingArr } = await supabase
         .from("closing_arr_actuals")
         .select("sales_rep_employee_id, closing_arr")
-        .in("sales_rep_employee_id", employeeIds)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
 
-      // Aggregate closing ARR by employee
+      // Aggregate closing ARR by employee (closing_arr_actuals only has sales_rep_employee_id)
       const closingActualMap = new Map<string, number>();
       (closingArr || []).forEach(arr => {
         if (arr.sales_rep_employee_id) {
@@ -167,6 +268,9 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         // Get plan metrics
         const planMetrics = metricsMap.get(userTarget.plan_id) || [];
         if (planMetrics.length === 0) continue;
+
+        // Get plan commissions
+        const planCommissions = commissionsMap.get(userTarget.plan_id) || [];
 
         // Calculate pro-ration
         const { startDate, endDate } = getEffectiveDates(
@@ -221,6 +325,71 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
           metricsActuals,
         });
 
+        // Calculate commissions for this employee's deals
+        const employeeDeals = dealsByEmployee.get(profile.employee_id!) || [];
+        const commissionDetails: CommissionDetail[] = [];
+        let totalCommissionGross = 0;
+        let totalCommissionPaid = 0;
+        let totalCommissionHoldback = 0;
+
+        // Calculate commissions for each deal type
+        const commissionTypeMappings = [
+          { type: 'Managed Services', field: 'managed_services_usd' as keyof DealRow },
+          { type: 'Implementation', field: 'implementation_usd' as keyof DealRow },
+          { type: 'CR/ER', field: 'cr_usd' as keyof DealRow },
+          // Perpetual License uses tcv_usd when new_software_booking_arr is 0 (subscription-based)
+        ];
+
+        // Aggregate deal values by commission type
+        const aggregatedValues = new Map<string, number>();
+        
+        employeeDeals.forEach(deal => {
+          commissionTypeMappings.forEach(({ type, field }) => {
+            const value = deal[field] as number | null;
+            if (value && value > 0) {
+              const current = aggregatedValues.get(type) || 0;
+              aggregatedValues.set(type, current + value);
+            }
+          });
+          
+          // Handle Perpetual License separately - check if deal qualifies
+          // (tcv_usd when it's a software deal, not managed services)
+          if (deal.tcv_usd && deal.tcv_usd > 0 && (deal.new_software_booking_arr_usd || 0) > 0) {
+            const current = aggregatedValues.get('Perpetual License') || 0;
+            aggregatedValues.set('Perpetual License', current + (deal.tcv_usd || 0));
+          }
+        });
+
+        // Calculate commission for each aggregated type
+        aggregatedValues.forEach((dealValue, commType) => {
+          const commConfig = planCommissions.find(
+            c => c.commission_type === commType && c.is_active
+          );
+          
+          if (commConfig) {
+            const calcResult = calculateDealCommission(
+              dealValue,
+              commConfig.commission_rate_pct,
+              commConfig.min_threshold_usd
+            );
+            
+            if (calcResult.qualifies && calcResult.gross > 0) {
+              commissionDetails.push({
+                commissionType: commType,
+                dealValue,
+                rate: commConfig.commission_rate_pct,
+                grossCommission: calcResult.gross,
+                immediatePayout: calcResult.paid,
+                holdback: calcResult.holdback,
+              });
+              
+              totalCommissionGross += calcResult.gross;
+              totalCommissionPaid += calcResult.paid;
+              totalCommissionHoldback += calcResult.holdback;
+            }
+          }
+        });
+
         auditData.push({
           employeeId: profile.employee_id,
           employeeName: profile.full_name,
@@ -243,6 +412,10 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
             gateThreshold: mp.gateThreshold,
           })),
           totalPayout: result.totalPayoutUSD,
+          commissions: commissionDetails,
+          totalCommissionGross,
+          totalCommissionPaid,
+          totalCommissionHoldback,
         });
       }
 
