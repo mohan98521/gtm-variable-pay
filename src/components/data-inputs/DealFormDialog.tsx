@@ -35,7 +35,6 @@ import { DealParticipantsEditor } from "./DealParticipantsEditor";
 import {
   DealWithParticipants,
   PROPOSAL_TYPES,
-  BUSINESS_UNITS,
   DEAL_STATUSES,
   useCreateDeal,
   useUpdateDeal,
@@ -459,20 +458,9 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Business Unit</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select BU" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {BUSINESS_UNITS.map((bu) => (
-                            <SelectItem key={bu.value} value={bu.value}>
-                              {bu.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g., Banking, Insurance" />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

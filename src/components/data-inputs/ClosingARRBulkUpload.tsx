@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
+import * as XLSX from "xlsx";
 import {
   Dialog,
   DialogContent,
@@ -145,8 +146,9 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
       }
     }
 
-    // Validate order_category_2
-    if (row.order_category_2 && !validCategories.has(row.order_category_2.toLowerCase())) {
+    // Case-insensitive validation for order_category_2
+    const normalizedCategory = row.order_category_2?.toLowerCase().trim();
+    if (normalizedCategory && !validCategories.has(normalizedCategory)) {
       errors.push("order_category_2 must be 'software' or 'managed_service'");
     }
 
@@ -219,26 +221,83 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
     return results;
   };
 
+  const parseExcel = (buffer: ArrayBuffer): Record<string, string>[] => {
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, {
+      raw: false,
+      defval: "",
+    });
+
+    // Normalize headers to lowercase with underscores
+    return rows.map((row) => {
+      const normalized: Record<string, string> = {};
+      for (const [key, value] of Object.entries(row)) {
+        const normalizedKey = key.toLowerCase().trim().replace(/\s+/g, "_");
+        normalized[normalizedKey] = String(value || "").trim();
+      }
+      return normalized;
+    });
+  };
+
+  const handleDownloadErrors = () => {
+    const headers = ["Row", "Errors"];
+    const csvContent = [
+      headers.join(","),
+      ...errorRows.map(
+        (row) => `${row.rowNumber},"${row.errors.join("; ").replace(/"/g, '""')}"`
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `closing_arr_upload_errors_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        const parsed = parseCSV(text);
-        setParsedRows(parsed);
-        setUploadComplete(false);
-      };
-      reader.readAsText(file);
+      const extension = file.name.split(".").pop()?.toLowerCase();
+
+      if (extension === "csv") {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          const parsed = parseCSV(text);
+          setParsedRows(parsed);
+          setUploadComplete(false);
+        };
+        reader.readAsText(file);
+      } else if (extension === "xlsx" || extension === "xls") {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const buffer = e.target?.result as ArrayBuffer;
+          const rows = parseExcel(buffer);
+          const parsed = rows.map((row, idx) => validateRow(row, idx + 2));
+          setParsedRows(parsed);
+          setUploadComplete(false);
+        };
+        reader.readAsArrayBuffer(file);
+      }
     },
     [employees, selectedYear]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "text/csv": [".csv"] },
+    accept: {
+      "text/csv": [".csv"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "application/vnd.ms-excel": [".xls"],
+    },
     maxFiles: 1,
   });
 
@@ -315,12 +374,12 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
               <input {...getInputProps()} />
               <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               {isDragActive ? (
-                <p className="text-primary">Drop the CSV file here...</p>
+                <p className="text-primary">Drop the file here...</p>
               ) : (
                 <>
-                  <p className="text-foreground">Drag and drop a CSV file here, or click to select</p>
+                  <p className="text-foreground">Drag and drop a CSV or Excel file here, or click to select</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Only .csv files are accepted
+                    Supported: .csv, .xlsx, .xls
                   </p>
                 </>
               )}
@@ -348,23 +407,29 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
 
           {/* Error Details */}
           {errorRows.length > 0 && !uploadComplete && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <ScrollArea className="max-h-32">
-                  <ul className="list-disc list-inside space-y-1">
-                    {errorRows.slice(0, 10).map((row) => (
-                      <li key={row.rowNumber} className="text-sm">
-                        Row {row.rowNumber}: {row.errors.join(", ")}
-                      </li>
-                    ))}
-                    {errorRows.length > 10 && (
-                      <li className="text-sm">...and {errorRows.length - 10} more errors</li>
-                    )}
-                  </ul>
-                </ScrollArea>
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-2">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <ScrollArea className="max-h-32">
+                    <ul className="list-disc list-inside space-y-1">
+                      {errorRows.slice(0, 10).map((row) => (
+                        <li key={row.rowNumber} className="text-sm">
+                          Row {row.rowNumber}: {row.errors.join(", ")}
+                        </li>
+                      ))}
+                      {errorRows.length > 10 && (
+                        <li className="text-sm">...and {errorRows.length - 10} more errors</li>
+                      )}
+                    </ul>
+                  </ScrollArea>
+                </AlertDescription>
+              </Alert>
+              <Button variant="outline" size="sm" onClick={handleDownloadErrors}>
+                <Download className="h-4 w-4 mr-2" />
+                Download Errors
+              </Button>
+            </div>
           )}
 
           {/* Preview Table */}
