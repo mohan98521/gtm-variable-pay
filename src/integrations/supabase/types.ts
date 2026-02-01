@@ -312,6 +312,7 @@ export type Database = {
           cr_usd: number | null
           created_at: string
           customer_code: string
+          customer_name: string | null
           eligible_for_perpetual_incentive: boolean | null
           er_usd: number | null
           first_year_amc_usd: number | null
@@ -356,6 +357,7 @@ export type Database = {
           cr_usd?: number | null
           created_at?: string
           customer_code: string
+          customer_name?: string | null
           eligible_for_perpetual_incentive?: boolean | null
           er_usd?: number | null
           first_year_amc_usd?: number | null
@@ -400,6 +402,7 @@ export type Database = {
           cr_usd?: number | null
           created_at?: string
           customer_code?: string
+          customer_name?: string | null
           eligible_for_perpetual_incentive?: boolean | null
           er_usd?: number | null
           first_year_amc_usd?: number | null
