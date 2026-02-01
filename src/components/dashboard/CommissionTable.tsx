@@ -27,7 +27,18 @@ export function CommissionTable({
   totalHoldback 
 }: CommissionTableProps) {
   if (commissions.length === 0) {
-    return null;
+    return (
+      <Card className="border-border/50 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg text-foreground">
+            Commission Structure Summary
+          </CardTitle>
+          <CardDescription>
+            No commission transactions recorded for this period
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
   }
 
   return (

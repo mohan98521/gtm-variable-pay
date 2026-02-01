@@ -105,11 +105,11 @@ export function useUserActuals() {
         }
       });
 
-      // Fetch closing ARR actuals (only has sales_rep_employee_id)
+      // Fetch closing ARR actuals (check both sales_rep and sales_head attribution)
       const { data: closingArr, error: closingError } = await supabase
         .from("closing_arr_actuals")
-        .select("month_year, closing_arr")
-        .eq("sales_rep_employee_id", employeeId)
+        .select("month_year, closing_arr, sales_rep_employee_id, sales_head_employee_id")
+        .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
 

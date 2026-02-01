@@ -128,7 +128,7 @@ export function useCurrentUserCompensation() {
         .from("comp_plans")
         .select("id, name")
         .eq("effective_year", selectedYear)
-        .ilike("name", `%${planName}%`)
+        .eq("name", planName)
         .maybeSingle();
 
       // If no plan found, try to get any active plan
@@ -241,11 +241,11 @@ export function useCurrentUserCompensation() {
         }
       });
 
-      // 9. Get closing ARR actuals
+      // 9. Get closing ARR actuals (check both sales_rep and sales_head attribution)
       const { data: closingArr } = await supabase
         .from("closing_arr_actuals")
-        .select("month_year, closing_arr")
-        .eq("sales_rep_employee_id", employeeId)
+        .select("month_year, closing_arr, sales_rep_employee_id, sales_head_employee_id")
+        .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
 
