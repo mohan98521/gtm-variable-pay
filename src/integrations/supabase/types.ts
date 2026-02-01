@@ -326,6 +326,8 @@ export type Database = {
           notes: string | null
           product: string
           product_specialist_employee_id: string | null
+          product_specialist_head_employee_id: string | null
+          product_specialist_head_name: string | null
           product_specialist_name: string | null
           project_id: string
           region: string
@@ -337,6 +339,10 @@ export type Database = {
           sales_head_name: string | null
           sales_rep_employee_id: string | null
           sales_rep_name: string | null
+          solution_manager_employee_id: string | null
+          solution_manager_head_employee_id: string | null
+          solution_manager_head_name: string | null
+          solution_manager_name: string | null
           status: string
           tcv_usd: number | null
           type_of_proposal: string
@@ -364,6 +370,8 @@ export type Database = {
           notes?: string | null
           product: string
           product_specialist_employee_id?: string | null
+          product_specialist_head_employee_id?: string | null
+          product_specialist_head_name?: string | null
           product_specialist_name?: string | null
           project_id: string
           region: string
@@ -375,6 +383,10 @@ export type Database = {
           sales_head_name?: string | null
           sales_rep_employee_id?: string | null
           sales_rep_name?: string | null
+          solution_manager_employee_id?: string | null
+          solution_manager_head_employee_id?: string | null
+          solution_manager_head_name?: string | null
+          solution_manager_name?: string | null
           status?: string
           tcv_usd?: number | null
           type_of_proposal: string
@@ -402,6 +414,8 @@ export type Database = {
           notes?: string | null
           product?: string
           product_specialist_employee_id?: string | null
+          product_specialist_head_employee_id?: string | null
+          product_specialist_head_name?: string | null
           product_specialist_name?: string | null
           project_id?: string
           region?: string
@@ -413,6 +427,10 @@ export type Database = {
           sales_head_name?: string | null
           sales_rep_employee_id?: string | null
           sales_rep_name?: string | null
+          solution_manager_employee_id?: string | null
+          solution_manager_head_employee_id?: string | null
+          solution_manager_head_name?: string | null
+          solution_manager_name?: string | null
           status?: string
           tcv_usd?: number | null
           type_of_proposal?: string

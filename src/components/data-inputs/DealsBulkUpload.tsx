@@ -46,8 +46,10 @@ interface ParsedDeal {
   sales_head_id?: string;
   sales_engineering_id?: string;
   sales_engineering_head_id?: string;
-  channel_sales_id?: string;
   product_specialist_id?: string;
+  product_specialist_head_id?: string;
+  solution_manager_id?: string;
+  solution_manager_head_id?: string;
   linked_to_impl?: boolean;
   eligible_for_perpetual_incentive?: boolean;
   status?: string;
@@ -81,8 +83,10 @@ const CSV_TEMPLATE_HEADERS = [
   "sales_head_id",
   "sales_engineering_id",
   "sales_engineering_head_id",
-  "channel_sales_id",
   "product_specialist_id",
+  "product_specialist_head_id",
+  "solution_manager_id",
+  "solution_manager_head_id",
   "linked_to_impl",
   "eligible_for_perpetual_incentive",
   "status",
@@ -110,6 +114,8 @@ const generateCSVTemplate = (): string => {
     "250000",
     "EMP001",
     "EMP002",
+    "",
+    "",
     "",
     "",
     "",
@@ -189,8 +195,10 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         sales_head_id: deal.sales_head_id || undefined,
         sales_engineering_id: deal.sales_engineering_id || undefined,
         sales_engineering_head_id: deal.sales_engineering_head_id || undefined,
-        channel_sales_id: deal.channel_sales_id || undefined,
         product_specialist_id: deal.product_specialist_id || undefined,
+        product_specialist_head_id: deal.product_specialist_head_id || undefined,
+        solution_manager_id: deal.solution_manager_id || undefined,
+        solution_manager_head_id: deal.solution_manager_head_id || undefined,
         linked_to_impl: deal.linked_to_impl ? parseBoolean(deal.linked_to_impl) : false,
         eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive ? parseBoolean(deal.eligible_for_perpetual_incentive) : false,
         status: deal.status || "draft",
@@ -253,7 +261,8 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       // Validate participant employee IDs if provided
       const participantFields = [
         "sales_rep_id", "sales_head_id", "sales_engineering_id",
-        "sales_engineering_head_id", "channel_sales_id", "product_specialist_id"
+        "sales_engineering_head_id", "product_specialist_id", "product_specialist_head_id",
+        "solution_manager_id", "solution_manager_head_id"
       ];
       participantFields.forEach((field) => {
         const empId = deal[field as keyof ParsedDeal] as string | undefined;
@@ -333,10 +342,14 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
           sales_engineering_name: getEmployeeName(deal.sales_engineering_id),
           sales_engineering_head_employee_id: deal.sales_engineering_head_id || null,
           sales_engineering_head_name: getEmployeeName(deal.sales_engineering_head_id),
-          channel_sales_employee_id: deal.channel_sales_id || null,
-          channel_sales_name: getEmployeeName(deal.channel_sales_id),
           product_specialist_employee_id: deal.product_specialist_id || null,
           product_specialist_name: getEmployeeName(deal.product_specialist_id),
+          product_specialist_head_employee_id: deal.product_specialist_head_id || null,
+          product_specialist_head_name: getEmployeeName(deal.product_specialist_head_id),
+          solution_manager_employee_id: deal.solution_manager_id || null,
+          solution_manager_name: getEmployeeName(deal.solution_manager_id),
+          solution_manager_head_employee_id: deal.solution_manager_head_id || null,
+          solution_manager_head_name: getEmployeeName(deal.solution_manager_head_id),
           linked_to_impl: deal.linked_to_impl || false,
           eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive || false,
           status: deal.status || "draft",
