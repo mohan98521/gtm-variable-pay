@@ -3,6 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Download, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
-import { PROPOSAL_TYPES, BUSINESS_UNITS, generateProjectId } from "@/hooks/useDeals";
+import { PROPOSAL_TYPES, generateProjectId } from "@/hooks/useDeals";
 
 interface DealsBulkUploadProps {
   open: boolean;
@@ -184,7 +185,6 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
   });
 
   const validProposalTypes = PROPOSAL_TYPES.map((m) => m.value);
-  const validBusinessUnits = BUSINESS_UNITS.map((b) => b.value);
 
   const parseBoolean = (value: string): boolean => {
     const lowered = value.toLowerCase().trim();
@@ -242,6 +242,61 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     return deals;
   };
 
+  const parseExcel = (buffer: ArrayBuffer): Record<string, string>[] => {
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, {
+      raw: false,
+      defval: "",
+    });
+
+    // Normalize headers to lowercase with underscores
+    return rows.map((row) => {
+      const normalized: Record<string, string> = {};
+      for (const [key, value] of Object.entries(row)) {
+        const normalizedKey = key.toLowerCase().trim().replace(/\s+/g, "_");
+        normalized[normalizedKey] = String(value || "").trim();
+      }
+      return normalized;
+    });
+  };
+
+  const rowsToParsedDeals = (rows: Record<string, string>[]): ParsedDeal[] => {
+    return rows.map((deal) => ({
+      project_id: deal.project_id === "AUTO" ? generateProjectId() : deal.project_id,
+      customer_code: deal.customer_code,
+      customer_name: deal.customer_name || undefined,
+      region: deal.region,
+      country: deal.country,
+      bu: deal.bu,
+      product: deal.product,
+      type_of_proposal: deal.type_of_proposal?.toLowerCase().trim() || "",
+      gp_margin_percent: deal.gp_margin_percent ? parseFloat(deal.gp_margin_percent) : undefined,
+      month_year: parseMonthYear(deal.month_year) || deal.month_year,
+      first_year_amc_usd: deal.first_year_amc_usd ? parseFloat(deal.first_year_amc_usd) : undefined,
+      first_year_subscription_usd: deal.first_year_subscription_usd ? parseFloat(deal.first_year_subscription_usd) : undefined,
+      managed_services_usd: deal.managed_services_usd ? parseFloat(deal.managed_services_usd) : undefined,
+      implementation_usd: deal.implementation_usd ? parseFloat(deal.implementation_usd) : undefined,
+      cr_usd: deal.cr_usd ? parseFloat(deal.cr_usd) : undefined,
+      er_usd: deal.er_usd ? parseFloat(deal.er_usd) : undefined,
+      tcv_usd: deal.tcv_usd ? parseFloat(deal.tcv_usd) : undefined,
+      sales_rep_id: deal.sales_rep_id || undefined,
+      sales_head_id: deal.sales_head_id || undefined,
+      sales_engineering_id: deal.sales_engineering_id || undefined,
+      sales_engineering_head_id: deal.sales_engineering_head_id || undefined,
+      product_specialist_id: deal.product_specialist_id || undefined,
+      product_specialist_head_id: deal.product_specialist_head_id || undefined,
+      solution_manager_id: deal.solution_manager_id || undefined,
+      solution_manager_head_id: deal.solution_manager_head_id || undefined,
+      linked_to_impl: deal.linked_to_impl ? parseBoolean(deal.linked_to_impl) : false,
+      eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive ? parseBoolean(deal.eligible_for_perpetual_incentive) : false,
+      status: deal.status || "draft",
+      notes: deal.notes || undefined,
+    }));
+  };
+
   const validateDeals = (deals: ParsedDeal[]): ValidationError[] => {
     const errors: ValidationError[] = [];
     const employeeIds = new Set(employees.map((e) => e.employee_id));
@@ -264,20 +319,17 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       if (!deal.product) {
         errors.push({ row, field: "product", message: "Product is required" });
       }
+      if (!deal.bu) {
+        errors.push({ row, field: "bu", message: "Business unit is required" });
+      }
 
-      if (!validProposalTypes.includes(deal.type_of_proposal as typeof validProposalTypes[number])) {
+      // Case-insensitive validation for type_of_proposal
+      const normalizedProposalType = deal.type_of_proposal?.toLowerCase().trim();
+      if (!validProposalTypes.includes(normalizedProposalType as typeof validProposalTypes[number])) {
         errors.push({
           row,
           field: "type_of_proposal",
           message: `Invalid type. Must be one of: ${validProposalTypes.join(", ")}`,
-        });
-      }
-
-      if (!validBusinessUnits.includes(deal.bu as typeof validBusinessUnits[number])) {
-        errors.push({
-          row,
-          field: "bu",
-          message: `Invalid business unit. Must be one of: ${validBusinessUnits.join(", ")}`,
         });
       }
 
@@ -309,21 +361,53 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     return errors;
   };
 
+  const handleDownloadErrors = () => {
+    const headers = ["Row", "Field", "Error Message"];
+    const csvContent = [
+      headers.join(","),
+      ...validationErrors.map(
+        (err) => `${err.row},"${err.field}","${err.message.replace(/"/g, '""')}"`
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `deals_upload_errors_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        const deals = parseCSV(text);
-        const errors = validateDeals(deals);
+      const extension = file.name.split(".").pop()?.toLowerCase();
 
-        setParsedDeals(deals);
-        setValidationErrors(errors);
-      };
-      reader.readAsText(file);
+      if (extension === "csv") {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          const deals = parseCSV(text);
+          const errors = validateDeals(deals);
+          setParsedDeals(deals);
+          setValidationErrors(errors);
+        };
+        reader.readAsText(file);
+      } else if (extension === "xlsx" || extension === "xls") {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const buffer = e.target?.result as ArrayBuffer;
+          const rows = parseExcel(buffer);
+          const deals = rowsToParsedDeals(rows);
+          const errors = validateDeals(deals);
+          setParsedDeals(deals);
+          setValidationErrors(errors);
+        };
+        reader.readAsArrayBuffer(file);
+      }
     },
     [employees, selectedYear, isMonthInFiscalYear]
   );
@@ -332,6 +416,8 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     onDrop,
     accept: {
       "text/csv": [".csv"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "application/vnd.ms-excel": [".xls"],
     },
     maxFiles: 1,
   });
@@ -483,11 +569,11 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
             <input {...getInputProps()} />
             <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
             {isDragActive ? (
-              <p className="text-sm text-primary">Drop the CSV file here...</p>
+              <p className="text-sm text-primary">Drop the file here...</p>
             ) : (
               <div>
-                <p className="text-sm font-medium">Drag & drop a CSV file here</p>
-                <p className="text-xs text-muted-foreground mt-1">or click to select a file</p>
+                <p className="text-sm font-medium">Drag & drop a CSV or Excel file here</p>
+                <p className="text-xs text-muted-foreground mt-1">Supported: .csv, .xlsx, .xls</p>
               </div>
             )}
           </div>
@@ -513,15 +599,21 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
               </div>
 
               {validationErrors.length > 0 && (
-                <ScrollArea className="h-32 border rounded-md p-3">
-                  <div className="space-y-1">
-                    {validationErrors.map((error, idx) => (
-                      <div key={idx} className="text-xs text-destructive">
-                        Row {error.row}, {error.field}: {error.message}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
+                <div className="space-y-2">
+                  <ScrollArea className="h-32 border rounded-md p-3">
+                    <div className="space-y-1">
+                      {validationErrors.map((error, idx) => (
+                        <div key={idx} className="text-xs text-destructive">
+                          Row {error.row}, {error.field}: {error.message}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  <Button variant="outline" size="sm" onClick={handleDownloadErrors}>
+                    <Download className="h-4 w-4 mr-1.5" />
+                    Download Errors
+                  </Button>
+                </div>
               )}
             </div>
           )}
