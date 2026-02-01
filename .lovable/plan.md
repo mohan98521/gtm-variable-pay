@@ -1,34 +1,236 @@
 
 
-## Update Date Format for Bulk Upload (MMM-YYYY)
+## Bulk Upload Enhancements
 
 ### Overview
 
-Update the bulk upload validation for both Deals and Closing ARR to accept user-friendly `MMM-YYYY` format (e.g., "Jan-2026") instead of requiring the database format `YYYY-MM-DD`.
+This plan addresses four improvements to the bulk upload functionality for both Deals and Closing ARR:
+
+1. **Excel file support** (.xlsx, .xls) in addition to CSV
+2. **Error export functionality** - download validation errors as CSV
+3. **Case-insensitive validation** for `bu` and `type_of_proposal` columns
+4. **Free text BU field** instead of predefined dropdown options
 
 ---
 
-### Current vs Proposed Format
+### Current State Analysis
 
-| Component | Current Format | New Format |
-|-----------|----------------|------------|
-| Database Storage | `2026-01-01` (date) | `2026-01-01` (no change) |
-| CSV Upload Input | `YYYY-MM-DD` required | `MMM-YYYY` or `YYYY-MM-DD` accepted |
-| UI Display | "January 2026" | "January 2026" (no change) |
-| CSV Template Example | `2026-01-01` | `Jan-2026` |
+| Feature | Current Behavior |
+|---------|-----------------|
+| File formats | CSV only (`.csv`) |
+| Validation errors | Displayed on-screen, no download option |
+| Case sensitivity | `type_of_proposal` must match exact case (e.g., "amc" not "AMC") |
+| BU field | Dropdown with predefined values: Banking, Insurance, Wealth, Capital Markets, Corporate |
 
 ---
 
-### Technical Approach
+### Changes Summary
 
-**No database changes required** - only client-side parsing logic needs updating.
+| Component | Changes |
+|-----------|---------|
+| `DealsBulkUpload.tsx` | Add Excel support, error export, case-insensitive validation |
+| `ClosingARRBulkUpload.tsx` | Add Excel support, error export |
+| `DealFormDialog.tsx` | Change BU from Select dropdown to free text Input |
+| `useDeals.ts` | Remove BU validation array (no longer needed) |
+| `package.json` | Add `xlsx` library dependency |
 
-The solution will:
-1. Create a shared date parsing utility that accepts both formats
-2. Parse `MMM-YYYY` (e.g., "Jan-2026", "Feb-2026") and convert to `YYYY-MM-01`
-3. Continue accepting `YYYY-MM-DD` format for backward compatibility
-4. Update CSV template examples to show the new user-friendly format
-5. Update validation error messages
+---
+
+### Implementation Details
+
+#### 1. Add Excel File Support
+
+**Install Dependency:**
+```bash
+npm install xlsx
+```
+
+**Updated Dropzone Configuration:**
+```typescript
+import * as XLSX from 'xlsx';
+
+const { getRootProps, getInputProps } = useDropzone({
+  accept: {
+    "text/csv": [".csv"],
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+    "application/vnd.ms-excel": [".xls"],
+  },
+  maxFiles: 1,
+});
+```
+
+**Excel Parsing Function:**
+```typescript
+const parseExcel = (buffer: ArrayBuffer): Record<string, string>[] => {
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  
+  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, {
+    raw: false,
+    defval: '',
+  });
+  
+  // Normalize headers to lowercase with underscores
+  return rows.map(row => {
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(row)) {
+      const normalizedKey = key.toLowerCase().trim().replace(/\s+/g, '_');
+      normalized[normalizedKey] = String(value || '').trim();
+    }
+    return normalized;
+  });
+};
+```
+
+**Updated onDrop Handler:**
+```typescript
+const onDrop = useCallback((acceptedFiles: File[]) => {
+  const file = acceptedFiles[0];
+  if (!file) return;
+
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  
+  if (extension === 'csv') {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const deals = parseCSV(text);
+      // ... validation
+    };
+    reader.readAsText(file);
+  } else if (extension === 'xlsx' || extension === 'xls') {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const buffer = e.target?.result as ArrayBuffer;
+      const rows = parseExcel(buffer);
+      const deals = rowsToDeals(rows);
+      // ... validation
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}, []);
+```
+
+---
+
+#### 2. Add Error Export/Download Functionality
+
+**New Function:**
+```typescript
+const handleDownloadErrors = () => {
+  const headers = ["Row", "Field", "Error Message"];
+  const csvContent = [
+    headers.join(","),
+    ...validationErrors.map(err => 
+      `${err.row},"${err.field}","${err.message.replace(/"/g, '""')}"`
+    )
+  ].join("\n");
+  
+  const blob = new Blob([csvContent], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `upload_errors_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+```
+
+**UI Addition (when errors exist):**
+```text
+┌─────────────────────────────────────────────────────┐
+│  ❌ 5 errors                                        │
+│  ┌────────────────────────────────────────────────┐ │
+│  │ Row 3, bu: Business unit is required           │ │
+│  │ Row 5, month_year: Invalid date format...      │ │
+│  │ ...                                            │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                     │
+│  [Download Errors]  ← NEW BUTTON                    │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 3. Remove Case Sensitivity for Validation
+
+**Current Code (DealsBulkUpload.tsx):**
+```typescript
+// Line 268 - Exact match required
+if (!validProposalTypes.includes(deal.type_of_proposal)) {
+  errors.push({ ... });
+}
+```
+
+**Updated Code:**
+```typescript
+// Normalize to lowercase before validation
+const normalizedProposalType = deal.type_of_proposal?.toLowerCase().trim();
+if (!validProposalTypes.includes(normalizedProposalType)) {
+  errors.push({
+    row,
+    field: "type_of_proposal",
+    message: `Invalid type. Must be one of: ${validProposalTypes.join(", ")}`,
+  });
+}
+// Also normalize before storing
+deal.type_of_proposal = normalizedProposalType;
+```
+
+**Apply same logic in ClosingARRBulkUpload.tsx** for `order_category_2` field.
+
+---
+
+#### 4. Make BU Field Free Text
+
+**Remove Dropdown Validation:**
+
+In `useDeals.ts`, the `BUSINESS_UNITS` constant will be kept for reference but no longer used for strict validation.
+
+**Update DealFormDialog.tsx:**
+
+Change from:
+```tsx
+<Select onValueChange={field.onChange} value={field.value}>
+  <SelectTrigger>
+    <SelectValue placeholder="Select BU" />
+  </SelectTrigger>
+  <SelectContent>
+    {BUSINESS_UNITS.map((bu) => (
+      <SelectItem key={bu.value} value={bu.value}>{bu.label}</SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+```
+
+To:
+```tsx
+<Input 
+  placeholder="Enter business unit (e.g., Banking, Insurance)" 
+  {...field} 
+/>
+```
+
+**Update DealsBulkUpload.tsx Validation:**
+
+Remove:
+```typescript
+if (!validBusinessUnits.includes(deal.bu)) {
+  errors.push({
+    row,
+    field: "bu",
+    message: `Invalid business unit. Must be one of: ${validBusinessUnits.join(", ")}`,
+  });
+}
+```
+
+Keep only required check:
+```typescript
+if (!deal.bu) {
+  errors.push({ row, field: "bu", message: "Business unit is required" });
+}
+```
 
 ---
 
@@ -36,107 +238,46 @@ The solution will:
 
 | File | Changes |
 |------|---------|
-| `src/components/data-inputs/DealsBulkUpload.tsx` | Add `parseMonthYear` function; update validation regex; update template example |
-| `src/components/data-inputs/ClosingARRBulkUpload.tsx` | Add `parseMonthYear` function; update `parseDate` function for month_year field |
+| `package.json` | Add `xlsx` dependency |
+| `src/components/data-inputs/DealsBulkUpload.tsx` | Excel parsing, error export, case-insensitive validation, remove BU list validation |
+| `src/components/data-inputs/ClosingARRBulkUpload.tsx` | Excel parsing, error export |
+| `src/components/data-inputs/DealFormDialog.tsx` | Change BU from Select to Input |
 
 ---
 
-### Implementation Details
+### Updated UI Preview
 
-**1. New Date Parsing Function**
+**Dropzone Text (both components):**
 
-Create a utility function to parse multiple date formats:
+| Current | Updated |
+|---------|---------|
+| "Drag & drop a CSV file here" | "Drag & drop a CSV or Excel file here" |
+| "or click to select a file" | "Supported: .csv, .xlsx, .xls" |
 
-```typescript
-const parseMonthYear = (value: string): string | null => {
-  if (!value || value.trim() === "") return null;
-  
-  const trimmed = value.trim();
-  
-  // Format 1: YYYY-MM-DD (existing format)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-  
-  // Format 2: MMM-YYYY (e.g., "Jan-2026")
-  const monthMap: Record<string, string> = {
-    'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
-    'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
-    'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
-  };
-  
-  const match = trimmed.match(/^([a-zA-Z]{3})-(\d{4})$/);
-  if (match) {
-    const monthNum = monthMap[match[1].toLowerCase()];
-    if (monthNum) {
-      return `${match[2]}-${monthNum}-01`;
-    }
-  }
-  
-  return null; // Invalid format
-};
-```
+**Error Section (when validation fails):**
 
-**2. Update DealsBulkUpload.tsx Validation**
-
-Replace the current validation:
-```typescript
-// Current (line 255)
-if (!deal.month_year || !deal.month_year.match(/^\d{4}-\d{2}-\d{2}$/)) {
-  errors.push({ row, field: "month_year", message: "Invalid date format. Use YYYY-MM-DD" });
-}
-```
-
-With:
-```typescript
-// New validation
-const parsedDate = parseMonthYear(deal.month_year);
-if (!parsedDate) {
-  errors.push({ row, field: "month_year", message: "Invalid date format. Use MMM-YYYY (e.g., Jan-2026)" });
-} else if (!isMonthInFiscalYear(parsedDate)) {
-  errors.push({ row, field: "month_year", message: `Month must be within fiscal year ${selectedYear}` });
-}
-```
-
-**3. Update CSV Template**
-
-Change the example row from:
-```
-"2026-01-01"
-```
-To:
-```
-"Jan-2026"
-```
-
-**4. Update Alert Message**
-
-Change from:
-```
-All deals must have a month_year within FY 2026 (Jan-Dec 2026).
-```
-To:
-```
-All deals must have a month_year (e.g., Jan-2026) within FY 2026.
+```text
+┌─ Validation Errors ─────────────────────────────────┐
+│                                                     │
+│  ❌ 5 errors found                                  │
+│                                                     │
+│  ┌────────────────────────────────────────────────┐ │
+│  │ Row 3: bu - Business unit is required          │ │
+│  │ Row 5: month_year - Invalid date format        │ │
+│  │ Row 7: sales_rep_id - Employee not found       │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                     │
+│  [📥 Download Errors]                               │
+│                                                     │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Backward Compatibility
+### Technical Notes
 
-The solution maintains backward compatibility:
-- `YYYY-MM-DD` format still works (for existing CSV files)
-- `MMM-YYYY` format now also works (user-friendly)
-- Both formats are parsed and converted to the database format before storage
-
----
-
-### Summary of Changes
-
-| Change | Deals Bulk Upload | Closing ARR Bulk Upload |
-|--------|-------------------|-------------------------|
-| Add `parseMonthYear` function | ✅ | ✅ |
-| Update validation logic | ✅ | ✅ |
-| Update template example | ✅ | ✅ (if applicable) |
-| Update help text/alert | ✅ | ✅ |
+- **Excel dates**: The xlsx library with `raw: false` option automatically converts Excel date cells to strings
+- **Header normalization**: Both CSV and Excel headers are normalized to lowercase with underscores for consistent matching
+- **Backward compatibility**: CSV files continue to work exactly as before
+- **BU field history**: Existing deal records with predefined BU values remain valid; new entries can use any text
 
