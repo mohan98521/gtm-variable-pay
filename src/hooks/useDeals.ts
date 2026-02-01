@@ -22,6 +22,7 @@ export interface Deal {
   cr_usd: number | null;
   er_usd: number | null;
   tcv_usd: number | null;
+  perpetual_license_usd: number | null;
   sales_rep_employee_id: string | null;
   sales_rep_name: string | null;
   sales_head_employee_id: string | null;
@@ -77,6 +78,7 @@ export interface CreateDealInput {
   cr_usd?: number;
   er_usd?: number;
   tcv_usd?: number;
+  perpetual_license_usd?: number;
   sales_rep_employee_id?: string;
   sales_rep_name?: string;
   sales_head_employee_id?: string;
