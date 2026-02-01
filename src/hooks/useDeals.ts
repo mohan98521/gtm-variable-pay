@@ -29,10 +29,14 @@ export interface Deal {
   sales_engineering_name: string | null;
   sales_engineering_head_employee_id: string | null;
   sales_engineering_head_name: string | null;
-  channel_sales_employee_id: string | null;
-  channel_sales_name: string | null;
   product_specialist_employee_id: string | null;
   product_specialist_name: string | null;
+  product_specialist_head_employee_id: string | null;
+  product_specialist_head_name: string | null;
+  solution_manager_employee_id: string | null;
+  solution_manager_name: string | null;
+  solution_manager_head_employee_id: string | null;
+  solution_manager_head_name: string | null;
   linked_to_impl: boolean | null;
   eligible_for_perpetual_incentive: boolean | null;
   status: string;
@@ -79,10 +83,14 @@ export interface CreateDealInput {
   sales_engineering_name?: string;
   sales_engineering_head_employee_id?: string;
   sales_engineering_head_name?: string;
-  channel_sales_employee_id?: string;
-  channel_sales_name?: string;
   product_specialist_employee_id?: string;
   product_specialist_name?: string;
+  product_specialist_head_employee_id?: string;
+  product_specialist_head_name?: string;
+  solution_manager_employee_id?: string;
+  solution_manager_name?: string;
+  solution_manager_head_employee_id?: string;
+  solution_manager_head_name?: string;
   linked_to_impl?: boolean;
   eligible_for_perpetual_incentive?: boolean;
   status?: string;
@@ -117,8 +125,10 @@ export const PARTICIPANT_ROLES = [
   { value: "sales_head", label: "Sales Head" },
   { value: "sales_engineering", label: "Sales Engineering" },
   { value: "sales_engineering_head", label: "Sales Engineering Head" },
-  { value: "channel_sales", label: "Channel Sales" },
   { value: "product_specialist", label: "Product Specialist" },
+  { value: "product_specialist_head", label: "Product Specialist Head" },
+  { value: "solution_manager", label: "Solution Manager" },
+  { value: "solution_manager_head", label: "Solution Manager Head" },
 ] as const;
 
 export const DEAL_STATUSES = [

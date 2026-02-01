@@ -67,8 +67,10 @@ const dealFormSchema = z.object({
   sales_head_employee_id: z.string().optional(),
   sales_engineering_employee_id: z.string().optional(),
   sales_engineering_head_employee_id: z.string().optional(),
-  channel_sales_employee_id: z.string().optional(),
   product_specialist_employee_id: z.string().optional(),
+  product_specialist_head_employee_id: z.string().optional(),
+  solution_manager_employee_id: z.string().optional(),
+  solution_manager_head_employee_id: z.string().optional(),
   linked_to_impl: z.boolean().default(false),
   eligible_for_perpetual_incentive: z.boolean().default(false),
   status: z.string().default("draft"),
@@ -159,8 +161,10 @@ export function DealFormDialog({
       sales_head_employee_id: "",
       sales_engineering_employee_id: "",
       sales_engineering_head_employee_id: "",
-      channel_sales_employee_id: "",
       product_specialist_employee_id: "",
+      product_specialist_head_employee_id: "",
+      solution_manager_employee_id: "",
+      solution_manager_head_employee_id: "",
       linked_to_impl: false,
       eligible_for_perpetual_incentive: false,
       status: "draft",
@@ -198,8 +202,10 @@ export function DealFormDialog({
           sales_head_employee_id: deal.sales_head_employee_id || "",
           sales_engineering_employee_id: deal.sales_engineering_employee_id || "",
           sales_engineering_head_employee_id: deal.sales_engineering_head_employee_id || "",
-          channel_sales_employee_id: deal.channel_sales_employee_id || "",
           product_specialist_employee_id: deal.product_specialist_employee_id || "",
+          product_specialist_head_employee_id: (deal as any).product_specialist_head_employee_id || "",
+          solution_manager_employee_id: (deal as any).solution_manager_employee_id || "",
+          solution_manager_head_employee_id: (deal as any).solution_manager_head_employee_id || "",
           linked_to_impl: deal.linked_to_impl || false,
           eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive || false,
           status: deal.status,
@@ -236,8 +242,10 @@ export function DealFormDialog({
           sales_head_employee_id: "",
           sales_engineering_employee_id: "",
           sales_engineering_head_employee_id: "",
-          channel_sales_employee_id: "",
           product_specialist_employee_id: "",
+          product_specialist_head_employee_id: "",
+          solution_manager_employee_id: "",
+          solution_manager_head_employee_id: "",
           linked_to_impl: false,
           eligible_for_perpetual_incentive: false,
           status: "draft",
@@ -254,8 +262,10 @@ export function DealFormDialog({
     const salesHeadName = getEmployeeName(values.sales_head_employee_id);
     const salesEngineeringName = getEmployeeName(values.sales_engineering_employee_id);
     const salesEngineeringHeadName = getEmployeeName(values.sales_engineering_head_employee_id);
-    const channelSalesName = getEmployeeName(values.channel_sales_employee_id);
     const productSpecialistName = getEmployeeName(values.product_specialist_employee_id);
+    const productSpecialistHeadName = getEmployeeName(values.product_specialist_head_employee_id);
+    const solutionManagerName = getEmployeeName(values.solution_manager_employee_id);
+    const solutionManagerHeadName = getEmployeeName(values.solution_manager_head_employee_id);
 
     if (isEditing && deal) {
       await updateDeal.mutateAsync({
@@ -265,8 +275,13 @@ export function DealFormDialog({
         sales_head_name: salesHeadName || undefined,
         sales_engineering_name: salesEngineeringName || undefined,
         sales_engineering_head_name: salesEngineeringHeadName || undefined,
-        channel_sales_name: channelSalesName || undefined,
         product_specialist_name: productSpecialistName || undefined,
+        product_specialist_head_employee_id: values.product_specialist_head_employee_id || undefined,
+        product_specialist_head_name: productSpecialistHeadName || undefined,
+        solution_manager_employee_id: values.solution_manager_employee_id || undefined,
+        solution_manager_name: solutionManagerName || undefined,
+        solution_manager_head_employee_id: values.solution_manager_head_employee_id || undefined,
+        solution_manager_head_name: solutionManagerHeadName || undefined,
         participants,
       });
     } else {
@@ -295,10 +310,14 @@ export function DealFormDialog({
         sales_engineering_name: salesEngineeringName || undefined,
         sales_engineering_head_employee_id: values.sales_engineering_head_employee_id || undefined,
         sales_engineering_head_name: salesEngineeringHeadName || undefined,
-        channel_sales_employee_id: values.channel_sales_employee_id || undefined,
-        channel_sales_name: channelSalesName || undefined,
         product_specialist_employee_id: values.product_specialist_employee_id || undefined,
         product_specialist_name: productSpecialistName || undefined,
+        product_specialist_head_employee_id: values.product_specialist_head_employee_id || undefined,
+        product_specialist_head_name: productSpecialistHeadName || undefined,
+        solution_manager_employee_id: values.solution_manager_employee_id || undefined,
+        solution_manager_name: solutionManagerName || undefined,
+        solution_manager_head_employee_id: values.solution_manager_head_employee_id || undefined,
+        solution_manager_head_name: solutionManagerHeadName || undefined,
         linked_to_impl: values.linked_to_impl,
         eligible_for_perpetual_incentive: values.eligible_for_perpetual_incentive,
         status: values.status,
@@ -754,10 +773,10 @@ export function DealFormDialog({
                 />
                 <FormField
                   control={form.control}
-                  name="channel_sales_employee_id"
+                  name="product_specialist_employee_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Channel Sales</FormLabel>
+                      <FormLabel>Product Specialist</FormLabel>
                       <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
@@ -779,10 +798,60 @@ export function DealFormDialog({
                 />
                 <FormField
                   control={form.control}
-                  name="product_specialist_employee_id"
+                  name="product_specialist_head_employee_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Specialist</FormLabel>
+                      <FormLabel>Product Specialist Head</FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select employee" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
+                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
+                              {emp.full_name} ({emp.employee_id})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="solution_manager_employee_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Solution Manager</FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select employee" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="_none">None</SelectItem>
+                          {employees.filter(emp => emp.employee_id).map((emp) => (
+                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
+                              {emp.full_name} ({emp.employee_id})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="solution_manager_head_employee_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Solution Manager Head</FormLabel>
                       <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
                         <FormControl>
                           <SelectTrigger>
