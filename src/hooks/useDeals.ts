@@ -6,6 +6,7 @@ export interface Deal {
   id: string;
   project_id: string;
   customer_code: string;
+  customer_name: string | null;
   region: string;
   country: string;
   bu: string;
@@ -61,6 +62,7 @@ export interface DealWithParticipants extends Deal {
 export interface CreateDealInput {
   project_id: string;
   customer_code: string;
+  customer_name?: string;
   region: string;
   country: string;
   bu: string;

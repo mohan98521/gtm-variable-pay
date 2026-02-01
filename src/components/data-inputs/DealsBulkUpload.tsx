@@ -28,6 +28,7 @@ interface DealsBulkUploadProps {
 interface ParsedDeal {
   project_id: string;
   customer_code: string;
+  customer_name?: string;
   region: string;
   country: string;
   bu: string;
@@ -65,6 +66,7 @@ interface ValidationError {
 const CSV_TEMPLATE_HEADERS = [
   "project_id",
   "customer_code",
+  "customer_name",
   "region",
   "country",
   "bu",
@@ -98,6 +100,7 @@ const generateCSVTemplate = (): string => {
   const exampleRow = [
     "AUTO",
     "CUST001",
+    "Acme Bank Ltd",
     "APAC",
     "Singapore",
     "banking",
@@ -177,6 +180,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       deals.push({
         project_id: deal.project_id === "AUTO" ? generateProjectId() : deal.project_id,
         customer_code: deal.customer_code,
+        customer_name: deal.customer_name || undefined,
         region: deal.region,
         country: deal.country,
         bu: deal.bu,
@@ -320,6 +324,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         const dealData = {
           project_id: deal.project_id,
           customer_code: deal.customer_code,
+          customer_name: deal.customer_name || null,
           region: deal.region,
           country: deal.country,
           bu: deal.bu,

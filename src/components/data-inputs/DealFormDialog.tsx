@@ -49,6 +49,7 @@ import { useFiscalYear } from "@/contexts/FiscalYearContext";
 const dealFormSchema = z.object({
   project_id: z.string().min(1, "Project ID is required"),
   customer_code: z.string().min(1, "Customer code is required"),
+  customer_name: z.string().optional(),
   region: z.string().min(1, "Region is required"),
   country: z.string().min(1, "Country is required"),
   bu: z.string().min(1, "Business unit is required"),
@@ -143,6 +144,7 @@ export function DealFormDialog({
     defaultValues: {
       project_id: "",
       customer_code: "",
+      customer_name: "",
       region: "",
       country: "",
       bu: "",
@@ -184,6 +186,7 @@ export function DealFormDialog({
         form.reset({
           project_id: deal.project_id,
           customer_code: deal.customer_code,
+          customer_name: (deal as any).customer_name || "",
           region: deal.region,
           country: deal.country,
           bu: deal.bu,
@@ -224,6 +227,7 @@ export function DealFormDialog({
         form.reset({
           project_id: generateProjectId(),
           customer_code: "",
+          customer_name: "",
           region: "",
           country: "",
           bu: "",
@@ -288,6 +292,7 @@ export function DealFormDialog({
       await createDeal.mutateAsync({
         project_id: values.project_id,
         customer_code: values.customer_code,
+        customer_name: values.customer_name || undefined,
         region: values.region,
         country: values.country,
         bu: values.bu,
@@ -389,6 +394,19 @@ export function DealFormDialog({
                       <FormLabel>Customer Code</FormLabel>
                       <FormControl>
                         <Input {...field} placeholder="e.g., CUST001" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="customer_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Customer Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g., Acme Bank Ltd" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
