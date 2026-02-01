@@ -1,160 +1,144 @@
 
 
-## Connect Dashboard to Real Actuals & Enhance Incentive Audit Report
+## Fix Employee ID Linkage Between Profiles and Employees
 
-### Overview
+### Problem Summary
 
-This plan implements two major enhancements:
+| Metric | Value |
+|--------|-------|
+| Total profiles | 12 |
+| Profiles with employee_id | 0 |
+| Profiles matchable by email | 11 |
+| Unmatched profile | 1 (mohankumar98521@gmail.com - admin, not in employees table) |
 
-1. **Dashboard with Real Actuals** - Replace mock data with real actuals from `deals` and `closing_arr_actuals` tables
-2. **Database-Driven Incentive Audit** - Replace hardcoded legacy calculation logic with the new `compensationEngine.ts`
-
----
-
-### Current State Analysis
-
-| Component | Current Implementation | Problem |
-|-----------|----------------------|---------|
-| **Dashboard** (lines 46-49) | Uses `mockAchievedPct` hardcoded values (0.71, 0.82) | Not reflecting real performance data |
-| **Dashboard** (lines 88-98) | Mock monthly trend with hardcoded percentages | No actual monthly breakdown |
-| **Incentive Audit** (lines 250-314) | Uses legacy `calculateBonusAllocation`, `getPayoutMultiplier` from `compensation.ts` | Ignores database-driven plan configurations, hardcoded multipliers |
+The `profiles.employee_id` column is NULL for all users, which breaks the connection between authenticated users and their performance data in the `deals` and `closing_arr_actuals` tables.
 
 ---
 
-### Data Flow Architecture
+### Solution Overview
 
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                        DATA SOURCES                                  │
-├───────────────────────┬────────────────────┬───────────────────────┤
-│       deals           │ closing_arr_actuals│  performance_targets  │
-│ (new_software_booking)│   (closing_arr)    │    (annual targets)   │
-└───────────┬───────────┴─────────┬──────────┴───────────┬───────────┘
-            │                     │                      │
-            ▼                     ▼                      ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  NEW HOOKS (to be created)                          │
-│   useUserActuals() - aggregates actuals by employee + metric type   │
-└─────────────────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   compensationEngine.ts                              │
-│    calculateVariablePayFromPlan() - database-driven calculations    │
-└─────────────────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌───────────────────────┬─────────────────────────────────────────────┐
-│       Dashboard       │            Incentive Audit Report           │
-│   (personal view)     │         (all employees view)                │
-└───────────────────────┴─────────────────────────────────────────────┘
-```
+1. **One-time data migration** - Update all existing profiles with their matching employee_id from the employees table
+2. **Database trigger enhancement** - Modify the `handle_new_user` trigger to automatically populate employee_id when new profiles are created
+3. **Edge function update** - Ensure the `create-employee-account` function also updates the profile with employee_id if the profile was created by the trigger
 
 ---
 
 ### Implementation Steps
 
-#### Step 1: Create `useUserActuals` Hook
+#### Step 1: One-Time Data Migration
 
-New hook to fetch real actuals for the current user from deals and closing_arr_actuals tables.
+Run a SQL migration to update all existing profiles where a matching employee exists:
 
-**File:** `src/hooks/useUserActuals.ts`
-
-```typescript
-// Query logic:
-// 1. Get current user's employee_id from profiles
-// 2. Aggregate deals by month where sales_rep_employee_id matches
-// 3. Sum new_software_booking_arr_usd for "New Software Booking ARR"
-// 4. Aggregate closing_arr_actuals by month where sales_rep_employee_id matches
-// 5. Sum closing_arr for "Closing ARR"
-// 6. Return structured data by metric name and month
+```sql
+-- Update existing profiles with employee_id from employees table
+UPDATE profiles p
+SET employee_id = e.employee_id
+FROM employees e
+WHERE LOWER(p.email) = LOWER(e.email)
+  AND p.employee_id IS NULL;
 ```
 
-**Interface:**
+**Expected Result:** 11 profiles updated with their employee_id
+
+---
+
+#### Step 2: Enhance the `handle_new_user` Trigger
+
+Modify the existing trigger function to lookup the employee_id when a new profile is created:
+
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  emp_id text;
+BEGIN
+  -- Look up employee_id from employees table by email
+  SELECT employee_id INTO emp_id
+  FROM public.employees
+  WHERE LOWER(email) = LOWER(NEW.email)
+  LIMIT 1;
+
+  INSERT INTO public.profiles (id, email, full_name, employee_id)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data ->> 'full_name', NEW.email),
+    emp_id  -- Will be NULL if no matching employee found
+  );
+  RETURN NEW;
+END;
+$function$;
+```
+
+---
+
+#### Step 3: Update Edge Function (Optional Enhancement)
+
+The `create-employee-account` edge function already handles this correctly in the case where it creates the profile (lines 150-157). However, when the trigger creates the profile first, the employee_id is not set.
+
+Update the edge function to also update existing profiles with the employee_id:
+
+**Current behavior (line 165-167):**
 ```typescript
-interface UserActuals {
-  metricName: string;
-  monthlyActuals: { month: string; value: number }[];
-  ytdTotal: number;
+} else {
+  console.log('Profile already exists for user:', newUserId);
+}
+```
+
+**Updated behavior:**
+```typescript
+} else {
+  // Profile exists but may not have employee_id, update it
+  const { error: updateProfileError } = await supabaseAdmin
+    .from('profiles')
+    .update({ employee_id: employee_id })
+    .eq('id', newUserId);
+
+  if (updateProfileError) {
+    console.error('Failed to update profile employee_id:', updateProfileError.message);
+  } else {
+    console.log('Updated profile with employee_id for user:', newUserId);
+  }
 }
 ```
 
 ---
 
-#### Step 2: Update Dashboard.tsx
+### Data Flow After Fix
 
-**Changes:**
-
-| Section | Current | Updated |
-|---------|---------|---------|
-| Metric achievement | `mockAchievedPct = 0.71 / 0.82` | Fetch from `useUserActuals()` hook |
-| Monthly trend | Hardcoded array of 8 months | Query actual monthly breakdown |
-| Payout calculation | Already uses `generatePayoutProjections` | Use `calculateVariablePayFromPlan` for current payout |
-
-**Key Updates:**
-
-1. Import new `useUserActuals` hook
-2. Replace mock achievement percentages (lines 46-49) with real actuals
-3. Replace mock monthly trend (lines 88-98) with real monthly data
-4. Calculate current payout using `calculateVariablePayFromPlan` from compensationEngine
-
----
-
-#### Step 3: Create `useIncentiveAuditData` Hook
-
-New hook to fetch and calculate incentive audit data for all employees using the database-driven engine.
-
-**File:** `src/hooks/useIncentiveAuditData.ts`
-
-**Logic:**
-1. Fetch all employees with their plan assignments from `user_targets` + `comp_plans`
-2. For each employee, get their `plan_metrics` with `multiplier_grids`
-3. Fetch actuals from `deals` (New Software Booking) and `closing_arr_actuals` (Closing ARR)
-4. Fetch targets from `performance_targets`
-5. Use `calculateVariablePayFromPlan` to compute each employee's incentive breakdown
-6. Return array of fully calculated results with metric-level detail
-
----
-
-#### Step 4: Update Reports.tsx Incentive Audit Tab
-
-**Changes:**
-
-| Current (lines 250-314) | Updated |
-|-------------------------|---------|
-| Uses `calculateBonusAllocation` (hardcoded splits) | Uses `calculateMetricBonusAllocation` from compensationEngine |
-| Uses `getPayoutMultiplier` (hardcoded multipliers) | Uses `getMultiplierFromGrid` from compensationEngine |
-| Only supports "New Software Booking ARR" and "Closing ARR" | Supports any metric defined in plan_metrics |
-| Uses `monthly_bookings` table | Uses `deals` and `closing_arr_actuals` directly |
-
-**Updated Data Flow:**
-
-```typescript
-// For each employee:
-const planConfig = getUserPlanConfiguration(employeeId);
-const actuals = getEmployeeActuals(employeeId);
-const targets = getPerformanceTargets(employeeId);
-
-const result = calculateVariablePayFromPlan({
-  userId: employeeId,
-  planId: planConfig.planId,
-  planName: planConfig.planName,
-  targetBonusUSD: planConfig.targetBonusUsd,
-  proRatedTargetBonusUSD: proRation.proRatedTargetBonusUSD,
-  proRationFactor: proRation.proRationFactor,
-  metrics: planConfig.metrics, // from plan_metrics + multiplier_grids
-  metricsActuals: actuals,
-});
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                    NEW USER REGISTRATION                             │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│          auth.users INSERT triggers handle_new_user()               │
+│                                                                      │
+│   1. Lookup employee_id from employees table by email                │
+│   2. Insert into profiles with employee_id populated                 │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    profiles table                                    │
+│                                                                      │
+│   id (auth.users.id) ──── employee_id (from employees table)        │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Data Queries Now Work                             │
+│                                                                      │
+│   profiles.employee_id = deals.sales_rep_employee_id                 │
+│   profiles.employee_id = closing_arr_actuals.sales_rep_employee_id   │
+│   profiles.employee_id = performance_targets.employee_id             │
+└─────────────────────────────────────────────────────────────────────┘
 ```
-
----
-
-### Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/hooks/useUserActuals.ts` | Fetch current user's actuals from deals + closing_arr_actuals |
-| `src/hooks/useIncentiveAuditData.ts` | Fetch all employees' incentive calculations using database-driven engine |
 
 ---
 
@@ -162,74 +146,73 @@ const result = calculateVariablePayFromPlan({
 
 | File | Changes |
 |------|---------|
-| `src/pages/Dashboard.tsx` | Replace mock data with real actuals, use compensationEngine for calculations |
-| `src/pages/Reports.tsx` | Refactor Incentive Audit to use new hook and database-driven calculations |
+| Database migration | Update existing profiles + enhance trigger |
+| `supabase/functions/create-employee-account/index.ts` | Update existing profiles with employee_id |
 
 ---
 
 ### Technical Details
 
-#### Dashboard Actuals Query Logic
+**Migration SQL (combined):**
 
-**New Software Booking ARR** (from deals table):
 ```sql
-SELECT 
-  date_trunc('month', month_year) as month,
-  SUM(new_software_booking_arr_usd) as value
-FROM deals
-WHERE sales_rep_employee_id = :employee_id
-  AND month_year >= :fiscal_year_start
-  AND month_year <= :fiscal_year_end
-GROUP BY date_trunc('month', month_year)
-ORDER BY month
+-- Step 1: Update existing profiles with employee_id
+UPDATE profiles p
+SET employee_id = e.employee_id
+FROM employees e
+WHERE LOWER(p.email) = LOWER(e.email)
+  AND p.employee_id IS NULL;
+
+-- Step 2: Replace the handle_new_user trigger function
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  emp_id text;
+BEGIN
+  -- Look up employee_id from employees table by email
+  SELECT employee_id INTO emp_id
+  FROM public.employees
+  WHERE LOWER(email) = LOWER(NEW.email)
+  LIMIT 1;
+
+  INSERT INTO public.profiles (id, email, full_name, employee_id)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data ->> 'full_name', NEW.email),
+    emp_id
+  );
+  RETURN NEW;
+END;
+$function$;
 ```
-
-**Closing ARR** (from closing_arr_actuals table):
-```sql
-SELECT 
-  date_trunc('month', month_year) as month,
-  SUM(closing_arr) as value
-FROM closing_arr_actuals
-WHERE sales_rep_employee_id = :employee_id
-  AND month_year >= :fiscal_year_start
-  AND month_year <= :fiscal_year_end
-GROUP BY date_trunc('month', month_year)
-ORDER BY month
-```
-
-#### Employee-to-Actuals Mapping
-
-The system maps employees to their actuals using:
-- `deals.sales_rep_employee_id` → employee_id
-- `closing_arr_actuals.sales_rep_employee_id` → employee_id
-
-This is matched against `employees.employee_id` and then linked to `profiles.email` for user_targets lookup.
 
 ---
 
-### Enhanced Incentive Audit Display
+### Verification
 
-The updated Incentive Audit will show:
+After implementation, this query should show all profiles with their employee_id populated:
 
-| Column | Source |
-|--------|--------|
-| Employee Name | employees.full_name |
-| Plan Name | comp_plans.name (via user_targets) |
-| Metric | plan_metrics.metric_name (multiple rows per employee) |
-| Target | performance_targets.target_value_usd |
-| Actual | Aggregated from deals/closing_arr_actuals |
-| Achievement % | (Actual / Target) × 100 |
-| Multiplier | From multiplier_grids based on achievement |
-| Allocation | (target_bonus_usd × weightage_percent / 100) |
-| Payout | (Achievement% / 100) × Allocation × Multiplier |
+```sql
+SELECT p.email, p.employee_id, e.full_name
+FROM profiles p
+LEFT JOIN employees e ON p.employee_id = e.employee_id
+ORDER BY p.email;
+```
 
 ---
 
-### Benefits
+### Summary
 
-1. **Real-Time Data** - Dashboard reflects actual performance from data entry
-2. **Database-Driven** - No hardcoded splits or multipliers; all from plan configuration
-3. **Flexible Metrics** - Supports any number of metrics defined in plan_metrics
-4. **Consistent Calculations** - Both Dashboard and Reports use the same compensationEngine
-5. **Plan-Specific Rules** - Each employee's calculations respect their assigned plan's logic (Stepped, Gated, Linear)
+| Step | Action | Impact |
+|------|--------|--------|
+| 1 | Run data migration | 11 existing profiles get employee_id |
+| 2 | Update trigger function | Future signups auto-populate employee_id |
+| 3 | Update edge function | Handles edge case where profile created by trigger |
+
+After this fix, the Dashboard and Incentive Audit will correctly display real actuals from the deals and closing_arr_actuals tables.
 
