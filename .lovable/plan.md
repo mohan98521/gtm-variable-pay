@@ -1,256 +1,255 @@
 
 
-## Complete Dashboard Redesign: Fix Data Flow and Add New Features
+## Fix Dashboard Issues: Actuals Not Reflecting, Add Commission Metrics, and Redesign What-If Simulator
 
-### Root Cause Analysis
+### Issue Analysis
 
-The dashboard shows all zeros because:
+Based on my investigation, I've identified **three root causes** for the issues:
 
-1. **Missing Plan Assignment**: The `user_targets` table is **empty** - there are no plan assignments for any users. The `useUserPlanConfiguration` hook depends on `user_targets` to link users to their compensation plans.
+---
 
-2. **Current Data Flow (Broken)**:
-```text
-user_targets (EMPTY!) 
-    → useUserPlanConfiguration returns null
-    → planConfig?.metrics = undefined
-    → Dashboard shows "No Plan Assigned" and all $0 values
+### Issue 1: Actuals Not Reflecting ($0 Displayed)
+
+**Root Cause:** The `SALES_FUNCTION_TO_PLAN` mapping in `useCurrentUserCompensation.ts` is missing key values:
+
+| Employee's sales_function | What Map Has | Comp Plan Name |
+|---------------------------|--------------|----------------|
+| **Farming** | Missing! | Farmer |
+| **Hunting** | Missing! | Hunter |
+
+The employee DU0001 has `sales_function = "Farming"` but the code only maps `"Farmer"`, so plan lookup fails with `ilike("name", "%Farming%")` which returns no results.
+
+**Evidence:**
+- Database shows `sales_function` values: `Farming`, `Hunting`, `Farmer - Retain`, etc.
+- Comp plan names: `Farmer`, `Hunter`, `Farmer Retain`, etc.
+- **$793,159** in actual deals exist for DU0001 in 2026
+
+**Fix:** Add missing mappings:
+```typescript
+const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
+  "Farming": "Farmer",      // ADD THIS
+  "Hunting": "Hunter",      // ADD THIS
+  "Farmer": "Farmer",
+  "Hunter": "Hunter",
+  // ... rest stays same
+};
 ```
 
-3. **Data That EXISTS**:
-   - `performance_targets` table has targets for DU0001 (Farming Sales Rep):
-     - New Software Booking ARR: $600,000
-     - Closing ARR: $1,600,000
-   - `employees` table has compensation data (tvp_usd: $81,477.65)
-   - `deals` table has actual transactions (total ~$793K in New Software Booking ARR for DU0001)
-   - `comp_plans` table has plans (Farmer plan exists: ed01c7a6-...)
+---
 
-### Solution: Bypass user_targets and Build Dashboard from Source Tables
+### Issue 2: Commission Structure Metrics Not Displayed
 
-Instead of relying on the empty `user_targets` table, redesign the dashboard to:
-1. Get plan assignment from `employees.sales_function` → map to `comp_plans`
-2. Get targets from `performance_targets` table
-3. Get target bonus from `employees.tvp_usd`
-4. Get actuals from `deals` and `closing_arr_actuals` (already working via useUserActuals)
+**Root Cause:** The current dashboard only shows **Variable Pay metrics** (New Software Booking ARR, Closing ARR). Commission metrics (Managed Services, Perpetual License, CR/ER, Implementation) are completely missing.
+
+**Data Available in Database:**
+| Commission Type | DU0001 Total Actuals |
+|-----------------|---------------------|
+| Managed Services | $106,875 |
+| Perpetual License | $100,000 |
+| CR/ER | $110,000 (CR + ER combined) |
+| Implementation | $100,000 |
+
+**Plan Commissions Configured:**
+| Type | Rate | Min Threshold |
+|------|------|---------------|
+| Managed Services | 1.5% | None |
+| Perpetual License | 4.0% | $50,000 |
+| CR/ER | 1.0% | None |
+| Implementation | 1.0% | None |
+
+**Fix:** 
+1. Add commission fetching to `useCurrentUserCompensation`
+2. Add commission display section to Dashboard
+3. Include commissions in the metrics table
+
+---
+
+### Issue 3: What-If Simulator Uses Percentage Sliders Instead of Actual Value Inputs
+
+**Current Behavior:** Users adjust achievement % with sliders (80%-200%)
+
+**Requested Behavior:** Users should input **actual values** directly, and the system should:
+1. Calculate achievement % from: `Achievement = (Actual / Target) * 100`
+2. Look up multiplier based on achievement %
+3. Calculate payout using the standard formula
+
+**Fix:** 
+- Replace percentage sliders with numeric input fields for actuals
+- Add commission metrics to the simulator
+- Show real-time calculation: Actuals entered → Achievement % calculated → Multiplier determined → Payout projected
 
 ---
 
 ### Implementation Plan
 
-#### Part 1: Create New Hook - useCurrentUserCompensation
+#### Step 1: Fix sales_function Mapping
 
-**File**: `src/hooks/useCurrentUserCompensation.ts` (NEW)
-
-This hook will bypass `user_targets` and source data directly:
+**File:** `src/hooks/useCurrentUserCompensation.ts`
 
 ```typescript
-// Data flow:
-// 1. Get current user's profile (with employee_id)
-// 2. Get employee master data (tvp_usd, sales_function)
-// 3. Map sales_function to comp_plan
-// 4. Get performance_targets for employee_id
-// 5. Get plan_metrics and multiplier_grids for the plan
-// 6. Return complete compensation configuration
+const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
+  "Farming": "Farmer",       // NEW
+  "Hunting": "Hunter",       // NEW
+  "Farmer": "Farmer",
+  "Hunter": "Hunter",
+  "Farmer - Retain": "Farmer Retain",
+  "Sales Head - Farmer": "Sales Head Farmer",
+  "Sales Head - Hunter": "Sales Head Hunter",
+  "CSM": "CSM",
+  "Sales Engineering": "Sales Engineering",
+  "SE": "Sales Engineering",
+  "Solution Architect": "Product Specialist or Solution Architect",
+  "Solution Manager": "Product Specialist or Solution Architect",
+};
 ```
 
-Key mappings:
-| Sales Function | Comp Plan Name |
-|----------------|----------------|
-| Farmer | Farmer |
-| Hunter | Hunter |
-| Farmer - Retain | Farmer Retain |
-| Sales Head - Farmer | Sales Head Farmer |
-| Sales Head - Hunter | Sales Head Hunter |
-| CSM | CSM |
-| Sales Engineering | Sales Engineering |
+#### Step 2: Add Commission Data Fetching
 
-#### Part 2: Redesign Dashboard Layout
+**File:** `src/hooks/useCurrentUserCompensation.ts`
 
-**File**: `src/pages/Dashboard.tsx` - Complete rewrite
+Extend the hook to:
+1. Fetch `plan_commissions` for the user's plan
+2. Aggregate commission actuals from deals (managed_services_usd, perpetual_license_usd, cr_usd + er_usd, implementation_usd)
+3. Calculate commission payouts: `DealValue × Rate` with 75/25 split
+4. Return commission data alongside variable pay metrics
 
-**New Layout Structure**:
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  Dashboard Header                                      FY 2026  Farmer │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │ Table 1: Metric-wise Performance Summary                      │ │
-│  │ ┌─────────┬────────┬────────┬────────┬────────┬───────┬──────┐│ │
-│  │ │ Metric  │ Target │ Actual │ Achiev.│ Elig.  │ Paid  │ Hold.││ │
-│  │ │         │        │        │   %    │ Payout │       │      ││ │
-│  │ ├─────────┼────────┼────────┼────────┼────────┼───────┼──────┤│ │
-│  │ │ New SW  │ $600K  │ $793K  │ 132.2% │ $86K   │ $64K  │ $22K ││ │
-│  │ │ ClosARR │ $1.6M  │ $0     │ 0%     │ $0     │ $0    │ $0   ││ │
-│  │ └─────────┴────────┴────────┴────────┴────────┴───────┴──────┘│ │
-│  │ Totals                              $86K     $64K      $22K   │ │
-│  │ Clawback (if any)                   $0                        │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                     │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │ Table 2: Monthly Performance Breakdown                        │ │
-│  │ ┌──────┬─────────────────────┬─────────────────────┐          │ │
-│  │ │ Month│ New Software ARR    │ Closing ARR          │          │ │
-│  │ ├──────┼─────────────────────┼─────────────────────┤          │ │
-│  │ │ Jan  │ $429,986            │ $0                   │          │ │
-│  │ │ Feb  │ $363,173            │ $0                   │          │ │
-│  │ │ ...  │ ...                 │ ...                  │          │ │
-│  │ └──────┴─────────────────────┴─────────────────────┘          │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                     │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │ Table 3: What-If Payout Simulator                             │ │
-│  │                                                                │ │
-│  │ New Software Booking ARR     Closing ARR                      │ │
-│  │ ┌───────────────────────┐   ┌───────────────────────┐         │ │
-│  │ │ Achievement % [slider]│   │ Achievement % [slider]│         │ │
-│  │ │ 80% ──●───────── 200% │   │ 80% ────●───── 200%   │         │ │
-│  │ │ Current: 132%         │   │ Current: 0%           │         │ │
-│  │ └───────────────────────┘   └───────────────────────┘         │ │
-│  │                                                                │ │
-│  │ Projected Payout Table:                                       │ │
-│  │ ┌─────────┬────────┬────────┬──────┬──────────┬────────────┐  │ │
-│  │ │ Metric  │ Sim %  │ Alloc  │ Mult │ Payout   │ Logic       │  │ │
-│  │ ├─────────┼────────┼────────┼──────┼──────────┼────────────┤  │ │
-│  │ │ New SW  │ 150%   │ $48.9K │ 1.6x │ $117,317 │ Stepped    │  │ │
-│  │ │ ClosARR │ 100%   │ $32.6K │ 1.2x │ $39,119  │ Gated      │  │ │
-│  │ ├─────────┼────────┼────────┼──────┼──────────┼────────────┤  │ │
-│  │ │ TOTAL   │        │        │      │ $156,436 │            │  │ │
-│  │ └─────────┴────────┴────────┴──────┴──────────┴────────────┘  │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-#### Part 3: Implementation Details
-
-**New Hook (useCurrentUserCompensation.ts)**:
+New interfaces:
 ```typescript
-interface CurrentUserCompensation {
-  employeeId: string;
-  employeeName: string;
-  targetBonusUsd: number;
-  planId: string;
-  planName: string;
-  metrics: {
-    metricName: string;
-    targetValue: number;
-    actualValue: number;
-    achievementPct: number;
-    weightagePercent: number;
-    allocation: number;
-    multiplier: number;
-    eligiblePayout: number;
-    amountPaid: number;      // 75% of eligible
-    holdback: number;        // 25% of eligible
-    logicType: string;
-    gateThreshold: number | null;
-  }[];
-  monthlyBreakdown: {
-    month: string;
-    newSoftwareArr: number;
-    closingArr: number;
-  }[];
-  clawbackAmount: number;
-  totalEligiblePayout: number;
-  totalPaid: number;
-  totalHoldback: number;
+export interface CommissionCompensation {
+  commissionType: string;
+  dealValue: number;
+  rate: number;
+  minThreshold: number | null;
+  grossPayout: number;
+  amountPaid: number;      // 75%
+  holdback: number;        // 25%
 }
 ```
 
-**Dashboard Component Changes**:
-1. Replace `useUserPlanConfiguration` with new `useCurrentUserCompensation`
-2. Replace existing cards with Table 1 (Metrics Summary)
-3. Replace Monthly Performance chart with Table 2 (Monthly by Metric)
-4. Replace Payout Projection with Interactive Simulator (Table 3)
+#### Step 3: Update Dashboard UI
 
-**Simulator Logic**:
-- Sliders for each metric (range: 80% to 200%)
-- Real-time calculation using `calculateVariablePayFromPlan`
-- Shows multiplier tier and logic type per metric
-- Shows 75/25 split calculation
+**File:** `src/pages/Dashboard.tsx`
 
----
+Add new section for Commission Structure:
+- Display commission metrics in a dedicated table or combined with variable pay
+- Show Deal Value, Rate, Gross Payout, Paid (75%), Holding (25%)
 
-### Files to Create/Modify
+#### Step 4: Redesign What-If Simulator with Input Fields
 
-| File | Action | Description |
-|------|--------|-------------|
-| `src/hooks/useCurrentUserCompensation.ts` | CREATE | New hook that bypasses user_targets |
-| `src/pages/Dashboard.tsx` | MODIFY | Complete redesign with 3 tables |
-| `src/components/dashboard/MetricsTable.tsx` | CREATE | Reusable metrics summary table |
-| `src/components/dashboard/MonthlyPerformanceTable.tsx` | CREATE | Monthly breakdown by metric |
-| `src/components/dashboard/PayoutSimulator.tsx` | CREATE | Interactive what-if simulator |
+**File:** `src/components/dashboard/PayoutSimulator.tsx`
 
----
-
-### Data Sourcing Strategy
-
+Replace sliders with:
 ```text
-Current User logs in
-        │
-        ▼
-┌──────────────────────────┐
-│   profiles table         │
-│   (get employee_id)      │
-└──────────────────────────┘
-        │
-        ▼
-┌──────────────────────────┐     ┌──────────────────────┐
-│   employees table        │     │  comp_plans table    │
-│   (tvp_usd, sales_func)  │────▶│  (match by name)     │
-└──────────────────────────┘     └──────────────────────┘
-        │                               │
-        ▼                               ▼
-┌──────────────────────────┐     ┌──────────────────────┐
-│   performance_targets    │     │  plan_metrics        │
-│   (targets by metric)    │     │  (weightage, logic)  │
-└──────────────────────────┘     └──────────────────────┘
-        │                               │
-        ▼                               ▼
-┌──────────────────────────┐     ┌──────────────────────┐
-│   deals table            │     │  multiplier_grids    │
-│   (actuals)              │     │  (multiplier tiers)  │
-└──────────────────────────┘     └──────────────────────┘
-        │                               │
-        └───────────────┬───────────────┘
-                        ▼
-              ┌─────────────────┐
-              │   Dashboard     │
-              │   (calculated)  │
-              └─────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ What-If Payout Simulator                      [Reset to current] │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ VARIABLE PAY METRICS                                            │
+│ ┌───────────────────────────────┬───────────────────────────┐  │
+│ │ New Software Booking ARR      │ Closing ARR               │  │
+│ │ Target: $600,000              │ Target: $1,600,000        │  │
+│ │ Simulated Actual: [_________] │ Simulated Actual: [______]│  │
+│ │ Achievement: 132.2%           │ Achievement: 0%           │  │
+│ └───────────────────────────────┴───────────────────────────┘  │
+│                                                                 │
+│ COMMISSION METRICS                                              │
+│ ┌───────────────────────────────┬───────────────────────────┐  │
+│ │ Managed Services              │ Perpetual License         │  │
+│ │ Rate: 1.5%                    │ Rate: 4% (Min: $50K)      │  │
+│ │ Simulated Deal Value: [_____] │ Simulated Deal Value:[___]│  │
+│ └───────────────────────────────┴───────────────────────────┘  │
+│ ┌───────────────────────────────┬───────────────────────────┐  │
+│ │ CR/ER                         │ Implementation            │  │
+│ │ Rate: 1%                      │ Rate: 1%                  │  │
+│ │ Simulated Deal Value: [_____] │ Simulated Deal Value:[___]│  │
+│ └───────────────────────────────┴───────────────────────────┘  │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ PROJECTED PAYOUTS                                               │
+│ ┌──────────────────┬────────┬──────┬──────────┬──────────────┐ │
+│ │ Metric           │ Value  │ Mult │ Payout   │ Logic        │ │
+│ ├──────────────────┼────────┼──────┼──────────┼──────────────┤ │
+│ │ New SW Booking   │ $793K  │ 1.6x │ $86,143  │ Stepped      │ │
+│ │ Closing ARR      │ $0     │ 0.0x │ $0       │ Gated        │ │
+│ │ Managed Services │ $107K  │ --   │ $1,603   │ Commission   │ │
+│ │ Perpetual License│ $100K  │ --   │ $4,000   │ Commission   │ │
+│ │ CR/ER            │ $110K  │ --   │ $1,100   │ Commission   │ │
+│ │ Implementation   │ $100K  │ --   │ $1,000   │ Commission   │ │
+│ ├──────────────────┼────────┼──────┼──────────┼──────────────┤ │
+│ │ TOTAL PROJECTED  │        │      │ $93,846  │              │ │
+│ └──────────────────┴────────┴──────┴──────────┴──────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-### Technical Notes
-
-1. **Plan Mapping Logic**:
-   - Map `employees.sales_function` → `comp_plans.name`
-   - Handle edge cases (null sales_function, unknown mappings)
-
-2. **Monthly Breakdown**:
-   - Already available in `useUserActuals` as `monthlyActuals` array
-   - Split by metric type for the new table format
-
-3. **What-If Simulator**:
-   - Use Slider components from shadcn/ui
-   - Call `getMultiplierFromGrid()` and `calculateMetricPayoutFromPlan()` on each change
-   - Show live updates without database calls
-
-4. **Holdback/Paid Split**:
-   - 75% immediate payment
-   - 25% holdback
-   - Already implemented in commission calculations, now apply to variable pay
+Key changes:
+- **Input fields** for entering simulated actuals (not sliders)
+- Show **Target** value for reference
+- Show **Achievement %** calculated from input
+- Show **Multiplier** looked up from plan grids
+- Include **all commission types** with rate display
 
 ---
 
-### Expected Results
+### Files to Modify
 
-| Before | After |
-|--------|-------|
-| "No Plan Assigned" | "Farmer" |
-| Annual Target: $0 | Annual Target: $600,000 (New SW) + $1,600,000 (Closing ARR) |
-| YTD Achieved: $0 | YTD Achieved: $793,159 (from deals) |
-| Estimated Payout: $0 | Eligible Payout: ~$86,000 (calculated with 1.6x multiplier) |
-| Static projections | Interactive what-if sliders per metric |
+| File | Changes |
+|------|---------|
+| `src/hooks/useCurrentUserCompensation.ts` | Fix mapping, add commission fetching and calculation |
+| `src/pages/Dashboard.tsx` | Add commission display section |
+| `src/components/dashboard/MetricsTable.tsx` | Optionally combine variable pay and commissions |
+| `src/components/dashboard/PayoutSimulator.tsx` | Replace sliders with input fields, add commission metrics |
+
+---
+
+### Expected Results After Fix
+
+| Metric | Before | After |
+|--------|--------|-------|
+| New Software Booking ARR Actual | $0 | **$793,159** |
+| Closing ARR Actual | $0 | $0 (no data, but correctly loaded) |
+| Achievement % | 0% | **132.2%** |
+| Multiplier | 1.00x | **1.60x** |
+| Commission: Managed Services | Not shown | **$106,875 @ 1.5% = $1,603** |
+| Commission: Perpetual License | Not shown | **$100,000 @ 4% = $4,000** |
+| Commission: CR/ER | Not shown | **$110,000 @ 1% = $1,100** |
+| Commission: Implementation | Not shown | **$100,000 @ 1% = $1,000** |
+| Simulator | % Sliders | **Actual Value Input Fields** |
+
+---
+
+### Technical Details
+
+**Commission Calculation Formula:**
+```
+Gross Payout = Deal Value × Rate (if above min threshold)
+Amount Paid = Gross Payout × 0.75
+Holdback = Gross Payout × 0.25
+```
+
+**Variable Pay Calculation Formula:**
+```
+Achievement % = (Actual / Target) × 100
+Multiplier = lookup from multiplier_grids based on Achievement %
+Eligible Payout = (Achievement % / 100) × Allocation × Multiplier
+Amount Paid = Eligible Payout × 0.75
+Holdback = Eligible Payout × 0.25
+```
+
+**Data Flow After Fix:**
+```text
+useCurrentUserCompensation
+├── profiles → employee_id (DU0001)
+├── employees → sales_function ("Farming") → map to "Farmer"
+├── comp_plans → plan_id (Farmer 2026)
+├── plan_metrics → variable pay metrics with grids
+├── plan_commissions → commission rates
+├── performance_targets → target values
+├── deals → all participant roles aggregated
+│   ├── new_software_booking_arr_usd → Variable Pay
+│   ├── managed_services_usd → Commission
+│   ├── perpetual_license_usd → Commission
+│   ├── cr_usd + er_usd → Commission
+│   └── implementation_usd → Commission
+└── closing_arr_actuals → Closing ARR
+```
 
