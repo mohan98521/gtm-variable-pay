@@ -13,6 +13,7 @@ export type PermissionKey =
   | "tab:role_management"
   | "tab:permissions"
   | "tab:comp_plans"
+  | "tab:performance_targets"
   // Actions
   | "action:create_comp_plan"
   | "action:edit_comp_plan"
@@ -47,6 +48,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "tab:comp_plans", label: "Compensation Plans", description: "View compensation plans tab", category: "tab" },
   { key: "tab:employee_accounts", label: "Employee Accounts", description: "Manage employee accounts", category: "tab" },
   { key: "tab:bulk_upload", label: "Bulk Upload", description: "Upload employee data in bulk", category: "tab" },
+  { key: "tab:performance_targets", label: "Performance Targets", description: "Manage employee performance targets", category: "tab" },
   { key: "tab:role_management", label: "Role Management", description: "Assign roles to users", category: "tab" },
   { key: "tab:permissions", label: "Permissions", description: "Configure role permissions", category: "tab", isLocked: true },
   
