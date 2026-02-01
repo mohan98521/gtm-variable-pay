@@ -7,15 +7,19 @@ import { Badge } from "@/components/ui/badge";
 import { useCurrentUserProfile } from "@/hooks/useCurrentUserTarget";
 import { useUserPlanConfiguration } from "@/hooks/useUserPlanConfiguration";
 import { useLatestExchangeRate } from "@/hooks/useExchangeRates";
+import { useUserActuals } from "@/hooks/useUserActuals";
+import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { calculateProRation } from "@/lib/compensation";
-import { generatePayoutProjections } from "@/lib/compensationEngine";
+import { generatePayoutProjections, calculateVariablePayFromPlan, MetricActual } from "@/lib/compensationEngine";
 
 export default function Dashboard() {
+  const { selectedYear } = useFiscalYear();
   const { data: planConfig, isLoading: planLoading } = useUserPlanConfiguration();
   const { data: profile, isLoading: profileLoading } = useCurrentUserProfile();
   const { data: exchangeRate } = useLatestExchangeRate(profile?.local_currency);
+  const { data: actualsData, isLoading: actualsLoading } = useUserActuals();
 
-  const isLoading = planLoading || profileLoading;
+  const isLoading = planLoading || profileLoading || actualsLoading;
 
   if (isLoading) {
     return (
@@ -38,15 +42,19 @@ export default function Dashboard() {
   const proRatedTargetBonus = proRation?.proRatedTargetBonusUSD ?? 0;
   const proRationPercent = proRation ? Math.round(proRation.proRationFactor * 100) : 100;
   
+  // Get actual values from the database
+  const actualsMap = new Map<string, number>();
+  (actualsData?.actuals || []).forEach(metric => {
+    actualsMap.set(metric.metricName, metric.ytdTotal);
+  });
+  
   // Build metrics from plan configuration (database-driven)
   const metrics = (planConfig?.metrics || []).map(metric => {
     // Calculate target for this metric based on weightage
     const metricTarget = annualTarget * (metric.weightage_percent / 100);
     
-    // Mock achieved values (will be replaced with actual data from monthly_actuals)
-    // Using different mock percentages for variety
-    const mockAchievedPct = metric.metric_name.includes("Closing") ? 0.71 : 0.82;
-    const achieved = metricTarget * mockAchievedPct;
+    // Get actual from database actuals
+    const achieved = actualsMap.get(metric.metric_name) || 0;
     
     return {
       id: metric.id,
@@ -63,8 +71,29 @@ export default function Dashboard() {
   const totalAchieved = metrics.reduce((sum, m) => sum + m.achieved, 0);
   const ytdAchievedPct = annualTarget > 0 ? (totalAchieved / annualTarget) * 100 : 0;
   
-  // Calculate current payout estimate
-  const currentPayoutEstimate = proRatedTargetBonus * (ytdAchievedPct / 100);
+  // Build metricsActuals for the compensation engine
+  const metricsActuals: MetricActual[] = metrics.map(m => ({
+    metricId: m.id,
+    metricName: m.name,
+    targetValue: m.target,
+    actualValue: m.achieved,
+  }));
+  
+  // Calculate current payout using the database-driven engine
+  const currentPayoutResult = planConfig?.metrics 
+    ? calculateVariablePayFromPlan({
+        userId: planConfig.userId,
+        planId: planConfig.planId,
+        planName: planConfig.planName,
+        targetBonusUSD: planConfig.targetBonusUsd ?? 0,
+        proRatedTargetBonusUSD: proRatedTargetBonus,
+        proRationFactor: proRation?.proRationFactor ?? 1,
+        metrics: planConfig.metrics,
+        metricsActuals,
+      })
+    : null;
+  
+  const currentPayoutEstimate = currentPayoutResult?.totalPayoutUSD ?? 0;
 
   const achievementPct = annualTarget > 0 ? (totalAchieved / annualTarget) * 100 : 0;
   
@@ -74,8 +103,38 @@ export default function Dashboard() {
   const paceStatus = achievementPct >= expectedPct ? "on-track" : achievementPct >= expectedPct * 0.85 ? "at-risk" : "behind";
 
   const planName = planConfig?.planName ?? "No Plan Assigned";
-  const fiscalYear = 2026; // Current fiscal year
+  const fiscalYear = selectedYear;
 
+  // Build monthly trend from actual data
+  const buildMonthlyTrend = () => {
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthlyData = new Map<string, number>();
+    
+    // Aggregate all metric actuals by month
+    (actualsData?.actuals || []).forEach(metric => {
+      metric.monthlyActuals.forEach(ma => {
+        const monthKey = ma.month; // YYYY-MM format
+        const current = monthlyData.get(monthKey) || 0;
+        monthlyData.set(monthKey, current + ma.value);
+      });
+    });
+    
+    // Convert to array and sort
+    const sortedMonths = Array.from(monthlyData.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, achieved]) => {
+        const monthIndex = parseInt(month.substring(5, 7), 10) - 1;
+        return {
+          month: monthNames[monthIndex] || month.substring(5, 7),
+          achieved,
+        };
+      });
+    
+    return sortedMonths;
+  };
+
+  const monthlyTrend = buildMonthlyTrend();
+  
   // Generate payout projections using database-driven calculation
   const projections = planConfig?.metrics 
     ? generatePayoutProjections(planConfig.metrics, proRatedTargetBonus, [100, 120, 150])
@@ -84,18 +143,6 @@ export default function Dashboard() {
         { achievementLevel: 120, label: "120%", estimatedPayout: proRatedTargetBonus * 1.44, averageMultiplier: 1.44 },
         { achievementLevel: 150, label: "150%", estimatedPayout: proRatedTargetBonus * 2.25, averageMultiplier: 2.25 },
       ];
-
-  // Mock monthly trend (will be replaced with actual data)
-  const monthlyTrend = [
-    { month: "Jan", achieved: annualTarget * 0.07 },
-    { month: "Feb", achieved: annualTarget * 0.084 },
-    { month: "Mar", achieved: annualTarget * 0.076 },
-    { month: "Apr", achieved: annualTarget * 0.11 },
-    { month: "May", achieved: annualTarget * 0.096 },
-    { month: "Jun", achieved: annualTarget * 0.124 },
-    { month: "Jul", achieved: annualTarget * 0.105 },
-    { month: "Aug", achieved: annualTarget * 0.11 },
-  ];
 
   return (
     <AppLayout>
@@ -201,47 +248,51 @@ export default function Dashboard() {
               <CardDescription>Achievement trend over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {monthlyTrend.map((month, idx) => {
-                  const maxValue = Math.max(...monthlyTrend.map(m => m.achieved));
-                  const widthPct = maxValue > 0 ? (month.achieved / maxValue) * 100 : 0;
-                  const prevMonth = monthlyTrend[idx - 1];
-                  const growth = prevMonth && prevMonth.achieved > 0 
-                    ? ((month.achieved - prevMonth.achieved) / prevMonth.achieved) * 100 
-                    : 0;
+              {monthlyTrend.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-8">No monthly data available yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {monthlyTrend.map((month, idx) => {
+                    const maxValue = Math.max(...monthlyTrend.map(m => m.achieved));
+                    const widthPct = maxValue > 0 ? (month.achieved / maxValue) * 100 : 0;
+                    const prevMonth = monthlyTrend[idx - 1];
+                    const growth = prevMonth && prevMonth.achieved > 0 
+                      ? ((month.achieved - prevMonth.achieved) / prevMonth.achieved) * 100 
+                      : 0;
 
-                  return (
-                    <div key={month.month} className="flex items-center gap-3">
-                      <span className="w-10 text-sm font-medium text-muted-foreground">{month.month}</span>
-                      <div className="flex-1">
-                        <div className="h-6 rounded bg-muted">
-                          <div
-                            className="h-6 rounded bg-gradient-to-r from-primary to-primary/80 transition-all duration-500"
-                            style={{ width: `${widthPct}%` }}
-                          />
+                    return (
+                      <div key={month.month} className="flex items-center gap-3">
+                        <span className="w-10 text-sm font-medium text-muted-foreground">{month.month}</span>
+                        <div className="flex-1">
+                          <div className="h-6 rounded bg-muted">
+                            <div
+                              className="h-6 rounded bg-gradient-to-r from-primary to-primary/80 transition-all duration-500"
+                              style={{ width: `${widthPct}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="w-24 text-right">
+                          <span className="text-sm font-medium text-foreground">
+                            ${Math.round(month.achieved).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="w-16 text-right">
+                          {idx > 0 && (
+                            <span className={`text-xs ${growth >= 0 ? "text-success" : "text-destructive"}`}>
+                              {growth >= 0 ? "+" : ""}{growth.toFixed(0)}%
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="w-24 text-right">
-                        <span className="text-sm font-medium text-foreground">
-                          ${Math.round(month.achieved).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="w-16 text-right">
-                        {idx > 0 && (
-                          <span className={`text-xs ${growth >= 0 ? "text-success" : "text-destructive"}`}>
-                            {growth >= 0 ? "+" : ""}{growth.toFixed(0)}%
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Payout Projection - Now Database-Driven */}
+        {/* Payout Projection - Database-Driven */}
         <Card className="border-border/50 shadow-sm">
           <CardHeader>
             <div className="flex items-center justify-between">

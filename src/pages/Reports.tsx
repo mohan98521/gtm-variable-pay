@@ -7,12 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Calculator, Columns } from "lucide-react";
+import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { calculateProRation, getEffectiveDates, calculateBonusAllocation, calculateAchievementPercent, getPayoutMultiplier } from "@/lib/compensation";
+import { calculateProRation, getEffectiveDates } from "@/lib/compensation";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { useIncentiveAuditData } from "@/hooks/useIncentiveAuditData";
+import { useFiscalYear } from "@/contexts/FiscalYearContext";
 
 const SALES_FUNCTIONS = [
   "All",
@@ -26,7 +28,7 @@ const SALES_FUNCTIONS = [
   "Sales Engineering",
 ];
 
-// All 27 employee fields for the master report (17 core + 9 compensation + 1 derived)
+// All 27 employee fields for the master report
 const ALL_EMPLOYEE_COLUMNS = [
   { key: "full_name", label: "Full Name", default: true },
   { key: "email", label: "Email", default: true },
@@ -46,7 +48,6 @@ const ALL_EMPLOYEE_COLUMNS = [
   { key: "department", label: "Department", default: false },
   { key: "region", label: "Region", default: false },
   { key: "departure_date", label: "Last Working Day", default: false },
-  // Compensation fields
   { key: "employee_role", label: "Employee Role", default: false },
   { key: "incentive_type", label: "Incentive Type", default: false },
   { key: "target_bonus_percent", label: "Target Bonus %", default: true },
@@ -77,7 +78,6 @@ interface Employee {
   manager_employee_id: string | null;
   city: string | null;
   country: string | null;
-  // Compensation target fields
   employee_role: string | null;
   incentive_type: string | null;
   target_bonus_percent: number | null;
@@ -109,19 +109,8 @@ interface UserTarget {
   };
 }
 
-interface PerformanceTarget {
-  employee_id: string;
-  metric_type: string;
-  target_value_usd: number;
-}
-
-interface MonthlyBooking {
-  employee_id: string;
-  booking_type: string;
-  booking_value_usd: number;
-}
-
 export default function Reports() {
+  const { selectedYear } = useFiscalYear();
   const [searchTerm, setSearchTerm] = useState("");
   const [salesFunctionFilter, setSalesFunctionFilter] = useState("All");
   const [visibleColumns, setVisibleColumns] = useState<string[]>(
@@ -143,7 +132,7 @@ export default function Reports() {
 
   // Fetch user targets with profiles
   const { data: userTargets = [] } = useQuery({
-    queryKey: ["user-targets-report"],
+    queryKey: ["user-targets-report", selectedYear],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_targets")
@@ -157,41 +146,17 @@ export default function Reports() {
             date_of_hire
           )
         `)
-        .gte("effective_end_date", "2026-01-01")
-        .lte("effective_start_date", "2026-12-31");
+        .gte("effective_end_date", `${selectedYear}-01-01`)
+        .lte("effective_start_date", `${selectedYear}-12-31`);
       if (error) throw error;
       return data as UserTarget[];
     },
   });
 
-  // Fetch performance targets
-  const { data: performanceTargets = [] } = useQuery({
-    queryKey: ["performance-targets-report"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("performance_targets")
-        .select("*")
-        .eq("effective_year", 2026);
-      if (error) throw error;
-      return data as PerformanceTarget[];
-    },
-  });
+  // Use the database-driven incentive audit hook
+  const { data: incentiveAuditData = [], isLoading: auditLoading } = useIncentiveAuditData(selectedYear);
 
-  // Fetch monthly bookings (actuals)
-  const { data: monthlyBookings = [] } = useQuery({
-    queryKey: ["monthly-bookings-report"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("monthly_bookings")
-        .select("employee_id, booking_type, booking_value_usd")
-        .gte("month_year", "2026-01-01")
-        .lte("month_year", "2026-12-31");
-      if (error) throw error;
-      return data as MonthlyBooking[];
-    },
-  });
-
-  // Create manager lookup map for Manager Full Name
+  // Create manager lookup map
   const managerNameMap = useMemo(() => {
     const map = new Map<string, string>();
     employees.forEach((emp) => {
@@ -222,7 +187,7 @@ export default function Reports() {
       const { startDate, endDate } = getEffectiveDates(
         profile.date_of_hire,
         null,
-        2026
+        selectedYear
       );
 
       const proRation = calculateProRation({
@@ -244,79 +209,12 @@ export default function Reports() {
         proRationFactor: proRation.proRationFactor,
       };
     }).filter(Boolean);
-  }, [userTargets]);
+  }, [userTargets, selectedYear]);
 
-  // Incentive audit data
-  const incentiveAuditData = useMemo(() => {
-    const employeeMap = new Map(employees.map(e => [e.employee_id, e]));
-    const targetMap = new Map<string, { newBooking: number; closing: number }>();
-    const actualMap = new Map<string, { newBooking: number; closing: number }>();
-
-    performanceTargets.forEach((pt) => {
-      const existing = targetMap.get(pt.employee_id) || { newBooking: 0, closing: 0 };
-      if (pt.metric_type === "New Software Booking ARR") {
-        existing.newBooking = pt.target_value_usd;
-      } else if (pt.metric_type === "Closing ARR") {
-        existing.closing = pt.target_value_usd;
-      }
-      targetMap.set(pt.employee_id, existing);
-    });
-
-    monthlyBookings.forEach((mb) => {
-      const existing = actualMap.get(mb.employee_id) || { newBooking: 0, closing: 0 };
-      if (mb.booking_type === "software_arr") {
-        existing.newBooking += mb.booking_value_usd;
-      }
-      actualMap.set(mb.employee_id, existing);
-    });
-
-    return Array.from(targetMap.entries()).map(([empId, targets]) => {
-      const employee = employeeMap.get(empId);
-      const actuals = actualMap.get(empId) || { newBooking: 0, closing: 0 };
-      const salesFunction = employee?.sales_function || "Hunter";
-
-      const userTarget = userTargets.find(ut => 
-        ut.profiles?.email === employee?.email
-      );
-      const targetBonusUsd = userTarget?.target_bonus_usd || 0;
-
-      const allocation = calculateBonusAllocation(targetBonusUsd, salesFunction);
-      
-      const newBookingAchievement = calculateAchievementPercent(actuals.newBooking, targets.newBooking);
-      const closingAchievement = calculateAchievementPercent(actuals.closing, targets.closing);
-
-      const newBookingMultiplier = getPayoutMultiplier(newBookingAchievement, salesFunction, "New Software Booking ARR");
-      const closingMultiplier = getPayoutMultiplier(closingAchievement, salesFunction, "Closing ARR");
-
-      const newBookingPayout = newBookingMultiplier === 0 ? 0 : (newBookingAchievement / 100) * allocation.newSoftwareBookingARR * newBookingMultiplier;
-      const closingPayout = closingMultiplier === 0 ? 0 : (closingAchievement / 100) * allocation.closingARR * closingMultiplier;
-
-      return {
-        employeeId: empId,
-        name: employee?.full_name || empId,
-        salesFunction,
-        metricType: "New Software Booking ARR",
-        actual: actuals.newBooking,
-        target: targets.newBooking,
-        achievementPct: newBookingAchievement,
-        allocation: allocation.newSoftwareBookingARR,
-        multiplier: newBookingMultiplier,
-        payout: newBookingPayout,
-        closingActual: actuals.closing,
-        closingTarget: targets.closing,
-        closingAchievementPct: closingAchievement,
-        closingAllocation: allocation.closingARR,
-        closingMultiplier,
-        closingPayout,
-        totalPayout: newBookingPayout + closingPayout,
-      };
-    });
-  }, [employees, performanceTargets, monthlyBookings, userTargets]);
-
-  // Filter audit data
+  // Filter incentive audit data (now using the database-driven hook)
   const filteredAuditData = useMemo(() => {
     return incentiveAuditData.filter((item) => {
-      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      const matchesSearch = item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFunction = salesFunctionFilter === "All" || item.salesFunction === salesFunctionFilter;
       return matchesSearch && matchesFunction;
@@ -333,67 +231,38 @@ export default function Reports() {
   // Get cell value for employee table
   const getCellValue = (emp: Employee, key: string): string => {
     switch (key) {
-      case "full_name":
-        return emp.full_name;
-      case "email":
-        return emp.email;
-      case "employee_id":
-        return emp.employee_id;
-      case "designation":
-        return emp.designation || "-";
-      case "sales_function":
-        return emp.sales_function || "-";
-      case "business_unit":
-        return emp.business_unit || "-";
-      case "group_name":
-        return emp.group_name || "-";
-      case "function_area":
-        return emp.function_area || "-";
-      case "manager_employee_id":
-        return emp.manager_employee_id || "-";
-      case "manager_full_name":
-        return emp.manager_employee_id ? (managerNameMap.get(emp.manager_employee_id) || emp.manager_employee_id) : "-";
-      case "date_of_hire":
-        return emp.date_of_hire ? format(new Date(emp.date_of_hire), "MMM dd, yyyy") : "-";
-      case "is_active":
-        return emp.is_active ? "Active" : "Inactive";
-      case "city":
-        return emp.city || "-";
-      case "country":
-        return emp.country || "-";
-      case "local_currency":
-        return emp.local_currency;
-      case "department":
-        return emp.department || "-";
-      case "region":
-        return emp.region || "-";
-      case "departure_date":
-        return emp.departure_date ? format(new Date(emp.departure_date), "MMM dd, yyyy") : "-";
-      // Compensation target fields
-      case "employee_role":
-        return emp.employee_role || "-";
-      case "incentive_type":
-        return emp.incentive_type || "-";
-      case "target_bonus_percent":
-        return emp.target_bonus_percent != null ? `${emp.target_bonus_percent}%` : "-";
-      case "tfp_local_currency":
-        return emp.tfp_local_currency != null ? emp.tfp_local_currency.toLocaleString() : "-";
-      case "tvp_local_currency":
-        return emp.tvp_local_currency != null ? emp.tvp_local_currency.toLocaleString() : "-";
-      case "ote_local_currency":
-        return emp.ote_local_currency != null ? emp.ote_local_currency.toLocaleString() : "-";
-      case "tfp_usd":
-        return emp.tfp_usd != null ? `$${emp.tfp_usd.toLocaleString()}` : "-";
-      case "tvp_usd":
-        return emp.tvp_usd != null ? `$${emp.tvp_usd.toLocaleString()}` : "-";
-      case "ote_usd":
-        return emp.ote_usd != null ? `$${emp.ote_usd.toLocaleString()}` : "-";
-      default:
-        return "-";
+      case "full_name": return emp.full_name;
+      case "email": return emp.email;
+      case "employee_id": return emp.employee_id;
+      case "designation": return emp.designation || "-";
+      case "sales_function": return emp.sales_function || "-";
+      case "business_unit": return emp.business_unit || "-";
+      case "group_name": return emp.group_name || "-";
+      case "function_area": return emp.function_area || "-";
+      case "manager_employee_id": return emp.manager_employee_id || "-";
+      case "manager_full_name": return emp.manager_employee_id ? (managerNameMap.get(emp.manager_employee_id) || emp.manager_employee_id) : "-";
+      case "date_of_hire": return emp.date_of_hire ? format(new Date(emp.date_of_hire), "MMM dd, yyyy") : "-";
+      case "is_active": return emp.is_active ? "Active" : "Inactive";
+      case "city": return emp.city || "-";
+      case "country": return emp.country || "-";
+      case "local_currency": return emp.local_currency;
+      case "department": return emp.department || "-";
+      case "region": return emp.region || "-";
+      case "departure_date": return emp.departure_date ? format(new Date(emp.departure_date), "MMM dd, yyyy") : "-";
+      case "employee_role": return emp.employee_role || "-";
+      case "incentive_type": return emp.incentive_type || "-";
+      case "target_bonus_percent": return emp.target_bonus_percent != null ? `${emp.target_bonus_percent}%` : "-";
+      case "tfp_local_currency": return emp.tfp_local_currency != null ? emp.tfp_local_currency.toLocaleString() : "-";
+      case "tvp_local_currency": return emp.tvp_local_currency != null ? emp.tvp_local_currency.toLocaleString() : "-";
+      case "ote_local_currency": return emp.ote_local_currency != null ? emp.ote_local_currency.toLocaleString() : "-";
+      case "tfp_usd": return emp.tfp_usd != null ? `$${emp.tfp_usd.toLocaleString()}` : "-";
+      case "tvp_usd": return emp.tvp_usd != null ? `$${emp.tvp_usd.toLocaleString()}` : "-";
+      case "ote_usd": return emp.ote_usd != null ? `$${emp.ote_usd.toLocaleString()}` : "-";
+      default: return "-";
     }
   };
 
-  // CSV Export functions - always exports all 17 fields
+  // CSV Export functions
   const exportToCSV = (data: any[], filename: string, headers: string[]) => {
     const csvRows = [headers.join(",")];
     data.forEach((row) => {
@@ -413,7 +282,6 @@ export default function Reports() {
     URL.revokeObjectURL(url);
   };
 
-  // Export all 27 fields regardless of visible columns
   const exportEmployees = () => {
     const data = filteredEmployees.map((e) => ({
       full_name: e.full_name,
@@ -434,7 +302,6 @@ export default function Reports() {
       department: e.department || "",
       region: e.region || "",
       departure_date: e.departure_date || "",
-      // Compensation target fields
       employee_role: e.employee_role || "",
       incentive_type: e.incentive_type || "",
       target_bonus_percent: e.target_bonus_percent ?? "",
@@ -461,25 +328,27 @@ export default function Reports() {
   };
 
   const exportIncentiveAudit = () => {
-    const data = filteredAuditData.map((a) => ({
-      name: a.name,
-      sales_function: a.salesFunction,
-      new_booking_actual: a.actual,
-      new_booking_target: a.target,
-      new_booking_achievement: a.achievementPct.toFixed(1) + "%",
-      new_booking_multiplier: a.multiplier,
-      new_booking_payout: a.payout.toFixed(2),
-      closing_actual: a.closingActual,
-      closing_target: a.closingTarget,
-      closing_achievement: a.closingAchievementPct.toFixed(1) + "%",
-      closing_multiplier: a.closingMultiplier,
-      closing_payout: a.closingPayout.toFixed(2),
-      total_payout: a.totalPayout.toFixed(2),
-    }));
-    exportToCSV(data, "incentive_audit", [
-      "name", "sales_function", "new_booking_actual", "new_booking_target", "new_booking_achievement",
-      "new_booking_multiplier", "new_booking_payout", "closing_actual", "closing_target",
-      "closing_achievement", "closing_multiplier", "closing_payout", "total_payout"
+    const exportData: any[] = [];
+    filteredAuditData.forEach((row) => {
+      row.metrics.forEach((metric) => {
+        exportData.push({
+          employee_name: row.employeeName,
+          plan_name: row.planName,
+          sales_function: row.salesFunction || "",
+          metric_name: metric.metricName,
+          target: metric.target,
+          actual: metric.actual,
+          achievement_pct: metric.achievementPct.toFixed(1) + "%",
+          logic_type: metric.logicType,
+          multiplier: metric.multiplier.toFixed(2),
+          allocation: metric.allocation.toFixed(2),
+          payout: metric.payout.toFixed(2),
+        });
+      });
+    });
+    exportToCSV(exportData, "incentive_audit", [
+      "employee_name", "plan_name", "sales_function", "metric_name", "target", 
+      "actual", "achievement_pct", "logic_type", "multiplier", "allocation", "payout"
     ]);
   };
 
@@ -536,13 +405,13 @@ export default function Reports() {
             </CardContent>
           </Card>
 
-          {/* Tab 1: Employee Master Data with Column Toggle */}
+          {/* Tab 1: Employee Master Data */}
           <TabsContent value="employees">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Employee Master Data</CardTitle>
-                  <CardDescription>Complete 27-field employee directory with column toggle (17 core + 9 compensation + Manager Name)</CardDescription>
+                  <CardDescription>Complete employee directory with column toggle</CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <DropdownMenu>
@@ -615,7 +484,7 @@ export default function Reports() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Compensation Snapshot</CardTitle>
-                  <CardDescription>OTE, Target Bonus, and Pro-ration factors for FY2026</CardDescription>
+                  <CardDescription>OTE, Target Bonus, and Pro-ration factors for FY{selectedYear}</CardDescription>
                 </div>
                 <Button onClick={exportCompensation} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
                   <Download className="mr-2 h-4 w-4" />
@@ -658,13 +527,15 @@ export default function Reports() {
             </Card>
           </TabsContent>
 
-          {/* Tab 3: Incentive Audit */}
+          {/* Tab 3: Incentive Audit - Now Database-Driven */}
           <TabsContent value="audit">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Incentive Audit</CardTitle>
-                  <CardDescription>Detailed calculation breakdown: (Actual / Target) × Multiplier × Allocation = Payout</CardDescription>
+                  <CardDescription>
+                    Database-driven calculation: (Actual / Target) × Multiplier × Allocation = Payout
+                  </CardDescription>
                 </div>
                 <Button onClick={exportIncentiveAudit} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
                   <Download className="mr-2 h-4 w-4" />
@@ -672,52 +543,79 @@ export default function Reports() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="w-full whitespace-nowrap">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                        <TableHead className="text-white font-semibold">Name</TableHead>
-                        <TableHead className="text-white font-semibold">Function</TableHead>
-                        <TableHead className="text-white font-semibold text-right">New Booking Actual</TableHead>
-                        <TableHead className="text-white font-semibold text-right">New Booking Target</TableHead>
-                        <TableHead className="text-white font-semibold text-right">Achievement %</TableHead>
-                        <TableHead className="text-white font-semibold text-right">Multiplier</TableHead>
-                        <TableHead className="text-white font-semibold text-right">NB Payout</TableHead>
-                        <TableHead className="text-white font-semibold text-right">Closing Achievement</TableHead>
-                        <TableHead className="text-white font-semibold text-right">Closing Payout</TableHead>
-                        <TableHead className="text-white font-semibold text-right">Total Payout</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredAuditData.map((item) => (
-                        <TableRow key={item.employeeId} className="data-row">
-                          <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell>{item.salesFunction}</TableCell>
-                          <TableCell className="text-right">${item.actual.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">${item.target.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">
-                            <span className={item.achievementPct >= 100 ? "text-success" : item.achievementPct >= 85 ? "text-warning" : "text-destructive"}>
-                              {item.achievementPct.toFixed(1)}%
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">{item.multiplier}x</TableCell>
-                          <TableCell className="text-right">${item.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                          <TableCell className="text-right">
-                            <span className={item.closingAchievementPct >= 100 ? "text-success" : item.closingAchievementPct >= 85 ? "text-warning" : "text-destructive"}>
-                              {item.closingAchievementPct.toFixed(1)}%
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">${item.closingPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                          <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
-                            ${item.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                          </TableCell>
+                {auditLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <ScrollArea className="w-full whitespace-nowrap">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                          <TableHead className="text-white font-semibold">Name</TableHead>
+                          <TableHead className="text-white font-semibold">Plan</TableHead>
+                          <TableHead className="text-white font-semibold">Metric</TableHead>
+                          <TableHead className="text-white font-semibold text-right">Target</TableHead>
+                          <TableHead className="text-white font-semibold text-right">Actual</TableHead>
+                          <TableHead className="text-white font-semibold text-right">Achievement</TableHead>
+                          <TableHead className="text-white font-semibold text-right">Multiplier</TableHead>
+                          <TableHead className="text-white font-semibold text-right">Allocation</TableHead>
+                          <TableHead className="text-white font-semibold text-right">Payout</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <ScrollBar orientation="horizontal" />
-                </ScrollArea>
-                {filteredAuditData.length === 0 && (
+                      </TableHeader>
+                      <TableBody>
+                        {filteredAuditData.flatMap((row) => 
+                          row.metrics.map((metric, idx) => (
+                            <TableRow key={`${row.employeeId}-${metric.metricName}`} className="data-row">
+                              {idx === 0 ? (
+                                <TableCell className="font-medium" rowSpan={row.metrics.length}>
+                                  {row.employeeName}
+                                </TableCell>
+                              ) : null}
+                              {idx === 0 ? (
+                                <TableCell rowSpan={row.metrics.length}>{row.planName}</TableCell>
+                              ) : null}
+                              <TableCell>
+                                {metric.metricName}
+                                {metric.isGated && (
+                                  <span className="ml-1 text-xs text-warning">(Gate: {metric.gateThreshold}%)</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">${metric.target.toLocaleString()}</TableCell>
+                              <TableCell className="text-right">${metric.actual.toLocaleString()}</TableCell>
+                              <TableCell className="text-right">
+                                <span className={
+                                  metric.achievementPct >= 100 ? "text-success" : 
+                                  metric.achievementPct >= 85 ? "text-warning" : "text-destructive"
+                                }>
+                                  {metric.achievementPct.toFixed(1)}%
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">{metric.multiplier.toFixed(2)}x</TableCell>
+                              <TableCell className="text-right">${metric.allocation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                              <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                                ${metric.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                        {/* Total row per employee */}
+                        {filteredAuditData.map((row) => (
+                          <TableRow key={`${row.employeeId}-total`} className="bg-muted/50 font-semibold">
+                            <TableCell colSpan={8} className="text-right">
+                              Total for {row.employeeName}:
+                            </TableCell>
+                            <TableCell className="text-right text-[hsl(var(--azentio-teal))]">
+                              ${row.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
+                )}
+                {!auditLoading && filteredAuditData.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">No incentive data found</p>
                 )}
               </CardContent>
