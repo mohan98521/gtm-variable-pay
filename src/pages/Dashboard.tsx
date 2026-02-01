@@ -1,8 +1,9 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MetricsTable } from "@/components/dashboard/MetricsTable";
 import { MonthlyPerformanceTable } from "@/components/dashboard/MonthlyPerformanceTable";
+import { CommissionTable } from "@/components/dashboard/CommissionTable";
 import { PayoutSimulator } from "@/components/dashboard/PayoutSimulator";
-import { Calendar, Loader2, UserCircle, Target, DollarSign } from "lucide-react";
+import { Calendar, Loader2, UserCircle, Target, DollarSign, Briefcase } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCurrentUserCompensation } from "@/hooks/useCurrentUserCompensation";
@@ -59,6 +60,10 @@ export default function Dashboard() {
     return `$${Math.round(value).toLocaleString()}`;
   };
 
+  const grandTotalEligible = compensation.totalEligiblePayout + compensation.totalCommissionPayout;
+  const grandTotalPaid = compensation.totalPaid + compensation.totalCommissionPaid;
+  const grandTotalHoldback = compensation.totalHoldback + compensation.totalCommissionHoldback;
+
   return (
     <AppLayout>
       <div className="p-6 lg:p-8 space-y-6">
@@ -82,7 +87,7 @@ export default function Dashboard() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card className="border-border/50 shadow-sm">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -106,9 +111,9 @@ export default function Dashboard() {
                   <DollarSign className="h-5 w-5 text-success" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Eligible Payout</p>
+                  <p className="text-sm text-muted-foreground">Total Eligible</p>
                   <p className="text-xl font-semibold text-success">
-                    {formatCurrency(compensation.totalEligiblePayout)}
+                    {formatCurrency(grandTotalEligible)}
                   </p>
                 </div>
               </div>
@@ -124,7 +129,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm text-muted-foreground">Amount Paid (75%)</p>
                   <p className="text-xl font-semibold text-foreground">
-                    {formatCurrency(compensation.totalPaid)}
+                    {formatCurrency(grandTotalPaid)}
                   </p>
                 </div>
               </div>
@@ -140,7 +145,23 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm text-muted-foreground">Holding (25%)</p>
                   <p className="text-xl font-semibold text-muted-foreground">
-                    {formatCurrency(compensation.totalHoldback)}
+                    {formatCurrency(grandTotalHoldback)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-secondary">
+                  <Briefcase className="h-5 w-5 text-secondary-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Commission</p>
+                  <p className="text-xl font-semibold text-foreground">
+                    {formatCurrency(compensation.totalCommissionPayout)}
                   </p>
                 </div>
               </div>
@@ -148,7 +169,7 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Table 1: Metrics Summary */}
+        {/* Table 1: Variable Pay Metrics Summary */}
         <MetricsTable
           metrics={compensation.metrics}
           totalEligiblePayout={compensation.totalEligiblePayout}
@@ -157,12 +178,21 @@ export default function Dashboard() {
           clawbackAmount={compensation.clawbackAmount}
         />
 
-        {/* Table 2: Monthly Performance */}
+        {/* Table 2: Commission Structure Summary */}
+        <CommissionTable
+          commissions={compensation.commissions}
+          totalGrossPayout={compensation.totalCommissionPayout}
+          totalPaid={compensation.totalCommissionPaid}
+          totalHoldback={compensation.totalCommissionHoldback}
+        />
+
+        {/* Table 3: Monthly Performance */}
         <MonthlyPerformanceTable monthlyBreakdown={compensation.monthlyBreakdown} />
 
-        {/* Table 3: What-If Simulator */}
+        {/* Table 4: What-If Simulator */}
         <PayoutSimulator
           metrics={compensation.metrics}
+          commissions={compensation.commissions}
           planMetrics={compensation.planMetrics}
           targetBonusUsd={compensation.targetBonusUsd}
         />
