@@ -163,7 +163,17 @@ serve(async (req) => {
         console.log('Profile created for user:', newUserId);
       }
     } else {
-      console.log('Profile already exists for user:', newUserId);
+      // Profile exists but may not have employee_id, update it
+      const { error: updateProfileError } = await supabaseAdmin
+        .from('profiles')
+        .update({ employee_id: employee_id })
+        .eq('id', newUserId);
+
+      if (updateProfileError) {
+        console.error('Failed to update profile employee_id:', updateProfileError.message);
+      } else {
+        console.log('Updated profile with employee_id for user:', newUserId);
+      }
     }
 
     // Assign sales_rep role to the new user
