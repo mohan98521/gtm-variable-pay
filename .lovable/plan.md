@@ -1,38 +1,69 @@
 
 
-## Add Performance Targets Permission to Database
+## Quick Fix: Unified Metric Types Dropdown
 
-### Current Status
+### Overview
 
-The Performance Targets Management UI has been implemented, but the `tab:performance_targets` permission needs to be added to the `role_permissions` table for admin and gtm_ops roles.
+Update the `useMetricTypes` hook to automatically combine metric types from both `plan_metrics` and `plan_commissions` tables, giving the Performance Targets form a complete list of all metrics defined in compensation plans.
 
-### Required Database Change
+---
 
-Insert two records into the `role_permissions` table:
+### Current vs Updated Behavior
 
-| Role | Permission Key | Is Allowed |
-|------|---------------|------------|
-| admin | tab:performance_targets | true |
-| gtm_ops | tab:performance_targets | true |
+| Current | After Quick Fix |
+|---------|-----------------|
+| Only shows: Closing ARR, New Software Booking ARR | Shows ALL: Closing ARR, CR/ER, Implementation, Managed Services, New Software Booking ARR, Perpetual License |
+| Queries only `plan_metrics` | Queries both `plan_metrics` and `plan_commissions` |
 
-### Implementation
+---
 
-Create a database migration to insert these permission records:
+### File to Modify
 
-```sql
-INSERT INTO role_permissions (role, permission_key, is_allowed)
-VALUES 
-  ('admin', 'tab:performance_targets', true),
-  ('gtm_ops', 'tab:performance_targets', true)
-ON CONFLICT (role, permission_key) DO NOTHING;
+**`src/hooks/usePerformanceTargets.ts`**
+
+Update the `useMetricTypes` function (lines 233-249) to:
+
+1. Query `plan_metrics` for unique `metric_name` values
+2. Query `plan_commissions` for unique `commission_type` values
+3. Combine both lists
+4. Remove duplicates
+5. Sort alphabetically
+
+---
+
+### Updated Logic
+
+```text
+useMetricTypes hook:
+1. Fetch plan_metrics.metric_name (unique values)
+2. Fetch plan_commissions.commission_type (unique values)
+3. Merge both arrays
+4. Deduplicate using Set
+5. Sort alphabetically
+6. Return combined list
 ```
 
-This will:
-1. Add the permission for admin users to see the Performance Targets tab
-2. Add the permission for gtm_ops users to see the Performance Targets tab
-3. Use `ON CONFLICT DO NOTHING` to avoid errors if the records already exist
+---
 
 ### Result
 
-After this migration runs, users with admin or gtm_ops roles will be able to see and access the Performance Targets tab in the Admin section.
+The Performance Targets form dropdown will automatically show all 6 metric types:
+
+- Closing ARR
+- CR/ER
+- Implementation
+- Managed Services
+- New Software Booking ARR
+- Perpetual License
+
+Plus the "Custom..." option for any additional metrics not in the database.
+
+---
+
+### Benefits
+
+- No database changes required
+- Automatically picks up new metrics when added to comp plans
+- Keeps the "Custom..." fallback option
+- Single code change in one hook
 
