@@ -234,16 +234,28 @@ export function useMetricTypes() {
   return useQuery({
     queryKey: ["metric_types"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch metrics from plan_metrics table
+      const { data: metricsData, error: metricsError } = await supabase
         .from("plan_metrics")
-        .select("metric_name")
-        .order("metric_name");
+        .select("metric_name");
 
-      if (error) throw error;
+      if (metricsError) throw metricsError;
 
-      // Get unique metric names
-      const uniqueMetrics = [...new Set(data?.map(m => m.metric_name) || [])];
-      return uniqueMetrics;
+      // Fetch commission types from plan_commissions table
+      const { data: commissionsData, error: commissionsError } = await supabase
+        .from("plan_commissions")
+        .select("commission_type");
+
+      if (commissionsError) throw commissionsError;
+
+      // Combine both sources
+      const metricNames = metricsData?.map(m => m.metric_name) || [];
+      const commissionTypes = commissionsData?.map(c => c.commission_type) || [];
+
+      // Merge, deduplicate, and sort alphabetically
+      const allMetrics = [...new Set([...metricNames, ...commissionTypes])].sort();
+
+      return allMetrics;
     },
   });
 }
