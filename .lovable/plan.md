@@ -1,54 +1,85 @@
 
-## Modify Deal Participant Fields ✅ COMPLETED
+
+## Quick Fix: Add Customer Name Field to Deals
 
 ### Overview
 
-Updated the deals section to remove Channel Sales from the UI and add three new participant roles: Product Specialist Head, Solution Manager, and Solution Manager Head.
+Add the missing `customer_name` field to the Data Inputs deals section to match the Closing ARR structure and provide complete customer identification.
 
 ---
 
-### Changes Summary
+### Current State
 
-| Action | Field | Status |
-|--------|-------|--------|
-| REMOVE (UI only) | channel_sales_employee_id, channel_sales_name | ✅ Done |
-| ADD | product_specialist_head_employee_id, product_specialist_head_name | ✅ Done |
-| ADD | solution_manager_employee_id, solution_manager_name | ✅ Done |
-| ADD | solution_manager_head_employee_id, solution_manager_head_name | ✅ Done |
+| Table | Has customer_code | Has customer_name |
+|-------|-------------------|-------------------|
+| `closing_arr_actuals` | ✅ Yes | ✅ Yes |
+| `deals` | ✅ Yes | ❌ **Missing** |
 
 ---
 
-### Completed Changes
+### Changes Required
 
-1. **Database Migration** ✅
-   - Added 6 new columns to the `deals` table
-   - Channel sales columns retained for historical data
+**1. Database Migration**
 
-2. **`src/hooks/useDeals.ts`** ✅
-   - Updated Deal interface with new fields
-   - Updated CreateDealInput interface
-   - Updated PARTICIPANT_ROLES constant (removed channel_sales, added 3 new roles)
+Add a new column to the `deals` table:
 
-3. **`src/components/data-inputs/DealFormDialog.tsx`** ✅
-   - Updated Zod schema with new fields
-   - Removed Channel Sales dropdown
-   - Added Product Specialist Head, Solution Manager, Solution Manager Head dropdowns
-   - Updated form defaults, reset logic, and submit handlers
+```sql
+ALTER TABLE deals 
+ADD COLUMN IF NOT EXISTS customer_name text;
+```
 
-4. **`src/components/data-inputs/DealsBulkUpload.tsx`** ✅
-   - Updated CSV template headers
-   - Updated ParsedDeal interface
-   - Updated parsing and upload logic
+**2. Update Hook (`src/hooks/useDeals.ts`)**
+
+Add to the `Deal` interface:
+- `customer_name: string | null`
+
+Add to the `CreateDealInput` interface:
+- `customer_name?: string`
+
+**3. Update Form Dialog (`src/components/data-inputs/DealFormDialog.tsx`)**
+
+- Add `customer_name` to the Zod schema (optional string)
+- Add a new "Customer Name" input field in the Deal Identity section
+- Update form defaults and reset logic
+- Include in submit data
+
+**4. Update Bulk Upload (`src/components/data-inputs/DealsBulkUpload.tsx`)**
+
+- Add `customer_name` to CSV template headers
+- Update `ParsedDeal` interface
+- Add field mapping in parse logic
 
 ---
 
-### Form Layout After Changes
+### Form Layout After Change
 
-The Participants section now has 8 dropdowns in a 2-column grid:
+The Deal Identity section will have 4 fields in the first row:
 
-| Row | Column 1 | Column 2 |
-|-----|----------|----------|
-| 1 | Sales Rep | Sales Head |
-| 2 | Sales Engineering | Sales Engineering Head |
-| 3 | Product Specialist | Product Specialist Head |
-| 4 | Solution Manager | Solution Manager Head |
+| Field 1 | Field 2 | Field 3 | Field 4 |
+|---------|---------|---------|---------|
+| Project ID | Customer Code | **Customer Name** | Product |
+
+---
+
+### Technical Details
+
+**Schema field:**
+```text
+customer_name: z.string().optional()
+```
+
+**Form field placement:** Right after Customer Code, before Product in the Deal Identity grid.
+
+**Default value:** Empty string
+
+---
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| Database | Add `customer_name` column to `deals` table |
+| `src/hooks/useDeals.ts` | Add field to interfaces |
+| `src/components/data-inputs/DealFormDialog.tsx` | Add form field and validation |
+| `src/components/data-inputs/DealsBulkUpload.tsx` | Add to CSV template and parsing |
+
