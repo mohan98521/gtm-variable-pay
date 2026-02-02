@@ -18,6 +18,7 @@ export interface PlanMetric {
   gate_threshold_percent: number | null;
   payout_on_booking_pct: number;
   payout_on_collection_pct: number;
+  payout_on_year_end_pct: number;
   created_at: string;
   multiplier_grids?: MultiplierGrid[];
 }

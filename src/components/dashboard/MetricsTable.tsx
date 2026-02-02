@@ -8,6 +8,7 @@ interface MetricsTableProps {
   totalEligiblePayout: number;
   totalPaid: number;
   totalHoldback: number;
+  totalYearEndHoldback: number;
   clawbackAmount: number;
 }
 
@@ -25,20 +26,23 @@ const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
 // Helper to determine if all metrics have the same payout split
 const getUniformPayoutSplit = (metrics: MetricCompensation[]) => {
-  if (metrics.length === 0) return { uniform: true, bookingPct: 75, collectionPct: 25 };
+  if (metrics.length === 0) return { uniform: true, bookingPct: 70, collectionPct: 25, yearEndPct: 5 };
   
-  const firstBooking = metrics[0].payoutOnBookingPct ?? 75;
+  const firstBooking = metrics[0].payoutOnBookingPct ?? 70;
   const firstCollection = metrics[0].payoutOnCollectionPct ?? 25;
+  const firstYearEnd = metrics[0].payoutOnYearEndPct ?? 5;
   
   const allSame = metrics.every(
-    m => (m.payoutOnBookingPct ?? 75) === firstBooking && 
-         (m.payoutOnCollectionPct ?? 25) === firstCollection
+    m => (m.payoutOnBookingPct ?? 70) === firstBooking && 
+         (m.payoutOnCollectionPct ?? 25) === firstCollection &&
+         (m.payoutOnYearEndPct ?? 5) === firstYearEnd
   );
   
   return { 
     uniform: allSame, 
     bookingPct: firstBooking, 
-    collectionPct: firstCollection 
+    collectionPct: firstCollection,
+    yearEndPct: firstYearEnd,
   };
 };
 
@@ -47,6 +51,7 @@ export function MetricsTable({
   totalEligiblePayout, 
   totalPaid, 
   totalHoldback,
+  totalYearEndHoldback,
   clawbackAmount 
 }: MetricsTableProps) {
   const payoutSplit = getUniformPayoutSplit(metrics);
@@ -57,8 +62,11 @@ export function MetricsTable({
     ? `Booking (${payoutSplit.bookingPct}%)` 
     : "Booking";
   const collectionHeader = payoutSplit.uniform 
-    ? `Holdback (${payoutSplit.collectionPct}%)` 
-    : "Holdback";
+    ? `Collection (${payoutSplit.collectionPct}%)` 
+    : "Collection";
+  const yearEndHeader = payoutSplit.uniform 
+    ? `Year End (${payoutSplit.yearEndPct}%)` 
+    : "Year End";
 
   return (
     <Card className="border-border/50 shadow-sm">
@@ -79,12 +87,13 @@ export function MetricsTable({
                 <TableHead className="text-right font-semibold">Eligible Payout</TableHead>
                 <TableHead className="text-right font-semibold">{bookingHeader}</TableHead>
                 <TableHead className="text-right font-semibold">{collectionHeader}</TableHead>
+                <TableHead className="text-right font-semibold">{yearEndHeader}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {metrics.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     No metrics configured for this plan
                   </TableCell>
                 </TableRow>
@@ -111,7 +120,7 @@ export function MetricsTable({
                           )}
                           {!payoutSplit.uniform && (
                             <Badge variant="outline" className="text-xs">
-                              {metric.payoutOnBookingPct ?? 75}/{metric.payoutOnCollectionPct ?? 25} split
+                              {metric.payoutOnBookingPct ?? 70}/{metric.payoutOnCollectionPct ?? 25}/{metric.payoutOnYearEndPct ?? 5}
                             </Badge>
                           )}
                         </div>
@@ -151,6 +160,9 @@ export function MetricsTable({
                     <TableCell className="text-right text-muted-foreground">
                       {formatCurrency(metric.holdback)}
                     </TableCell>
+                    <TableCell className="text-right text-warning">
+                      {formatCurrency(metric.yearEndHoldback)}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -167,13 +179,16 @@ export function MetricsTable({
                 <TableCell className="text-right font-bold text-muted-foreground">
                   {formatCurrency(totalHoldback)}
                 </TableCell>
+                <TableCell className="text-right font-bold text-warning">
+                  {formatCurrency(totalYearEndHoldback)}
+                </TableCell>
               </TableRow>
               {clawbackAmount > 0 && (
                 <TableRow className="bg-destructive/10">
                   <TableCell colSpan={5} className="font-semibold text-destructive">
                     Clawback
                   </TableCell>
-                  <TableCell colSpan={3} className="text-right font-bold text-destructive">
+                  <TableCell colSpan={4} className="text-right font-bold text-destructive">
                     -{formatCurrency(clawbackAmount)}
                   </TableCell>
                 </TableRow>

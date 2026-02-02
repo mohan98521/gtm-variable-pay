@@ -175,6 +175,7 @@ export default function Dashboard() {
           totalEligiblePayout={compensation.totalEligiblePayout}
           totalPaid={compensation.totalPaid}
           totalHoldback={compensation.totalHoldback}
+          totalYearEndHoldback={compensation.totalYearEndHoldback}
           clawbackAmount={compensation.clawbackAmount}
         />
 

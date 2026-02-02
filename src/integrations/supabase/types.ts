@@ -973,6 +973,7 @@ export type Database = {
           min_threshold_usd: number | null
           payout_on_booking_pct: number | null
           payout_on_collection_pct: number | null
+          payout_on_year_end_pct: number | null
           plan_id: string
         }
         Insert: {
@@ -984,6 +985,7 @@ export type Database = {
           min_threshold_usd?: number | null
           payout_on_booking_pct?: number | null
           payout_on_collection_pct?: number | null
+          payout_on_year_end_pct?: number | null
           plan_id: string
         }
         Update: {
@@ -995,6 +997,7 @@ export type Database = {
           min_threshold_usd?: number | null
           payout_on_booking_pct?: number | null
           payout_on_collection_pct?: number | null
+          payout_on_year_end_pct?: number | null
           plan_id?: string
         }
         Relationships: [
@@ -1016,6 +1019,7 @@ export type Database = {
           metric_name: string
           payout_on_booking_pct: number | null
           payout_on_collection_pct: number | null
+          payout_on_year_end_pct: number | null
           plan_id: string
           weightage_percent: number
         }
@@ -1027,6 +1031,7 @@ export type Database = {
           metric_name: string
           payout_on_booking_pct?: number | null
           payout_on_collection_pct?: number | null
+          payout_on_year_end_pct?: number | null
           plan_id: string
           weightage_percent: number
         }
@@ -1038,6 +1043,7 @@ export type Database = {
           metric_name?: string
           payout_on_booking_pct?: number | null
           payout_on_collection_pct?: number | null
+          payout_on_year_end_pct?: number | null
           plan_id?: string
           weightage_percent?: number
         }
