@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Download, FileSpreadsheet, Loader2, CheckCircle, XCircle, Info } from "lucide-react";
 import { useMyClosingARR, ClosingARRRecord } from "@/hooks/useMyActualsData";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { generateCSV, downloadCSV } from "@/lib/csvExport";
 import { generateXLSX, downloadXLSX } from "@/lib/xlsxExport";
 import { format } from "date-fns";
@@ -64,12 +65,17 @@ function getMonthOptions(year: number) {
 
 export function MyClosingARRReport() {
   const { selectedYear } = useFiscalYear();
+  const { canViewAllData } = useUserRole();
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   
   const monthParam = selectedMonth === "all" ? null : selectedMonth;
   const { data: records = [], isLoading } = useMyClosingARR(monthParam);
   
   const monthOptions = useMemo(() => getMonthOptions(selectedYear), [selectedYear]);
+  
+  const reportDescription = canViewAllData()
+    ? `All Closing ARR records for fiscal year ${selectedYear}`
+    : `Closing ARR records contributing to your incentive computation for ${selectedYear}`;
 
   // Calculate totals - for Full Year, use latest month logic
   const totals = useMemo(() => {
@@ -119,9 +125,9 @@ export function MyClosingARRReport() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div>
-          <CardTitle>My Closing ARR (Actuals)</CardTitle>
+          <CardTitle>{canViewAllData() ? "All Closing ARR (Actuals)" : "My Closing ARR (Actuals)"}</CardTitle>
           <CardDescription>
-            Closing ARR records contributing to your incentive computation for {selectedYear}
+            {reportDescription}
           </CardDescription>
         </div>
         <div className="flex items-center gap-3">
