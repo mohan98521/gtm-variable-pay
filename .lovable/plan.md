@@ -1,164 +1,262 @@
 
-# Fix Closing ARR Computation Logic
+# My Actuals Reports: Deals and Closing ARR
 
-## Problems Identified
-
-### Issue 1: Eligibility Filter Not Applied in Achievement Calculation
-Currently, the system sums ALL Closing ARR records for achievement. Per business rules, only **Eligible Closing ARR** (projects with `end_date > Dec 31, {fiscalYear}`) should be counted toward achievement.
-
-**Current:** Uses total Closing ARR = $2.08M (12 projects)  
-**Expected:** Uses Eligible Closing ARR = $181K (2 projects with end_date > 2026-12-31)
-
-### Issue 2: Sales Head Attribution Missing for Closing ARR
-The Incentive Audit report only checks `sales_rep_employee_id` for Closing ARR attribution. Your bulk upload includes both `sales_rep_id` and `sales_head_id`, but the Sales Head is not being credited.
-
-### Issue 3: Non-Cumulative Monthly Logic for Closing ARR
-Unlike Deals (which ARE cumulative), Closing ARR uploads are monthly **snapshots** of the ARR portfolio. When you upload Jan with $500K and Feb with $700K, the Feb value represents the current portfolio state, not an addition.
-
-**Current Logic:** YTD = Jan + Feb + ... (cumulative)  
-**Correct Logic:** Use only the **latest month's** eligible Closing ARR
+## Overview
+Build two new report tabs on the Reports page for all users to view the actual deal and Closing ARR records being used in their incentive computations. Both reports will include:
+- Month filter with "Full Year" as default
+- All fields captured in the bulk upload
+- Export to both CSV and XLSX formats
+- For Closing ARR: an "Eligible" column showing which records count toward achievement
 
 ---
 
-## Solution Overview
+## Solution Architecture
 
-### Step 1: Update `useCurrentUserCompensation.ts`
-- Add eligibility filter: only include records where `end_date > Dec 31, {fiscalYear}`
-- Update query to use OR condition for both `sales_rep_employee_id` and `sales_head_employee_id`
-- Change aggregation logic: instead of summing all months, use only the **latest month** data
+### New Files to Create
 
-### Step 2: Update `useUserActuals.ts`
-- Apply same eligibility filter and latest-month logic for Closing ARR
-- Ensure Sales Head attribution works correctly
+**1. `src/hooks/useMyActualsData.ts`**
+A hook to fetch actual deal and closing ARR records for the current user:
+- `useMyDeals(selectedMonth)` - Returns full deal records where user is ANY participant (8 roles)
+- `useMyClosingARR(selectedMonth)` - Returns full closing ARR records with eligibility flag
 
-### Step 3: Update `useIncentiveAuditData.ts`
-- Apply eligibility filter in the Closing ARR query
-- Add `sales_head_employee_id` attribution for Closing ARR aggregation
-- Implement latest-month logic instead of cumulative sum
+**2. `src/components/reports/MyDealsReport.tsx`**
+A table component showing all deals for the current user including:
+- Month filter (Full Year + individual months)
+- All deal fields from bulk upload (approx 30 columns)
+- Export CSV and XLSX buttons
+- Summary row showing totals
 
-### Step 4: Update Monthly Breakdown Display
-- Keep monthly breakdown showing each month's values for transparency
-- Clearly indicate which month is being used for achievement
+**3. `src/components/reports/MyClosingARRReport.tsx`**
+A table component showing all Closing ARR records including:
+- Month filter (Full Year + individual months)
+- All Closing ARR fields from bulk upload (approx 28 columns)
+- Eligible Closing ARR column (calculated: end_date > Dec 31, fiscal year)
+- Export CSV and XLSX buttons
+- Summary showing Total vs Eligible Closing ARR
+
+**4. `src/lib/xlsxExport.ts`**
+A utility for exporting data to XLSX format (Excel):
+- Uses existing `xlsx` library already installed
+- Companion to existing `csvExport.ts`
 
 ---
 
 ## Technical Details
 
-### File 1: `src/hooks/useCurrentUserCompensation.ts`
-
-**Changes to Closing ARR query (lines 244-260):**
+### File 1: `src/lib/xlsxExport.ts`
 
 ```typescript
-// Before: Fetches ALL records and sums cumulatively
-const { data: closingArr } = await supabase
-  .from("closing_arr_actuals")
-  .select("month_year, closing_arr, sales_rep_employee_id, sales_head_employee_id")
-  .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
-  .gte("month_year", fiscalYearStart)
-  .lte("month_year", fiscalYearEnd);
+import * as XLSX from "xlsx";
 
-// After: Add eligibility filter and use latest month only
-const { data: closingArr } = await supabase
-  .from("closing_arr_actuals")
-  .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id")
-  .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
-  .gte("month_year", fiscalYearStart)
-  .lte("month_year", fiscalYearEnd)
-  .gt("end_date", `${selectedYear}-12-31`); // ELIGIBILITY FILTER
+export function generateXLSX<T>(
+  data: T[],
+  columns: { key: keyof T | string; header: string; getValue?: (row: T) => string | number | null }[],
+  sheetName: string = "Data"
+): Blob {
+  // Convert data to array of arrays with headers
+  const headers = columns.map(col => col.header);
+  const rows = data.map(row => 
+    columns.map(col => col.getValue ? col.getValue(row) : row[col.key as keyof T] ?? "")
+  );
+  
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  
+  const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  return new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
 
-// New aggregation logic:
-// 1. Group by month
-// 2. Use only the LATEST month's total for achievement
-// 3. Keep all months for monthly breakdown display
+export function downloadXLSX(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 ```
 
-**New aggregation logic:**
+### File 2: `src/hooks/useMyActualsData.ts`
+
 ```typescript
-const closingByMonth = new Map<string, number>();
-(closingArr || []).forEach((arr) => {
-  const monthKey = arr.month_year?.substring(0, 7) || "";
-  closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + (arr.closing_arr || 0));
-});
+// All 8 participant role columns
+const PARTICIPANT_ROLES = [
+  'sales_rep_employee_id',
+  'sales_head_employee_id',
+  'sales_engineering_employee_id',
+  'sales_engineering_head_employee_id',
+  'product_specialist_employee_id',
+  'product_specialist_head_employee_id',
+  'solution_manager_employee_id',
+  'solution_manager_head_employee_id',
+] as const;
 
-// Find the latest month with data
-const sortedMonths = Array.from(closingByMonth.keys()).sort();
-const latestMonth = sortedMonths[sortedMonths.length - 1];
-const closingYtd = latestMonth ? closingByMonth.get(latestMonth) || 0 : 0;
+export function useMyDeals(selectedMonth: string | null) {
+  // Fetch current user's employee_id
+  // Query ALL deal columns for fiscal year
+  // Client-side filter for records where user is ANY participant
+  // If selectedMonth provided, filter to that month only
+  // Return full deal records
+}
+
+export function useMyClosingARR(selectedMonth: string | null) {
+  // Fetch current user's employee_id
+  // Query ALL closing_arr_actuals columns with sales_rep OR sales_head attribution
+  // No eligibility filter at query level (we show all, flag eligible ones)
+  // If selectedMonth provided, filter to that month only
+  // Return full records with calculated 'isEligible' flag
+}
 ```
+
+### File 3: `src/components/reports/MyDealsReport.tsx`
+
+Structure:
+- Card with header "My Deals (Actuals)"
+- Month filter dropdown: "Full Year" (default) + 12 individual months
+- Horizontal scroll table with all deal columns:
+  - Project ID, Customer Code, Customer Name, Region, Country
+  - BU, Product, Type of Proposal, Month
+  - First Year AMC (USD), First Year Subscription (USD), New Software Booking ARR (USD)
+  - Managed Services (USD), Implementation (USD), CR (USD), ER (USD)
+  - TCV (USD), Perpetual License (USD), GP Margin %
+  - Sales Rep Name/ID, Sales Head Name/ID
+  - SE Name/ID, SE Head Name/ID
+  - Product Specialist Name/ID, Product Specialist Head Name/ID
+  - Solution Manager Name/ID, Solution Manager Head Name/ID
+  - Status, Notes
+- Footer summary: Total ARR
+- Export buttons: CSV and XLSX
+
+### File 4: `src/components/reports/MyClosingARRReport.tsx`
+
+Structure:
+- Card with header "My Closing ARR (Actuals)"
+- Month filter dropdown: "Full Year" (default) + 12 individual months
+- Note explaining eligibility: "Records with End Date > Dec 31, {fiscalYear} are eligible for achievement"
+- Horizontal scroll table with all columns:
+  - Month, BU, Product, PID, Customer Code, Customer Name
+  - Order Category, Status, Order Category 2
+  - Opening ARR, CR, ALS+Others, New, Inflation
+  - Discount/Decrement, Churn, Adjustment, Closing ARR
+  - Country, Revised Region, Start Date, End Date, Renewal Status
+  - Sales Rep Employee ID, Sales Rep Name
+  - Sales Head Employee ID, Sales Head Name
+  - **Eligible Closing ARR** (new column: Closing ARR if eligible, 0 if not)
+  - **Eligible** (Yes/No indicator)
+- Footer summary: Total Closing ARR and Eligible Closing ARR
+- Export buttons: CSV and XLSX
+
+### File 5: Update `src/pages/Reports.tsx`
+
+Add two new tabs to the existing TabsList:
+- "My Deals" with Briefcase icon
+- "My Closing ARR" with Database icon
+
+Add corresponding TabsContent sections using the new components.
 
 ---
 
-### File 2: `src/hooks/useUserActuals.ts`
+## Column Specifications
 
-**Changes to useUserActuals (lines 108-137):**
-- Add `end_date` to the select query
-- Apply eligibility filter: `.gt("end_date", `${selectedYear}-12-31`)`
-- Change aggregation to use latest month only
+### Deals Report Columns (All Bulk Upload Fields)
 
-**Changes to useEmployeeActuals (lines 195-204):**
-- Add `sales_head_employee_id` to the OR condition
-- Add eligibility filter
-- Change to latest-month logic
+| Column | Header | Source |
+|--------|--------|--------|
+| project_id | Project ID | deal.project_id |
+| customer_code | Customer Code | deal.customer_code |
+| customer_name | Customer Name | deal.customer_name |
+| region | Region | deal.region |
+| country | Country | deal.country |
+| bu | Business Unit | deal.bu |
+| product | Product | deal.product |
+| type_of_proposal | Type of Proposal | deal.type_of_proposal |
+| month_year | Month | deal.month_year |
+| first_year_amc_usd | First Year AMC (USD) | deal.first_year_amc_usd |
+| first_year_subscription_usd | First Year Subscription (USD) | deal.first_year_subscription_usd |
+| new_software_booking_arr_usd | New Software Booking ARR (USD) | deal.new_software_booking_arr_usd |
+| managed_services_usd | Managed Services (USD) | deal.managed_services_usd |
+| implementation_usd | Implementation (USD) | deal.implementation_usd |
+| cr_usd | CR (USD) | deal.cr_usd |
+| er_usd | ER (USD) | deal.er_usd |
+| tcv_usd | TCV (USD) | deal.tcv_usd |
+| perpetual_license_usd | Perpetual License (USD) | deal.perpetual_license_usd |
+| gp_margin_percent | GP Margin % | deal.gp_margin_percent |
+| sales_rep_employee_id | Sales Rep ID | deal.sales_rep_employee_id |
+| sales_rep_name | Sales Rep Name | deal.sales_rep_name |
+| sales_head_employee_id | Sales Head ID | deal.sales_head_employee_id |
+| sales_head_name | Sales Head Name | deal.sales_head_name |
+| sales_engineering_employee_id | SE ID | deal.sales_engineering_employee_id |
+| sales_engineering_name | SE Name | deal.sales_engineering_name |
+| sales_engineering_head_employee_id | SE Head ID | deal.sales_engineering_head_employee_id |
+| sales_engineering_head_name | SE Head Name | deal.sales_engineering_head_name |
+| product_specialist_employee_id | Product Specialist ID | deal.product_specialist_employee_id |
+| product_specialist_name | Product Specialist Name | deal.product_specialist_name |
+| product_specialist_head_employee_id | Product Specialist Head ID | deal.product_specialist_head_employee_id |
+| product_specialist_head_name | Product Specialist Head Name | deal.product_specialist_head_name |
+| solution_manager_employee_id | Solution Manager ID | deal.solution_manager_employee_id |
+| solution_manager_name | Solution Manager Name | deal.solution_manager_name |
+| solution_manager_head_employee_id | Solution Manager Head ID | deal.solution_manager_head_employee_id |
+| solution_manager_head_name | Solution Manager Head Name | deal.solution_manager_head_name |
+| status | Status | deal.status |
+| notes | Notes | deal.notes |
+
+### Closing ARR Report Columns (All Bulk Upload Fields + Eligible)
+
+| Column | Header | Source |
+|--------|--------|--------|
+| month_year | Month | record.month_year |
+| bu | BU | record.bu |
+| product | Product | record.product |
+| pid | PID | record.pid |
+| customer_code | Customer Code | record.customer_code |
+| customer_name | Customer Name | record.customer_name |
+| order_category | Order Category | record.order_category |
+| status | Status | record.status |
+| order_category_2 | Order Category 2 | record.order_category_2 |
+| opening_arr | Opening ARR | record.opening_arr |
+| cr | CR | record.cr |
+| als_others | ALS + Others | record.als_others |
+| new | New | record.new |
+| inflation | Inflation | record.inflation |
+| discount_decrement | Discount/Decrement | record.discount_decrement |
+| churn | Churn | record.churn |
+| adjustment | Adjustment | record.adjustment |
+| closing_arr | Closing ARR | record.closing_arr |
+| country | Country | record.country |
+| revised_region | Revised Region | record.revised_region |
+| start_date | Start Date | record.start_date |
+| end_date | End Date | record.end_date |
+| renewal_status | Renewal Status | record.renewal_status |
+| sales_rep_employee_id | Sales Rep ID | record.sales_rep_employee_id |
+| sales_rep_name | Sales Rep Name | record.sales_rep_name |
+| sales_head_employee_id | Sales Head ID | record.sales_head_employee_id |
+| sales_head_name | Sales Head Name | record.sales_head_name |
+| eligible_closing_arr | Eligible Closing ARR | calculated |
+| is_eligible | Eligible | calculated (Yes/No) |
 
 ---
 
-### File 3: `src/hooks/useIncentiveAuditData.ts`
+## Summary of Files
 
-**Changes (lines 245-259):**
-```typescript
-// Before
-const { data: closingArr } = await supabase
-  .from("closing_arr_actuals")
-  .select("sales_rep_employee_id, closing_arr")
-  ...
-
-// After
-const { data: closingArr } = await supabase
-  .from("closing_arr_actuals")
-  .select("month_year, sales_rep_employee_id, sales_head_employee_id, closing_arr, end_date")
-  .gte("month_year", fiscalYearStart)
-  .lte("month_year", fiscalYearEnd)
-  .gt("end_date", `${fiscalYear}-12-31`); // ELIGIBILITY FILTER
-
-// New aggregation: Group by employee, then take latest month's value
-const closingActualMap = new Map<string, Map<string, number>>(); // employee -> month -> value
-
-(closingArr || []).forEach(arr => {
-  // Credit BOTH sales_rep AND sales_head
-  [arr.sales_rep_employee_id, arr.sales_head_employee_id].forEach(empId => {
-    if (empId) {
-      const monthKey = arr.month_year?.substring(0, 7) || "";
-      const empMap = closingActualMap.get(empId) || new Map<string, number>();
-      empMap.set(monthKey, (empMap.get(monthKey) || 0) + (arr.closing_arr || 0));
-      closingActualMap.set(empId, empMap);
-    }
-  });
-});
-
-// For each employee, use only the latest month's value
-const employeeClosingActuals = new Map<string, number>();
-closingActualMap.forEach((monthMap, empId) => {
-  const sortedMonths = Array.from(monthMap.keys()).sort();
-  const latestMonth = sortedMonths[sortedMonths.length - 1];
-  employeeClosingActuals.set(empId, latestMonth ? monthMap.get(latestMonth) || 0 : 0);
-});
-```
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/lib/xlsxExport.ts` | Create | XLSX export utility |
+| `src/hooks/useMyActualsData.ts` | Create | Fetch user's deal and closing ARR records |
+| `src/components/reports/MyDealsReport.tsx` | Create | Deals report with month filter + export |
+| `src/components/reports/MyClosingARRReport.tsx` | Create | Closing ARR report with eligibility + export |
+| `src/pages/Reports.tsx` | Update | Add two new tabs for the reports |
 
 ---
-
-## Summary of Changes
-
-| File | Change |
-|------|--------|
-| `useCurrentUserCompensation.ts` | Add eligibility filter + Sales Head attribution + latest-month logic |
-| `useUserActuals.ts` | Add eligibility filter + latest-month logic for both hooks |
-| `useIncentiveAuditData.ts` | Add eligibility filter + Sales Head attribution + latest-month aggregation |
 
 ## Expected Outcome
 
-After implementation:
-- **Farming Sales Head** (DU0002) with Closing ARR target of $2M will show:
-  - **Actual:** ~$181K (only the 2 eligible projects: pid 220020001 + pid 180101078)
-  - **Achievement:** ~9% (not 129.8% as currently shown incorrectly)
-- **Both Sales Rep and Sales Head** will receive credit for Closing ARR records
-- Each month's upload is treated as a portfolio snapshot, not cumulative additions
+All users will see two new tabs on the Reports page:
+1. **My Deals** - Full list of deals where they are a participant, with all fields from bulk upload
+2. **My Closing ARR** - Full list of Closing ARR records with eligibility status and eligible ARR column
+
+Both reports include:
+- Month filter with "Full Year" default
+- All bulk upload fields displayed
+- Export to CSV and XLSX
+- Summary totals
