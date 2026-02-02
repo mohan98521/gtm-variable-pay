@@ -17,18 +17,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle,
   Check,
   Clock,
   Edit,
-  AlertCircle,
   Download,
+  Upload,
+  ChevronDown,
 } from "lucide-react";
 import { DealCollection, useUpdateCollectionStatus } from "@/hooks/useCollections";
 import { CollectionFormDialog } from "./CollectionFormDialog";
+import { CollectionsBulkUpload } from "./CollectionsBulkUpload";
 import { generateXLSX, downloadXLSX } from "@/lib/xlsxExport";
+import { generateCSV, downloadCSV } from "@/lib/csvExport";
 
 interface PendingCollectionsTableProps {
   collections: DealCollection[];
@@ -37,6 +46,7 @@ interface PendingCollectionsTableProps {
 
 export function PendingCollectionsTable({ collections, isLoading }: PendingCollectionsTableProps) {
   const [editingCollection, setEditingCollection] = useState<DealCollection | null>(null);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const updateMutation = useUpdateCollectionStatus();
 
   const formatCurrency = (value: number | null | undefined) => {
@@ -96,21 +106,40 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
     });
   };
 
-  const handleExport = () => {
-    const columns = [
-      { key: "booking_month", header: "Booking Month", getValue: (row: DealCollection) => formatMonth(row.booking_month) },
-      { key: "months_pending", header: "Months Pending", getValue: (row: DealCollection) => getMonthsPending(row.booking_month) },
-      { key: "project_id", header: "Project ID" },
-      { key: "customer_name", header: "Customer", getValue: (row: DealCollection) => row.customer_name || "-" },
-      { key: "type_of_proposal", header: "Type", getValue: (row: DealCollection) => row.deal?.type_of_proposal || "-" },
-      { key: "sales_rep_name", header: "Sales Rep", getValue: (row: DealCollection) => row.deal?.sales_rep_name || "-" },
-      { key: "deal_value_usd", header: "Deal Value (USD)", getValue: (row: DealCollection) => row.deal_value_usd || 0 },
-      { key: "first_milestone_due_date", header: "Due Date", getValue: (row: DealCollection) => formatDate(row.first_milestone_due_date) },
-      { key: "status", header: "Status", getValue: (row: DealCollection) => getCollectionStatus(row).label },
-    ];
+  const getExportData = () => {
+    return collections.map((row) => ({
+      project_id: row.project_id,
+      customer_name: row.customer_name || "",
+      deal_value_usd: row.deal_value_usd || 0,
+      booking_month: formatMonth(row.booking_month),
+      type_of_proposal: row.deal?.type_of_proposal || "",
+      sales_rep_name: row.deal?.sales_rep_name || "",
+      is_collected: "No",
+      collection_date: "",
+      notes: row.notes || "",
+    }));
+  };
 
-    const blob = generateXLSX(collections, columns, "Pending Collections");
+  const exportColumns = [
+    { key: "project_id", header: "project_id" },
+    { key: "customer_name", header: "customer_name" },
+    { key: "deal_value_usd", header: "deal_value_usd" },
+    { key: "booking_month", header: "booking_month" },
+    { key: "type_of_proposal", header: "type_of_proposal" },
+    { key: "sales_rep_name", header: "sales_rep_name" },
+    { key: "is_collected", header: "is_collected" },
+    { key: "collection_date", header: "collection_date" },
+    { key: "notes", header: "notes" },
+  ];
+
+  const handleExportExcel = () => {
+    const blob = generateXLSX(getExportData(), exportColumns as any, "Pending Collections");
     downloadXLSX(blob, `pending-collections-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  };
+
+  const handleExportCSV = () => {
+    const csv = generateCSV(getExportData(), exportColumns as any);
+    downloadCSV(csv, `pending-collections-${format(new Date(), "yyyy-MM-dd")}.csv`);
   };
 
   // Sort by booking month (oldest first) - already done by query, but ensure consistency
@@ -195,12 +224,29 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
         </div>
       </div>
 
-      {/* Export Button */}
-      <div className="flex justify-end mb-4">
-        <Button variant="outline" size="sm" onClick={handleExport}>
-          <Download className="h-4 w-4 mr-1.5" />
-          Export
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-2 mb-4">
+        <Button variant="outline" size="sm" onClick={() => setBulkUploadOpen(true)}>
+          <Upload className="h-4 w-4 mr-1.5" />
+          Import Status
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
+              <ChevronDown className="h-4 w-4 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleExportCSV}>
+              Export to CSV
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportExcel}>
+              Export to Excel
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="rounded-md border overflow-x-auto">
@@ -319,6 +365,11 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
         open={!!editingCollection}
         onOpenChange={(open) => !open && setEditingCollection(null)}
         collection={editingCollection}
+      />
+
+      <CollectionsBulkUpload
+        open={bulkUploadOpen}
+        onOpenChange={setBulkUploadOpen}
       />
     </>
   );
