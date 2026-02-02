@@ -29,7 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { PlanCommission, PREDEFINED_COMMISSION_TYPES } from "@/hooks/usePlanCommissions";
 
 const CUSTOM_TYPE_OPTION = "__custom__";
@@ -45,6 +45,7 @@ const formSchema = z.object({
   is_active: z.boolean().default(true),
   payout_on_booking_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
   payout_on_collection_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
+  payout_on_year_end_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
 }).refine((data) => {
   if (data.commission_type === CUSTOM_TYPE_OPTION) {
     return data.custom_type_name && data.custom_type_name.trim().length >= 2;
@@ -53,9 +54,9 @@ const formSchema = z.object({
 }, {
   message: "Custom type name must be at least 2 characters",
   path: ["custom_type_name"],
-}).refine((data) => data.payout_on_booking_pct + data.payout_on_collection_pct === 100, {
-  message: "Booking and Collection percentages must sum to 100%",
-  path: ["payout_on_collection_pct"],
+}).refine((data) => data.payout_on_booking_pct + data.payout_on_collection_pct + data.payout_on_year_end_pct === 100, {
+  message: "Booking, Collection, and Year End percentages must sum to 100%",
+  path: ["payout_on_year_end_pct"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -87,13 +88,18 @@ export function CommissionFormDialog({
       commission_rate_pct: 0,
       min_threshold_usd: null,
       is_active: true,
-      payout_on_booking_pct: 75,
+      payout_on_booking_pct: 70,
       payout_on_collection_pct: 25,
+      payout_on_year_end_pct: 5,
     },
   });
 
   const watchedType = form.watch("commission_type");
   const isCustomType = watchedType === CUSTOM_TYPE_OPTION;
+  const bookingPct = form.watch("payout_on_booking_pct");
+  const collectionPct = form.watch("payout_on_collection_pct");
+  const yearEndPct = form.watch("payout_on_year_end_pct");
+  const payoutSum = (bookingPct || 0) + (collectionPct || 0) + (yearEndPct || 0);
 
   useEffect(() => {
     if (open) {
@@ -106,8 +112,9 @@ export function CommissionFormDialog({
           commission_rate_pct: commission.commission_rate_pct,
           min_threshold_usd: commission.min_threshold_usd,
           is_active: commission.is_active,
-          payout_on_booking_pct: (commission as any).payout_on_booking_pct ?? 75,
+          payout_on_booking_pct: (commission as any).payout_on_booking_pct ?? 70,
           payout_on_collection_pct: (commission as any).payout_on_collection_pct ?? 25,
+          payout_on_year_end_pct: (commission as any).payout_on_year_end_pct ?? 5,
         });
       } else {
         form.reset({
@@ -116,8 +123,9 @@ export function CommissionFormDialog({
           commission_rate_pct: 0,
           min_threshold_usd: null,
           is_active: true,
-          payout_on_booking_pct: 75,
+          payout_on_booking_pct: 70,
           payout_on_collection_pct: 25,
+          payout_on_year_end_pct: 5,
         });
       }
     }
@@ -146,9 +154,57 @@ export function CommissionFormDialog({
     });
   };
 
+  // Auto-adjust third field when two are changed
+  const handleBookingChange = (value: number) => {
+    const newBooking = Math.min(100, Math.max(0, value || 0));
+    form.setValue("payout_on_booking_pct", newBooking);
+    
+    const remaining = 100 - newBooking;
+    const currentCollection = form.getValues("payout_on_collection_pct") || 0;
+    
+    if (currentCollection > remaining) {
+      form.setValue("payout_on_collection_pct", remaining);
+      form.setValue("payout_on_year_end_pct", 0);
+    } else {
+      form.setValue("payout_on_year_end_pct", remaining - currentCollection);
+    }
+  };
+
+  const handleCollectionChange = (value: number) => {
+    const newCollection = Math.min(100, Math.max(0, value || 0));
+    form.setValue("payout_on_collection_pct", newCollection);
+    
+    const booking = form.getValues("payout_on_booking_pct") || 0;
+    const remaining = 100 - booking - newCollection;
+    
+    if (remaining >= 0) {
+      form.setValue("payout_on_year_end_pct", remaining);
+    } else {
+      const newBooking = Math.max(0, booking + remaining);
+      form.setValue("payout_on_booking_pct", newBooking);
+      form.setValue("payout_on_year_end_pct", 0);
+    }
+  };
+
+  const handleYearEndChange = (value: number) => {
+    const newYearEnd = Math.min(100, Math.max(0, value || 0));
+    form.setValue("payout_on_year_end_pct", newYearEnd);
+    
+    const booking = form.getValues("payout_on_booking_pct") || 0;
+    const remaining = 100 - booking - newYearEnd;
+    
+    if (remaining >= 0) {
+      form.setValue("payout_on_collection_pct", remaining);
+    } else {
+      const newBooking = Math.max(0, booking + remaining);
+      form.setValue("payout_on_booking_pct", newBooking);
+      form.setValue("payout_on_collection_pct", 0);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Commission" : "Add Commission Type"}</DialogTitle>
           <DialogDescription>
@@ -289,28 +345,32 @@ export function CommissionFormDialog({
 
             {/* Payout Split Section */}
             <div className="pt-4 border-t">
-              <h4 className="text-sm font-medium mb-3">Payout Split</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium">Payout Split</h4>
+                {payoutSum !== 100 && (
+                  <div className="flex items-center gap-1 text-warning text-xs">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>Must sum to 100% (currently {payoutSum}%)</span>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
                 <FormField
                   control={form.control}
                   name="payout_on_booking_pct"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Upon Bookings (%)</FormLabel>
+                      <FormLabel className="text-xs">Upon Bookings (%)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           min={0}
                           max={100}
                           {...field}
-                          onChange={(e) => {
-                            const booking = Number(e.target.value) || 0;
-                            field.onChange(booking);
-                            form.setValue("payout_on_collection_pct", 100 - booking);
-                          }}
+                          onChange={(e) => handleBookingChange(Number(e.target.value))}
                         />
                       </FormControl>
-                      <FormDescription>Paid on deal booking</FormDescription>
+                      <FormDescription className="text-xs">Paid on booking</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -321,21 +381,38 @@ export function CommissionFormDialog({
                   name="payout_on_collection_pct"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Upon Collections (%)</FormLabel>
+                      <FormLabel className="text-xs">Upon Collections (%)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           min={0}
                           max={100}
                           {...field}
-                          onChange={(e) => {
-                            const collection = Number(e.target.value) || 0;
-                            field.onChange(collection);
-                            form.setValue("payout_on_booking_pct", 100 - collection);
-                          }}
+                          onChange={(e) => handleCollectionChange(Number(e.target.value))}
                         />
                       </FormControl>
-                      <FormDescription>Held until collection</FormDescription>
+                      <FormDescription className="text-xs">Held until collected</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="payout_on_year_end_pct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">At Year End (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          {...field}
+                          onChange={(e) => handleYearEndChange(Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-xs">Released in December</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

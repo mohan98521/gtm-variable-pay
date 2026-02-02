@@ -136,6 +136,7 @@ export default function PlanBuilder() {
       gate_threshold_percent?: number | null;
       payout_on_booking_pct?: number;
       payout_on_collection_pct?: number;
+      payout_on_year_end_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_metrics")
@@ -145,8 +146,9 @@ export default function PlanBuilder() {
           weightage_percent: values.weightage_percent,
           logic_type: values.logic_type,
           gate_threshold_percent: values.gate_threshold_percent || null,
-          payout_on_booking_pct: values.payout_on_booking_pct ?? 75,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 70,
           payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
+          payout_on_year_end_pct: values.payout_on_year_end_pct ?? 5,
         })
         .select()
         .single();
@@ -173,6 +175,7 @@ export default function PlanBuilder() {
       gate_threshold_percent?: number | null;
       payout_on_booking_pct?: number;
       payout_on_collection_pct?: number;
+      payout_on_year_end_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_metrics")
@@ -181,8 +184,9 @@ export default function PlanBuilder() {
           weightage_percent: values.weightage_percent,
           logic_type: values.logic_type,
           gate_threshold_percent: values.gate_threshold_percent || null,
-          payout_on_booking_pct: values.payout_on_booking_pct ?? 75,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 70,
           payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
+          payout_on_year_end_pct: values.payout_on_year_end_pct ?? 5,
         })
         .eq("id", values.id)
         .select()
@@ -418,8 +422,9 @@ export default function PlanBuilder() {
                     <TableHead className="text-center">Weightage</TableHead>
                     <TableHead className="text-center">Logic Type</TableHead>
                     <TableHead className="text-center">Gate Threshold</TableHead>
-                    <TableHead className="text-center">Upon Bookings</TableHead>
-                    <TableHead className="text-center">Upon Collections</TableHead>
+                    <TableHead className="text-center">Bookings</TableHead>
+                    <TableHead className="text-center">Collections</TableHead>
+                    <TableHead className="text-center">Year End</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -437,10 +442,13 @@ export default function PlanBuilder() {
                         {metric.gate_threshold_percent ? `${metric.gate_threshold_percent}%` : "-"}
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="outline">{metric.payout_on_booking_pct ?? 75}%</Badge>
+                        <Badge variant="outline">{metric.payout_on_booking_pct ?? 70}%</Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline">{metric.payout_on_collection_pct ?? 25}%</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline">{metric.payout_on_year_end_pct ?? 5}%</Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">

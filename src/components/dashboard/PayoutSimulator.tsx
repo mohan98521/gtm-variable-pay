@@ -89,6 +89,7 @@ export function PayoutSimulator({ metrics, commissions, planMetrics, targetBonus
           gate_threshold_percent: metric.gateThreshold,
           payout_on_booking_pct: 75,
           payout_on_collection_pct: 25,
+          payout_on_year_end_pct: 0,
           created_at: "",
           multiplier_grids: metric.multiplierGrids,
         };

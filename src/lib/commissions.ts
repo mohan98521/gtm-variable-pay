@@ -5,6 +5,9 @@ export interface PlanCommission {
   commission_rate_pct: number;
   min_threshold_usd: number | null;
   is_active: boolean;
+  payout_on_booking_pct?: number;
+  payout_on_collection_pct?: number;
+  payout_on_year_end_pct?: number;
 }
 
 export interface CommissionCalculation {
@@ -15,47 +18,52 @@ export interface CommissionCalculation {
   minThresholdUsd: number | null;
   qualifies: boolean;
   grossCommission: number;
-  paidAmount: number;      // 75% of gross
-  holdbackAmount: number;  // 25% of gross
+  paidAmount: number;        // payout_on_booking_pct of gross
+  holdbackAmount: number;    // payout_on_collection_pct of gross
+  yearEndHoldback: number;   // payout_on_year_end_pct of gross
 }
 
 /**
  * Calculate commission for a single deal based on TCV and commission rate.
- * Applies a configurable split between immediate payout and holdback.
+ * Applies a configurable three-way split: booking, collection holdback, and year-end reserve.
  * 
  * @param tcvUsd - Total Contract Value in USD
  * @param commissionRatePct - Commission rate as a percentage (e.g., 4 for 4%)
  * @param minThresholdUsd - Optional minimum threshold the deal must meet
- * @param payoutOnBookingPct - Percentage paid on booking (default 75)
+ * @param payoutOnBookingPct - Percentage paid on booking (default 70)
  * @param payoutOnCollectionPct - Percentage held for collection (default 25)
- * @returns Commission breakdown with gross, paid, and holdback amounts
+ * @param payoutOnYearEndPct - Percentage reserved for year-end (default 5)
+ * @returns Commission breakdown with gross, paid, holdback, and year-end amounts
  */
 export function calculateDealCommission(
   tcvUsd: number,
   commissionRatePct: number,
   minThresholdUsd: number | null = null,
-  payoutOnBookingPct: number = 75,
-  payoutOnCollectionPct: number = 25
-): { qualifies: boolean; gross: number; paid: number; holdback: number } {
+  payoutOnBookingPct: number = 70,
+  payoutOnCollectionPct: number = 25,
+  payoutOnYearEndPct: number = 5
+): { qualifies: boolean; gross: number; paid: number; holdback: number; yearEndHoldback: number } {
   // Check if deal meets minimum threshold
   const qualifies = minThresholdUsd === null || tcvUsd >= minThresholdUsd;
   
   if (!qualifies || commissionRatePct === 0) {
-    return { qualifies, gross: 0, paid: 0, holdback: 0 };
+    return { qualifies, gross: 0, paid: 0, holdback: 0, yearEndHoldback: 0 };
   }
   
   // Calculate gross commission
   const gross = tcvUsd * (commissionRatePct / 100);
   
-  // Apply configurable split (defaults to 75/25)
+  // Apply configurable three-way split (defaults to 70/25/5)
   const paid = gross * (payoutOnBookingPct / 100);
   const holdback = gross * (payoutOnCollectionPct / 100);
+  const yearEndHoldback = gross * (payoutOnYearEndPct / 100);
   
   return {
     qualifies,
     gross: Math.round(gross * 100) / 100,
     paid: Math.round(paid * 100) / 100,
     holdback: Math.round(holdback * 100) / 100,
+    yearEndHoldback: Math.round(yearEndHoldback * 100) / 100,
   };
 }
 
@@ -91,7 +99,10 @@ export function calculateCommissionForDeal(
   const result = calculateDealCommission(
     tcvUsd,
     commission.commission_rate_pct,
-    commission.min_threshold_usd
+    commission.min_threshold_usd,
+    commission.payout_on_booking_pct ?? 70,
+    commission.payout_on_collection_pct ?? 25,
+    commission.payout_on_year_end_pct ?? 5
   );
   
   return {
@@ -104,6 +115,7 @@ export function calculateCommissionForDeal(
     grossCommission: result.gross,
     paidAmount: result.paid,
     holdbackAmount: result.holdback,
+    yearEndHoldback: result.yearEndHoldback,
   };
 }
 
@@ -112,13 +124,14 @@ export function calculateCommissionForDeal(
  */
 export function calculateTotalCommission(
   calculations: CommissionCalculation[]
-): { totalGross: number; totalPaid: number; totalHoldback: number } {
+): { totalGross: number; totalPaid: number; totalHoldback: number; totalYearEndHoldback: number } {
   return calculations.reduce(
     (acc, calc) => ({
       totalGross: acc.totalGross + calc.grossCommission,
       totalPaid: acc.totalPaid + calc.paidAmount,
       totalHoldback: acc.totalHoldback + calc.holdbackAmount,
+      totalYearEndHoldback: acc.totalYearEndHoldback + calc.yearEndHoldback,
     }),
-    { totalGross: 0, totalPaid: 0, totalHoldback: 0 }
+    { totalGross: 0, totalPaid: 0, totalHoldback: 0, totalYearEndHoldback: 0 }
   );
 }
