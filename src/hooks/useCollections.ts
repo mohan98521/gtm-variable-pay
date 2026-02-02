@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { format, parseISO } from "date-fns";
 
 export interface DealCollection {
   id: string;
@@ -12,6 +13,7 @@ export interface DealCollection {
   is_collected: boolean;
   collection_date: string | null;
   collection_amount_usd: number | null;
+  collection_month: string | null;
   first_milestone_due_date: string | null;
   is_clawback_triggered: boolean;
   clawback_amount_usd: number | null;
@@ -32,24 +34,26 @@ export interface DealCollection {
   };
 }
 
+const COLLECTION_SELECT_QUERY = `
+  *,
+  deal:deals(
+    bu,
+    product,
+    type_of_proposal,
+    sales_rep_name,
+    sales_rep_employee_id,
+    tcv_usd,
+    linked_to_impl
+  )
+`;
+
 export function useCollections(monthYear?: string) {
   return useQuery({
     queryKey: ["deal_collections", monthYear],
     queryFn: async () => {
       let query = supabase
         .from("deal_collections")
-        .select(`
-          *,
-          deal:deals(
-            bu,
-            product,
-            type_of_proposal,
-            sales_rep_name,
-            sales_rep_employee_id,
-            tcv_usd,
-            linked_to_impl
-          )
-        `)
+        .select(COLLECTION_SELECT_QUERY)
         .order("booking_month", { ascending: false });
 
       if (monthYear) {
@@ -69,18 +73,7 @@ export function useAllCollections() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deal_collections")
-        .select(`
-          *,
-          deal:deals(
-            bu,
-            product,
-            type_of_proposal,
-            sales_rep_name,
-            sales_rep_employee_id,
-            tcv_usd,
-            linked_to_impl
-          )
-        `)
+        .select(COLLECTION_SELECT_QUERY)
         .order("booking_month", { ascending: false });
 
       if (error) throw error;
@@ -89,28 +82,45 @@ export function useAllCollections() {
   });
 }
 
+/**
+ * Pending collections - cumulative view of all deals not yet collected
+ * Sorted by booking month (oldest first - priority)
+ */
 export function usePendingCollections() {
   return useQuery({
     queryKey: ["deal_collections", "pending"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deal_collections")
-        .select(`
-          *,
-          deal:deals(
-            bu,
-            product,
-            type_of_proposal,
-            sales_rep_name,
-            sales_rep_employee_id,
-            tcv_usd,
-            linked_to_impl
-          )
-        `)
+        .select(COLLECTION_SELECT_QUERY)
         .eq("is_collected", false)
         .eq("is_clawback_triggered", false)
-        .order("first_milestone_due_date", { ascending: true });
+        .order("booking_month", { ascending: true }); // Oldest first
 
+      if (error) throw error;
+      return data as DealCollection[];
+    },
+  });
+}
+
+/**
+ * Collected deals - for payroll processing and reporting
+ * Optionally filtered by collection month
+ */
+export function useCollectedDeals(collectionMonth?: string) {
+  return useQuery({
+    queryKey: ["deal_collections", "collected", collectionMonth],
+    queryFn: async () => {
+      let query = supabase
+        .from("deal_collections")
+        .select(COLLECTION_SELECT_QUERY)
+        .eq("is_collected", true);
+
+      if (collectionMonth) {
+        query = query.eq("collection_month", collectionMonth);
+      }
+
+      const { data, error } = await query.order("collection_date", { ascending: false });
       if (error) throw error;
       return data as DealCollection[];
     },

@@ -281,6 +281,7 @@ export type Database = {
           clawback_triggered_at: string | null
           collection_amount_usd: number | null
           collection_date: string | null
+          collection_month: string | null
           created_at: string
           customer_name: string | null
           deal_id: string
@@ -300,6 +301,7 @@ export type Database = {
           clawback_triggered_at?: string | null
           collection_amount_usd?: number | null
           collection_date?: string | null
+          collection_month?: string | null
           created_at?: string
           customer_name?: string | null
           deal_id: string
@@ -319,6 +321,7 @@ export type Database = {
           clawback_triggered_at?: string | null
           collection_amount_usd?: number | null
           collection_date?: string | null
+          collection_month?: string | null
           created_at?: string
           customer_name?: string | null
           deal_id?: string

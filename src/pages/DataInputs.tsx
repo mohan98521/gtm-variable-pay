@@ -20,10 +20,11 @@ import { ClosingARRTable } from "@/components/data-inputs/ClosingARRTable";
 import { ClosingARRFormDialog } from "@/components/data-inputs/ClosingARRFormDialog";
 import { ClosingARRBulkUpload } from "@/components/data-inputs/ClosingARRBulkUpload";
 import { ClosingARRSummary } from "@/components/data-inputs/ClosingARRSummary";
-import { CollectionsTable } from "@/components/data-inputs/CollectionsTable";
+import { PendingCollectionsTable } from "@/components/data-inputs/PendingCollectionsTable";
+import { CollectedDealsTable } from "@/components/data-inputs/CollectedDealsTable";
 import { useDeals, DealWithParticipants, PROPOSAL_TYPES } from "@/hooks/useDeals";
 import { useClosingARRData, ClosingARRActual } from "@/hooks/useClosingARR";
-import { useAllCollections, usePendingCollections } from "@/hooks/useCollections";
+import { usePendingCollections, useCollectedDeals } from "@/hooks/useCollections";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { format } from "date-fns";
 
@@ -38,6 +39,7 @@ export default function DataInputs() {
   });
   const [selectedProposalType, setSelectedProposalType] = useState<string>("all");
   const [activeSection, setActiveSection] = useState<"deals" | "closing-arr" | "collections">("deals");
+  const [collectionsSubTab, setCollectionsSubTab] = useState<"pending" | "collected">("pending");
   
   // Deals state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -59,13 +61,8 @@ export default function DataInputs() {
   const { data: closingARRRecords = [], isLoading: isLoadingARR } = useClosingARRData(selectedMonth);
 
   // Fetch Collections data
-  const { data: allCollections = [], isLoading: isLoadingCollections } = useAllCollections();
-  const { data: pendingCollections = [] } = usePendingCollections();
-
-  // Filter collections by selected month
-  const filteredCollections = useMemo(() => {
-    return allCollections.filter(c => c.booking_month === selectedMonth);
-  }, [allCollections, selectedMonth]);
+  const { data: pendingCollections = [], isLoading: isLoadingPending } = usePendingCollections();
+  const { data: collectedDeals = [], isLoading: isLoadingCollected } = useCollectedDeals();
 
   const handleAddDeal = () => {
     setEditingDeal(null);
@@ -328,84 +325,65 @@ export default function DataInputs() {
 
           {/* Collections Section */}
           <TabsContent value="collections" className="space-y-6 mt-6">
-            {/* Collections Stats */}
-            <div className="grid gap-4 sm:grid-cols-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <Wallet className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Collections</p>
-                      <p className="text-2xl font-semibold text-foreground">{allCollections.length}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-warning/10 text-warning">
-                      <Clock className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pending</p>
-                      <p className="text-2xl font-semibold text-foreground">
-                        {pendingCollections.length}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-success/10 text-success">
-                      <CheckCircle className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Collected</p>
-                      <p className="text-2xl font-semibold text-foreground">
-                        {allCollections.filter(c => c.is_collected).length}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-destructive/10 text-destructive">
-                      <Clock className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Clawbacks</p>
-                      <p className="text-2xl font-semibold text-foreground">
-                        {allCollections.filter(c => c.is_clawback_triggered).length}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Collections Sub-Tabs */}
+            <Tabs value={collectionsSubTab} onValueChange={(v) => setCollectionsSubTab(v as "pending" | "collected")}>
+              <TabsList>
+                <TabsTrigger value="pending" className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Pending Collections
+                  {pendingCollections.length > 0 && (
+                    <Badge variant="secondary" className="ml-1">
+                      {pendingCollections.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="collected" className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  Collected Deals
+                  {collectedDeals.length > 0 && (
+                    <Badge variant="outline" className="ml-1">
+                      {collectedDeals.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Collections Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Collection Status</CardTitle>
-                <CardDescription>
-                  Track collection status for deals. Collections are automatically created when deals are added.
-                  Mark as collected when payment is received, or trigger clawback if overdue.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CollectionsTable
-                  collections={filteredCollections}
-                  isLoading={isLoadingCollections}
-                />
-              </CardContent>
-            </Card>
+              <TabsContent value="pending" className="mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Pending Collections</CardTitle>
+                    <CardDescription>
+                      Cumulative view of all deals awaiting collection. Mark as "Yes" when payment is received.
+                      Deals are automatically added here when created in the Deals tab.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <PendingCollectionsTable
+                      collections={pendingCollections}
+                      isLoading={isLoadingPending}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="collected" className="mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Collected Deals Report</CardTitle>
+                    <CardDescription>
+                      Historical view of all collected deals for payroll processing. 
+                      Filter by collection month to see deals processed in that period.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <CollectedDealsTable
+                      collections={collectedDeals}
+                      isLoading={isLoadingCollected}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
 
