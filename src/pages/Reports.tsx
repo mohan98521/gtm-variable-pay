@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent } from "lucide-react";
+import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -15,7 +15,8 @@ import { calculateProRation, getEffectiveDates } from "@/lib/compensation";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useIncentiveAuditData } from "@/hooks/useIncentiveAuditData";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
-
+import { MyDealsReport } from "@/components/reports/MyDealsReport";
+import { MyClosingARRReport } from "@/components/reports/MyClosingARRReport";
 const SALES_FUNCTIONS = [
   "All",
   "Farmer",
@@ -382,7 +383,7 @@ export default function Reports() {
         </div>
 
         <Tabs defaultValue="employees" className="space-y-4">
-          <TabsList className="bg-[hsl(var(--azentio-navy))] text-white">
+          <TabsList className="bg-[hsl(var(--azentio-navy))] text-white flex-wrap h-auto gap-1 p-1">
             <TabsTrigger value="employees" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
               <Users className="mr-2 h-4 w-4" />
               Employee Master
@@ -394,6 +395,14 @@ export default function Reports() {
             <TabsTrigger value="audit" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
               <Calculator className="mr-2 h-4 w-4" />
               Incentive Audit
+            </TabsTrigger>
+            <TabsTrigger value="my-deals" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <Briefcase className="mr-2 h-4 w-4" />
+              My Deals
+            </TabsTrigger>
+            <TabsTrigger value="my-closing-arr" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <Database className="mr-2 h-4 w-4" />
+              My Closing ARR
             </TabsTrigger>
           </TabsList>
 
@@ -756,6 +765,16 @@ export default function Reports() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Tab 4: My Deals */}
+          <TabsContent value="my-deals">
+            <MyDealsReport />
+          </TabsContent>
+
+          {/* Tab 5: My Closing ARR */}
+          <TabsContent value="my-closing-arr">
+            <MyClosingARRReport />
           </TabsContent>
         </Tabs>
       </div>
