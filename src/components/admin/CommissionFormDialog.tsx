@@ -43,6 +43,8 @@ const formSchema = z.object({
     .max(100, "Rate cannot exceed 100%"),
   min_threshold_usd: z.coerce.number().nullable().optional(),
   is_active: z.boolean().default(true),
+  payout_on_booking_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
+  payout_on_collection_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
 }).refine((data) => {
   if (data.commission_type === CUSTOM_TYPE_OPTION) {
     return data.custom_type_name && data.custom_type_name.trim().length >= 2;
@@ -51,6 +53,9 @@ const formSchema = z.object({
 }, {
   message: "Custom type name must be at least 2 characters",
   path: ["custom_type_name"],
+}).refine((data) => data.payout_on_booking_pct + data.payout_on_collection_pct === 100, {
+  message: "Booking and Collection percentages must sum to 100%",
+  path: ["payout_on_collection_pct"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -82,6 +87,8 @@ export function CommissionFormDialog({
       commission_rate_pct: 0,
       min_threshold_usd: null,
       is_active: true,
+      payout_on_booking_pct: 75,
+      payout_on_collection_pct: 25,
     },
   });
 
@@ -99,6 +106,8 @@ export function CommissionFormDialog({
           commission_rate_pct: commission.commission_rate_pct,
           min_threshold_usd: commission.min_threshold_usd,
           is_active: commission.is_active,
+          payout_on_booking_pct: (commission as any).payout_on_booking_pct ?? 75,
+          payout_on_collection_pct: (commission as any).payout_on_collection_pct ?? 25,
         });
       } else {
         form.reset({
@@ -107,6 +116,8 @@ export function CommissionFormDialog({
           commission_rate_pct: 0,
           min_threshold_usd: null,
           is_active: true,
+          payout_on_booking_pct: 75,
+          payout_on_collection_pct: 25,
         });
       }
     }
@@ -275,6 +286,62 @@ export function CommissionFormDialog({
                 </FormItem>
               )}
             />
+
+            {/* Payout Split Section */}
+            <div className="pt-4 border-t">
+              <h4 className="text-sm font-medium mb-3">Payout Split</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="payout_on_booking_pct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Upon Bookings (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          {...field}
+                          onChange={(e) => {
+                            const booking = Number(e.target.value) || 0;
+                            field.onChange(booking);
+                            form.setValue("payout_on_collection_pct", 100 - booking);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>Paid on deal booking</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="payout_on_collection_pct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Upon Collections (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          {...field}
+                          onChange={(e) => {
+                            const collection = Number(e.target.value) || 0;
+                            field.onChange(collection);
+                            form.setValue("payout_on_booking_pct", 100 - collection);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>Held until collection</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             <DialogFooter>
               <Button

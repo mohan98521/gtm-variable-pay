@@ -9,6 +9,8 @@ export interface PlanCommission {
   commission_rate_pct: number;
   min_threshold_usd: number | null;
   is_active: boolean;
+  payout_on_booking_pct: number;
+  payout_on_collection_pct: number;
   created_at: string;
 }
 
@@ -52,6 +54,8 @@ export function useCreatePlanCommission() {
       commission_rate_pct: number;
       min_threshold_usd?: number | null;
       is_active?: boolean;
+      payout_on_booking_pct?: number;
+      payout_on_collection_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_commissions")
@@ -61,6 +65,8 @@ export function useCreatePlanCommission() {
           commission_rate_pct: values.commission_rate_pct,
           min_threshold_usd: values.min_threshold_usd ?? null,
           is_active: values.is_active ?? true,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 75,
+          payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
         })
         .select()
         .single();
@@ -88,6 +94,8 @@ export function useUpdatePlanCommission() {
       commission_rate_pct: number;
       min_threshold_usd?: number | null;
       is_active?: boolean;
+      payout_on_booking_pct?: number;
+      payout_on_collection_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_commissions")
@@ -95,6 +103,8 @@ export function useUpdatePlanCommission() {
           commission_rate_pct: values.commission_rate_pct,
           min_threshold_usd: values.min_threshold_usd ?? null,
           is_active: values.is_active,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 75,
+          payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
         })
         .eq("id", values.id)
         .select()

@@ -193,30 +193,36 @@ export type Database = {
       }
       comp_plans: {
         Row: {
+          clawback_period_days: number | null
           created_at: string
           description: string | null
           effective_year: number
           id: string
           is_active: boolean
           name: string
+          payout_frequency: string | null
           updated_at: string
         }
         Insert: {
+          clawback_period_days?: number | null
           created_at?: string
           description?: string | null
           effective_year?: number
           id?: string
           is_active?: boolean
           name: string
+          payout_frequency?: string | null
           updated_at?: string
         }
         Update: {
+          clawback_period_days?: number | null
           created_at?: string
           description?: string | null
           effective_year?: number
           id?: string
           is_active?: boolean
           name?: string
+          payout_frequency?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -263,6 +269,74 @@ export type Database = {
             foreignKeyName: "deal_audit_log_deal_id_fkey"
             columns: ["deal_id"]
             isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_collections: {
+        Row: {
+          booking_month: string
+          clawback_amount_usd: number | null
+          clawback_triggered_at: string | null
+          collection_amount_usd: number | null
+          collection_date: string | null
+          created_at: string
+          customer_name: string | null
+          deal_id: string
+          deal_value_usd: number
+          first_milestone_due_date: string | null
+          id: string
+          is_clawback_triggered: boolean | null
+          is_collected: boolean | null
+          notes: string | null
+          project_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          booking_month: string
+          clawback_amount_usd?: number | null
+          clawback_triggered_at?: string | null
+          collection_amount_usd?: number | null
+          collection_date?: string | null
+          created_at?: string
+          customer_name?: string | null
+          deal_id: string
+          deal_value_usd?: number
+          first_milestone_due_date?: string | null
+          id?: string
+          is_clawback_triggered?: boolean | null
+          is_collected?: boolean | null
+          notes?: string | null
+          project_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          booking_month?: string
+          clawback_amount_usd?: number | null
+          clawback_triggered_at?: string | null
+          collection_amount_usd?: number | null
+          collection_date?: string | null
+          created_at?: string
+          customer_name?: string | null
+          deal_id?: string
+          deal_value_usd?: number
+          first_milestone_due_date?: string | null
+          id?: string
+          is_clawback_triggered?: boolean | null
+          is_collected?: boolean | null
+          notes?: string | null
+          project_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_collections_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: true
             referencedRelation: "deals"
             referencedColumns: ["id"]
           },
@@ -671,48 +745,107 @@ export type Database = {
       }
       monthly_payouts: {
         Row: {
+          approval_status: string | null
+          approved_at: string | null
+          approved_by: string | null
+          booking_amount_usd: number | null
           calculated_amount_usd: number
+          clawback_amount_usd: number | null
+          collection_amount_usd: number | null
+          commission_id: string | null
           created_at: string
+          deal_id: string | null
           employee_id: string
           holdback_amount_usd: number | null
           id: string
+          metric_id: string | null
           month_year: string
           notes: string | null
           paid_amount_usd: number | null
           paid_date: string | null
           payout_type: string
+          plan_id: string | null
           status: string
           updated_at: string
         }
         Insert: {
+          approval_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          booking_amount_usd?: number | null
           calculated_amount_usd?: number
+          clawback_amount_usd?: number | null
+          collection_amount_usd?: number | null
+          commission_id?: string | null
           created_at?: string
+          deal_id?: string | null
           employee_id: string
           holdback_amount_usd?: number | null
           id?: string
+          metric_id?: string | null
           month_year: string
           notes?: string | null
           paid_amount_usd?: number | null
           paid_date?: string | null
           payout_type: string
+          plan_id?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
+          approval_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          booking_amount_usd?: number | null
           calculated_amount_usd?: number
+          clawback_amount_usd?: number | null
+          collection_amount_usd?: number | null
+          commission_id?: string | null
           created_at?: string
+          deal_id?: string | null
           employee_id?: string
           holdback_amount_usd?: number | null
           id?: string
+          metric_id?: string | null
           month_year?: string
           notes?: string | null
           paid_amount_usd?: number | null
           paid_date?: string | null
           payout_type?: string
+          plan_id?: string | null
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "monthly_payouts_commission_id_fkey"
+            columns: ["commission_id"]
+            isOneToOne: false
+            referencedRelation: "plan_commissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_payouts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_payouts_metric_id_fkey"
+            columns: ["metric_id"]
+            isOneToOne: false
+            referencedRelation: "plan_metrics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_payouts_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "comp_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       multiplier_grids: {
         Row: {
@@ -745,6 +878,60 @@ export type Database = {
             columns: ["plan_metric_id"]
             isOneToOne: false
             referencedRelation: "plan_metrics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payout_audit_log: {
+        Row: {
+          action: string
+          changed_at: string
+          changed_by: string | null
+          deal_collection_id: string | null
+          entity_type: string
+          id: string
+          new_values: Json | null
+          old_values: Json | null
+          payout_id: string | null
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          changed_at?: string
+          changed_by?: string | null
+          deal_collection_id?: string | null
+          entity_type?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          payout_id?: string | null
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          changed_at?: string
+          changed_by?: string | null
+          deal_collection_id?: string | null
+          entity_type?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          payout_id?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_audit_log_deal_collection_id_fkey"
+            columns: ["deal_collection_id"]
+            isOneToOne: false
+            referencedRelation: "deal_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_audit_log_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_payouts"
             referencedColumns: ["id"]
           },
         ]
@@ -784,6 +971,8 @@ export type Database = {
           id: string
           is_active: boolean | null
           min_threshold_usd: number | null
+          payout_on_booking_pct: number | null
+          payout_on_collection_pct: number | null
           plan_id: string
         }
         Insert: {
@@ -793,6 +982,8 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           min_threshold_usd?: number | null
+          payout_on_booking_pct?: number | null
+          payout_on_collection_pct?: number | null
           plan_id: string
         }
         Update: {
@@ -802,6 +993,8 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           min_threshold_usd?: number | null
+          payout_on_booking_pct?: number | null
+          payout_on_collection_pct?: number | null
           plan_id?: string
         }
         Relationships: [
@@ -821,6 +1014,8 @@ export type Database = {
           id: string
           logic_type: Database["public"]["Enums"]["logic_type"]
           metric_name: string
+          payout_on_booking_pct: number | null
+          payout_on_collection_pct: number | null
           plan_id: string
           weightage_percent: number
         }
@@ -830,6 +1025,8 @@ export type Database = {
           id?: string
           logic_type?: Database["public"]["Enums"]["logic_type"]
           metric_name: string
+          payout_on_booking_pct?: number | null
+          payout_on_collection_pct?: number | null
           plan_id: string
           weightage_percent: number
         }
@@ -839,6 +1036,8 @@ export type Database = {
           id?: string
           logic_type?: Database["public"]["Enums"]["logic_type"]
           metric_name?: string
+          payout_on_booking_pct?: number | null
+          payout_on_collection_pct?: number | null
           plan_id?: string
           weightage_percent?: number
         }
