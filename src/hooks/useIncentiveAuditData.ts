@@ -242,20 +242,40 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         });
       });
 
-      // 8. Fetch closing ARR actuals - also with multi-participant attribution
+      // 8. Fetch ELIGIBLE closing ARR actuals with multi-participant attribution
+      // Eligibility: Only records with end_date > fiscal year end
+      // Attribution: Both sales_rep AND sales_head receive credit
+      // Logic: Use LATEST month's value per employee (not cumulative)
       const { data: closingArr } = await supabase
         .from("closing_arr_actuals")
-        .select("sales_rep_employee_id, closing_arr")
+        .select("month_year, sales_rep_employee_id, sales_head_employee_id, closing_arr, end_date")
         .gte("month_year", fiscalYearStart)
-        .lte("month_year", fiscalYearEnd);
+        .lte("month_year", fiscalYearEnd)
+        .gt("end_date", `${fiscalYear}-12-31`); // ELIGIBILITY FILTER
 
-      // Aggregate closing ARR by employee (closing_arr_actuals only has sales_rep_employee_id)
-      const closingActualMap = new Map<string, number>();
+      // Group eligible Closing ARR by employee -> month -> value
+      const closingByEmployeeMonth = new Map<string, Map<string, number>>();
+      
       (closingArr || []).forEach(arr => {
-        if (arr.sales_rep_employee_id) {
-          const current = closingActualMap.get(arr.sales_rep_employee_id) || 0;
-          closingActualMap.set(arr.sales_rep_employee_id, current + (arr.closing_arr || 0));
-        }
+        const monthKey = arr.month_year?.substring(0, 7) || "";
+        const value = arr.closing_arr || 0;
+        
+        // Credit BOTH sales_rep AND sales_head
+        [arr.sales_rep_employee_id, arr.sales_head_employee_id].forEach(empId => {
+          if (empId) {
+            const empMonthMap = closingByEmployeeMonth.get(empId) || new Map<string, number>();
+            empMonthMap.set(monthKey, (empMonthMap.get(monthKey) || 0) + value);
+            closingByEmployeeMonth.set(empId, empMonthMap);
+          }
+        });
+      });
+
+      // For each employee, use only the LATEST month's value for achievement
+      const closingActualMap = new Map<string, number>();
+      closingByEmployeeMonth.forEach((monthMap, empId) => {
+        const sortedMonths = Array.from(monthMap.keys()).sort();
+        const latestMonth = sortedMonths[sortedMonths.length - 1];
+        closingActualMap.set(empId, latestMonth ? monthMap.get(latestMonth) || 0 : 0);
       });
 
       // 9. Calculate incentive for each employee

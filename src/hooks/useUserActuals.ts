@@ -105,17 +105,19 @@ export function useUserActuals() {
         }
       });
 
-      // Fetch closing ARR actuals (check both sales_rep and sales_head attribution)
+      // Fetch ELIGIBLE closing ARR actuals (only records with end_date > fiscal year end)
+      // Attribution: Both sales_rep and sales_head receive credit
       const { data: closingArr, error: closingError } = await supabase
         .from("closing_arr_actuals")
-        .select("month_year, closing_arr, sales_rep_employee_id, sales_head_employee_id")
+        .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id")
         .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
         .gte("month_year", fiscalYearStart)
-        .lte("month_year", fiscalYearEnd);
+        .lte("month_year", fiscalYearEnd)
+        .gt("end_date", `${selectedYear}-12-31`); // ELIGIBILITY FILTER
 
       if (closingError) throw closingError;
 
-      // Aggregate Closing ARR by month
+      // Aggregate Eligible Closing ARR by month
       const closingByMonth = new Map<string, number>();
       (closingArr || []).forEach((arr) => {
         const monthKey = arr.month_year?.substring(0, 7) || "";
@@ -132,9 +134,15 @@ export function useUserActuals() {
         .map(([month, value]) => ({ month, value }))
         .sort((a, b) => a.month.localeCompare(b.month));
 
-      // Calculate YTD totals
+      // New Software Booking ARR is cumulative (sum all months)
       const newBookingYtd = newBookingMonthly.reduce((sum, m) => sum + m.value, 0);
-      const closingYtd = closingMonthly.reduce((sum, m) => sum + m.value, 0);
+      
+      // Closing ARR uses LATEST month only (not cumulative - uploads are portfolio snapshots)
+      const sortedClosingMonths = closingMonthly.map(m => m.month).sort();
+      const latestClosingMonth = sortedClosingMonths[sortedClosingMonths.length - 1];
+      const closingYtd = latestClosingMonth 
+        ? closingMonthly.find(m => m.month === latestClosingMonth)?.value || 0 
+        : 0;
 
       const actuals: MetricActuals[] = [
         {
@@ -192,16 +200,25 @@ export function useEmployeeActuals(employeeId: string | undefined, fiscalYear: n
         }
       });
 
-      // Fetch closing ARR actuals
+      // Fetch ELIGIBLE closing ARR actuals (both sales_rep and sales_head attribution)
       const { data: closingArr } = await supabase
         .from("closing_arr_actuals")
-        .select("month_year, closing_arr")
-        .eq("sales_rep_employee_id", employeeId)
+        .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id")
+        .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
         .gte("month_year", fiscalYearStart)
-        .lte("month_year", fiscalYearEnd);
+        .lte("month_year", fiscalYearEnd)
+        .gt("end_date", `${fiscalYear}-12-31`); // ELIGIBILITY FILTER
 
-      // Calculate YTD totals
-      const closingYtd = (closingArr || []).reduce((sum, a) => sum + (a.closing_arr || 0), 0);
+      // Group eligible Closing ARR by month and use only the LATEST month
+      const closingByMonth = new Map<string, number>();
+      (closingArr || []).forEach((arr) => {
+        const monthKey = arr.month_year?.substring(0, 7) || "";
+        closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + (arr.closing_arr || 0));
+      });
+      
+      const sortedClosingMonths = Array.from(closingByMonth.keys()).sort();
+      const latestClosingMonth = sortedClosingMonths[sortedClosingMonths.length - 1];
+      const closingYtd = latestClosingMonth ? closingByMonth.get(latestClosingMonth) || 0 : 0;
 
       return {
         newSoftwareBookingArr: newBookingYtd,
