@@ -17,6 +17,16 @@ const PARTICIPANT_ROLES = [
 // Roles that can view all data (non-sales roles without targets)
 const VIEW_ALL_ROLES = ["admin", "gtm_ops", "finance", "executive"] as const;
 
+/**
+ * Get the last day of a month given YYYY-MM format
+ */
+function getMonthEndDate(yearMonth: string): string {
+  const [year, month] = yearMonth.split("-").map(Number);
+  // new Date(year, month, 0) gives the last day of that month
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${yearMonth}-${lastDay.toString().padStart(2, "0")}`;
+}
+
 export interface DealRecord {
   id: string;
   project_id: string;
@@ -136,7 +146,9 @@ export function useMyDeals(selectedMonth: string | null) {
 
       // If specific month selected, filter to that month
       if (selectedMonth) {
-        query = query.gte("month_year", `${selectedMonth}-01`).lte("month_year", `${selectedMonth}-31`);
+        const startDate = `${selectedMonth}-01`;
+        const endDate = getMonthEndDate(selectedMonth);
+        query = query.gte("month_year", startDate).lte("month_year", endDate);
       }
 
       const { data: deals, error } = await query;
@@ -202,7 +214,9 @@ export function useMyClosingARR(selectedMonth: string | null) {
 
       // If specific month selected, filter to that month
       if (selectedMonth) {
-        query = query.gte("month_year", `${selectedMonth}-01`).lte("month_year", `${selectedMonth}-31`);
+        const startDate = `${selectedMonth}-01`;
+        const endDate = getMonthEndDate(selectedMonth);
+        query = query.gte("month_year", startDate).lte("month_year", endDate);
       }
 
       // If user cannot view all, filter by employee_id
