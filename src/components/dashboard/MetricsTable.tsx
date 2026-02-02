@@ -23,6 +23,25 @@ const formatCurrency = (value: number) => {
 
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
+// Helper to determine if all metrics have the same payout split
+const getUniformPayoutSplit = (metrics: MetricCompensation[]) => {
+  if (metrics.length === 0) return { uniform: true, bookingPct: 75, collectionPct: 25 };
+  
+  const firstBooking = metrics[0].payoutOnBookingPct ?? 75;
+  const firstCollection = metrics[0].payoutOnCollectionPct ?? 25;
+  
+  const allSame = metrics.every(
+    m => (m.payoutOnBookingPct ?? 75) === firstBooking && 
+         (m.payoutOnCollectionPct ?? 25) === firstCollection
+  );
+  
+  return { 
+    uniform: allSame, 
+    bookingPct: firstBooking, 
+    collectionPct: firstCollection 
+  };
+};
+
 export function MetricsTable({ 
   metrics, 
   totalEligiblePayout, 
@@ -30,6 +49,17 @@ export function MetricsTable({
   totalHoldback,
   clawbackAmount 
 }: MetricsTableProps) {
+  const payoutSplit = getUniformPayoutSplit(metrics);
+  
+  // Column headers: if all metrics have same split, show that percentage
+  // Otherwise, show generic "Booking" and "Collection"
+  const bookingHeader = payoutSplit.uniform 
+    ? `Booking (${payoutSplit.bookingPct}%)` 
+    : "Booking";
+  const collectionHeader = payoutSplit.uniform 
+    ? `Holdback (${payoutSplit.collectionPct}%)` 
+    : "Holdback";
+
   return (
     <Card className="border-border/50 shadow-sm">
       <CardHeader className="pb-3">
@@ -47,8 +77,8 @@ export function MetricsTable({
                 <TableHead className="text-right font-semibold">Achiev. %</TableHead>
                 <TableHead className="text-right font-semibold">Multiplier</TableHead>
                 <TableHead className="text-right font-semibold">Eligible Payout</TableHead>
-                <TableHead className="text-right font-semibold">Paid (75%)</TableHead>
-                <TableHead className="text-right font-semibold">Holding (25%)</TableHead>
+                <TableHead className="text-right font-semibold">{bookingHeader}</TableHead>
+                <TableHead className="text-right font-semibold">{collectionHeader}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -64,7 +94,7 @@ export function MetricsTable({
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <span className="font-medium text-foreground">{metric.metricName}</span>
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-1.5 flex-wrap">
                           <Badge variant="outline" className="text-xs">
                             {metric.weightagePercent}% weight
                           </Badge>
@@ -77,6 +107,11 @@ export function MetricsTable({
                           {metric.gateThreshold && (
                             <Badge variant="destructive" className="text-xs">
                               Gate: {metric.gateThreshold}%
+                            </Badge>
+                          )}
+                          {!payoutSplit.uniform && (
+                            <Badge variant="outline" className="text-xs">
+                              {metric.payoutOnBookingPct ?? 75}/{metric.payoutOnCollectionPct ?? 25} split
                             </Badge>
                           )}
                         </div>
