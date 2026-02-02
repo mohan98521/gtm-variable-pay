@@ -148,7 +148,7 @@ export function ClosingARRTable({
   const getCategoryBadge = (category: string | null) => {
     if (!category) return null;
     const variant = category === "software" ? "default" : "secondary";
-    const label = category === "software" ? "Software" : "Managed Service";
+    const label = category === "software" ? "Software" : "Managed Services";
     return <Badge variant={variant}>{label}</Badge>;
   };
 

@@ -21,6 +21,15 @@ import { Download, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, XCircle 
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { PROPOSAL_TYPES, generateProjectId } from "@/hooks/useDeals";
 
+// Normalize type_of_proposal variations to standard values
+const normalizeProposalType = (value: string | undefined): string => {
+  if (!value) return '';
+  const normalized = value.toLowerCase().trim().replace(/\s+/g, '_');
+  // Map singular to plural for managed services
+  if (normalized === 'managed_service') return 'managed_services';
+  return normalized;
+};
+
 interface DealsBulkUploadProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -217,7 +226,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         country: deal.country,
         bu: deal.bu,
         product: deal.product,
-        type_of_proposal: deal.type_of_proposal,
+        type_of_proposal: normalizeProposalType(deal.type_of_proposal),
         gp_margin_percent: deal.gp_margin_percent ? parseFloat(deal.gp_margin_percent) : undefined,
         month_year: parseMonthYear(deal.month_year) || deal.month_year,
         first_year_amc_usd: deal.first_year_amc_usd ? parseFloat(deal.first_year_amc_usd) : undefined,
@@ -276,7 +285,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       country: deal.country,
       bu: deal.bu,
       product: deal.product,
-      type_of_proposal: deal.type_of_proposal?.toLowerCase().trim() || "",
+      type_of_proposal: normalizeProposalType(deal.type_of_proposal),
       gp_margin_percent: deal.gp_margin_percent ? parseFloat(deal.gp_margin_percent) : undefined,
       month_year: parseMonthYear(deal.month_year) || deal.month_year,
       first_year_amc_usd: deal.first_year_amc_usd ? parseFloat(deal.first_year_amc_usd) : undefined,

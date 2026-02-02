@@ -5,8 +5,17 @@ import { toast } from "sonner";
 // Constants
 export const ORDER_CATEGORY_2_OPTIONS = [
   { value: "software", label: "Software" },
-  { value: "managed_service", label: "Managed Service" },
+  { value: "managed_services", label: "Managed Services" },
 ] as const;
+
+// Normalize order_category_2 variations to standard values
+export const normalizeOrderCategory2 = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const normalized = value.toLowerCase().trim().replace(/\s+/g, '_');
+  // Map singular to plural
+  if (normalized === 'managed_service') return 'managed_services';
+  return normalized;
+};
 
 // Types
 export interface ClosingARRActual {
