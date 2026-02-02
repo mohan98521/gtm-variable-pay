@@ -1,112 +1,94 @@
 
-# Fix Month Filter for My Deals and My Closing ARR Reports
+# Fix Reports Page Filters - Context-Aware Filter Display
 
-## Problem Identified
+## Problem
+The global search bar and "Farmer" (Sales Function) filter on the Reports page are always visible but only work for certain tabs:
+- **Works**: Employee Master, Incentive Audit
+- **Doesn't work**: Compensation Snapshot, My Deals, My Closing ARR
 
-The month filter in `useMyActualsData.ts` uses an invalid date format for months with fewer than 31 days.
-
-**Current Code (Lines 138-140):**
-```typescript
-if (selectedMonth) {
-  query = query.gte("month_year", `${selectedMonth}-01`).lte("month_year", `${selectedMonth}-31`);
-}
-```
-
-When `selectedMonth` is `2026-02`, this generates:
-- `gte("month_year", "2026-02-01")` - Valid
-- `lte("month_year", "2026-02-31")` - **Invalid date** (February has 28/29 days)
-
-The database query fails silently, returning no results for months like February, April, June, September, and November.
-
----
+This creates confusion as users expect the filters to work on all tabs.
 
 ## Solution
-
-Use proper date arithmetic to calculate the last day of the selected month instead of hardcoding `-31`.
-
-**Correct Approach:**
-```typescript
-if (selectedMonth) {
-  // selectedMonth is "YYYY-MM" format
-  const [year, month] = selectedMonth.split("-").map(Number);
-  
-  // First day of the month
-  const startDate = `${selectedMonth}-01`;
-  
-  // Last day of the month - use Date object to calculate correctly
-  const lastDay = new Date(year, month, 0).getDate(); // month is 1-indexed, but Date uses 0-indexed, so this gives last day
-  const endDate = `${selectedMonth}-${lastDay.toString().padStart(2, "0")}`;
-  
-  query = query.gte("month_year", startDate).lte("month_year", endDate);
-}
-```
-
-This correctly handles:
-- February (28 or 29 days depending on leap year)
-- April, June, September, November (30 days)
-- All other months (31 days)
+Make the global filter card **context-aware** - only show it on tabs where it actually functions. The "My Deals" and "My Closing ARR" tabs already have their own month filters built-in.
 
 ---
 
-## Files to Update
+## Implementation
 
-### File 1: `src/hooks/useMyActualsData.ts`
+### Update `src/pages/Reports.tsx`
 
-**Changes in `useMyDeals` function (lines 137-140):**
-Replace the hardcoded `-31` with proper last-day-of-month calculation.
+1. **Track the active tab** using state
+2. **Conditionally render the filter card** only for tabs where it works
+3. Show the filter card only when on:
+   - `employees` (Employee Master)
+   - `audit` (Incentive Audit)
 
-**Changes in `useMyClosingARR` function (lines 203-206):**
-Apply the same fix to the Closing ARR month filtering.
+### Code Changes
 
----
-
-## Implementation Details
-
-Create a helper function to calculate the last day of a month:
-
+**Add active tab state:**
 ```typescript
-/**
- * Get the last day of a month given YYYY-MM format
- */
-function getMonthEndDate(yearMonth: string): string {
-  const [year, month] = yearMonth.split("-").map(Number);
-  // new Date(year, month, 0) gives the last day of the previous month
-  // Since month is 1-indexed in our format but 0-indexed in JS Date,
-  // passing month directly gives us the last day of that month
-  const lastDay = new Date(year, month, 0).getDate();
-  return `${yearMonth}-${lastDay.toString().padStart(2, "0")}`;
-}
+const [activeTab, setActiveTab] = useState("employees");
 ```
 
-Then update both filter blocks:
-
+**Update Tabs component to track active tab:**
 ```typescript
-// In useMyDeals (around line 138)
-if (selectedMonth) {
-  const startDate = `${selectedMonth}-01`;
-  const endDate = getMonthEndDate(selectedMonth);
-  query = query.gte("month_year", startDate).lte("month_year", endDate);
-}
+<Tabs 
+  defaultValue="employees" 
+  value={activeTab}
+  onValueChange={setActiveTab}
+  className="space-y-4"
+>
+```
 
-// In useMyClosingARR (around line 204)
-if (selectedMonth) {
-  const startDate = `${selectedMonth}-01`;
-  const endDate = getMonthEndDate(selectedMonth);
-  query = query.gte("month_year", startDate).lte("month_year", endDate);
-}
+**Conditionally render the filter card:**
+```typescript
+{/* Filters - Only show for Employee Master and Incentive Audit */}
+{(activeTab === "employees" || activeTab === "audit") && (
+  <Card>
+    <CardContent className="pt-4">
+      <div className="flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, ID, or email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+        <Select value={salesFunctionFilter} onValueChange={setSalesFunctionFilter}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter by Sales Function" />
+          </SelectTrigger>
+          <SelectContent>
+            {SALES_FUNCTIONS.map((sf) => (
+              <SelectItem key={sf} value={sf}>{sf}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </CardContent>
+  </Card>
+)}
 ```
 
 ---
 
 ## Summary
 
-| File | Change |
-|------|--------|
-| `src/hooks/useMyActualsData.ts` | Add `getMonthEndDate` helper function and fix month filter in both `useMyDeals` and `useMyClosingARR` hooks |
+| Change | Description |
+|--------|-------------|
+| Add `activeTab` state | Track which tab is currently selected |
+| Update `<Tabs>` component | Add `value` and `onValueChange` props to track state |
+| Wrap filter card in conditional | Only render filters for `employees` and `audit` tabs |
 
 ## Expected Outcome
+- **Employee Master tab**: Shows search + sales function filter ✅
+- **Compensation Snapshot tab**: No filters shown (data comes from user_targets, no filtering logic) ✅
+- **Incentive Audit tab**: Shows search + sales function filter ✅
+- **My Deals tab**: No global filters (uses its own month filter) ✅
+- **My Closing ARR tab**: No global filters (uses its own month filter) ✅
 
-After this fix:
-- February 2026 deals will display correctly (using `2026-02-28` as end date)
-- All months will filter correctly regardless of their actual number of days
-- No more invalid date errors from the database
+This removes user confusion by only showing filters when they actually work.
