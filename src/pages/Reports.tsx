@@ -112,6 +112,7 @@ interface UserTarget {
 
 export default function Reports() {
   const { selectedYear } = useFiscalYear();
+  const [activeTab, setActiveTab] = useState("employees");
   const [searchTerm, setSearchTerm] = useState("");
   const [salesFunctionFilter, setSalesFunctionFilter] = useState("All");
   const [visibleColumns, setVisibleColumns] = useState<string[]>(
@@ -382,7 +383,7 @@ export default function Reports() {
           <p className="text-muted-foreground">View and export employee and compensation data</p>
         </div>
 
-        <Tabs defaultValue="employees" className="space-y-4">
+        <Tabs defaultValue="employees" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="bg-[hsl(var(--azentio-navy))] text-white flex-wrap h-auto gap-1 p-1">
             <TabsTrigger value="employees" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
               <Users className="mr-2 h-4 w-4" />
@@ -406,7 +407,8 @@ export default function Reports() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Filters */}
+          {/* Filters - Only show for Employee Master and Incentive Audit tabs */}
+          {(activeTab === "employees" || activeTab === "audit") && (
           <Card>
             <CardContent className="pt-4">
               <div className="flex flex-wrap gap-4">
@@ -434,6 +436,7 @@ export default function Reports() {
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* Tab 1: Employee Master Data */}
           <TabsContent value="employees">
