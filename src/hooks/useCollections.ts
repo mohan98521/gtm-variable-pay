@@ -274,3 +274,65 @@ export function useBulkUpdateCollections() {
     },
   });
 }
+
+/**
+ * Bulk import collection statuses from CSV/Excel
+ * Used by CollectionsBulkUpload component
+ */
+export function useBulkImportCollections() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      updates: Array<{
+        id: string;
+        is_collected: boolean;
+        collection_date?: string | null;
+        notes?: string | null;
+      }>
+    ) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const results = await Promise.all(
+        updates.map(async (update) => {
+          // Calculate collection_month as first of the month when collected
+          const collectionMonth = update.is_collected && update.collection_date
+            ? format(parseISO(update.collection_date), "yyyy-MM-01")
+            : null;
+
+          const { data, error } = await supabase
+            .from("deal_collections")
+            .update({
+              is_collected: update.is_collected,
+              collection_date: update.is_collected ? update.collection_date : null,
+              collection_month: collectionMonth,
+              notes: update.notes,
+              updated_by: user?.id,
+            })
+            .eq("id", update.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+          return data;
+        })
+      );
+
+      return results;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["deal_collections"] });
+      toast({
+        title: "Import successful",
+        description: `${data.length} collection record${data.length !== 1 ? "s" : ""} updated.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Import failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
