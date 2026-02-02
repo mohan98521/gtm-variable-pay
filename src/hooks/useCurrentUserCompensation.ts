@@ -41,11 +41,13 @@ export interface MetricCompensation {
   allocation: number;
   multiplier: number;
   eligiblePayout: number;
-  amountPaid: number;      // 75% of eligible
-  holdback: number;        // 25% of eligible
+  amountPaid: number;      // payout_on_booking_pct of eligible
+  holdback: number;        // payout_on_collection_pct of eligible
   logicType: string;
   gateThreshold: number | null;
   multiplierGrids: MultiplierGrid[];
+  payoutOnBookingPct: number;
+  payoutOnCollectionPct: number;
 }
 
 export interface CommissionCompensation {
@@ -54,8 +56,10 @@ export interface CommissionCompensation {
   rate: number;
   minThreshold: number | null;
   grossPayout: number;
-  amountPaid: number;      // 75%
-  holdback: number;        // 25%
+  amountPaid: number;      // payout_on_booking_pct
+  holdback: number;        // payout_on_collection_pct
+  payoutOnBookingPct: number;
+  payoutOnCollectionPct: number;
 }
 
 export interface MonthlyMetricBreakdown {
@@ -177,12 +181,14 @@ export function useCurrentUserCompensation() {
         commission_type: string;
         commission_rate_pct: number;
         min_threshold_usd: number | null;
+        payout_on_booking_pct: number | null;
+        payout_on_collection_pct: number | null;
       }> = [];
       
       if (planId) {
         const { data: commissions } = await supabase
           .from("plan_commissions")
-          .select("commission_type, commission_rate_pct, min_threshold_usd")
+          .select("commission_type, commission_rate_pct, min_threshold_usd, payout_on_booking_pct, payout_on_collection_pct")
           .eq("plan_id", planId)
           .eq("is_active", true);
         
@@ -290,8 +296,11 @@ export function useCurrentUserCompensation() {
           const belowGate = isGated && pm.gate_threshold_percent && achievementPct <= pm.gate_threshold_percent;
           const eligiblePayout = belowGate ? 0 : (achievementPct / 100) * allocation * multiplier;
 
-          const amountPaid = eligiblePayout * 0.75;
-          const holdback = eligiblePayout * 0.25;
+          // Use dynamic payout split from plan metric (fallback to 75/25)
+          const payoutOnBookingPct = pm.payout_on_booking_pct ?? 75;
+          const payoutOnCollectionPct = pm.payout_on_collection_pct ?? 25;
+          const amountPaid = eligiblePayout * (payoutOnBookingPct / 100);
+          const holdback = eligiblePayout * (payoutOnCollectionPct / 100);
 
           metrics.push({
             metricName: pm.metric_name,
@@ -307,12 +316,16 @@ export function useCurrentUserCompensation() {
             logicType: pm.logic_type,
             gateThreshold: pm.gate_threshold_percent,
             multiplierGrids: pm.multiplier_grids || [],
+            payoutOnBookingPct,
+            payoutOnCollectionPct,
           });
         });
       } else {
         // Fallback: create metrics from performance targets if no plan metrics
         const metricNames = ["New Software Booking ARR", "Closing ARR"];
         const defaultWeightage = 50;
+        const defaultBookingPct = 75;
+        const defaultCollectionPct = 25;
 
         metricNames.forEach(metricName => {
           const targetValue = targetMap.get(metricName) || 0;
@@ -322,8 +335,8 @@ export function useCurrentUserCompensation() {
           // Default multiplier logic
           const multiplier = achievementPct >= 100 ? 1.0 : 1.0;
           const eligiblePayout = (achievementPct / 100) * allocation * multiplier;
-          const amountPaid = eligiblePayout * 0.75;
-          const holdback = eligiblePayout * 0.25;
+          const amountPaid = eligiblePayout * (defaultBookingPct / 100);
+          const holdback = eligiblePayout * (defaultCollectionPct / 100);
 
           metrics.push({
             metricName,
@@ -339,6 +352,8 @@ export function useCurrentUserCompensation() {
             logicType: "Linear",
             gateThreshold: null,
             multiplierGrids: [],
+            payoutOnBookingPct: defaultBookingPct,
+            payoutOnCollectionPct: defaultCollectionPct,
           });
         });
       }
@@ -356,8 +371,12 @@ export function useCurrentUserCompensation() {
         const rate = pc.commission_rate_pct / 100;
         const meetsThreshold = !pc.min_threshold_usd || dealValue >= pc.min_threshold_usd;
         const grossPayout = meetsThreshold ? dealValue * rate : 0;
-        const amountPaid = grossPayout * 0.75;
-        const holdback = grossPayout * 0.25;
+        
+        // Use dynamic payout split from plan commission (fallback to 75/25)
+        const payoutOnBookingPct = pc.payout_on_booking_pct ?? 75;
+        const payoutOnCollectionPct = pc.payout_on_collection_pct ?? 25;
+        const amountPaid = grossPayout * (payoutOnBookingPct / 100);
+        const holdback = grossPayout * (payoutOnCollectionPct / 100);
 
         return {
           commissionType: pc.commission_type,
@@ -367,6 +386,8 @@ export function useCurrentUserCompensation() {
           grossPayout,
           amountPaid,
           holdback,
+          payoutOnBookingPct,
+          payoutOnCollectionPct,
         };
       });
 

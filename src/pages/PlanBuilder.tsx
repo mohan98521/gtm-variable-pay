@@ -418,6 +418,8 @@ export default function PlanBuilder() {
                     <TableHead className="text-center">Weightage</TableHead>
                     <TableHead className="text-center">Logic Type</TableHead>
                     <TableHead className="text-center">Gate Threshold</TableHead>
+                    <TableHead className="text-center">Upon Bookings</TableHead>
+                    <TableHead className="text-center">Upon Collections</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -433,6 +435,12 @@ export default function PlanBuilder() {
                       </TableCell>
                       <TableCell className="text-center">
                         {metric.gate_threshold_percent ? `${metric.gate_threshold_percent}%` : "-"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline">{metric.payout_on_booking_pct ?? 75}%</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline">{metric.payout_on_collection_pct ?? 25}%</Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">

@@ -88,6 +88,8 @@ interface PlanCommissionRow {
   commission_rate_pct: number;
   min_threshold_usd: number | null;
   is_active: boolean;
+  payout_on_booking_pct: number | null;
+  payout_on_collection_pct: number | null;
 }
 
 /**
@@ -149,10 +151,10 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         allGrids = grids || [];
       }
 
-      // 5. Fetch all plan commissions
+      // 5. Fetch all plan commissions with payout split fields
       const { data: allCommissions, error: commissionsError } = await supabase
         .from("plan_commissions")
-        .select("*")
+        .select("id, plan_id, commission_type, commission_rate_pct, min_threshold_usd, is_active, payout_on_booking_pct, payout_on_collection_pct")
         .in("plan_id", planIds);
 
       if (commissionsError) throw commissionsError;
@@ -390,10 +392,16 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
           );
           
           if (commConfig) {
+            // Use dynamic payout split from plan commission (fallback to 75/25)
+            const payoutOnBookingPct = commConfig.payout_on_booking_pct ?? 75;
+            const payoutOnCollectionPct = commConfig.payout_on_collection_pct ?? 25;
+            
             const calcResult = calculateDealCommission(
               dealValue,
               commConfig.commission_rate_pct,
-              commConfig.min_threshold_usd
+              commConfig.min_threshold_usd,
+              payoutOnBookingPct,
+              payoutOnCollectionPct
             );
             
             if (calcResult.qualifies && calcResult.gross > 0) {

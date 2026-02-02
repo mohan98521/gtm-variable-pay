@@ -21,17 +21,21 @@ export interface CommissionCalculation {
 
 /**
  * Calculate commission for a single deal based on TCV and commission rate.
- * Applies the 75%/25% split between immediate payout and holdback.
+ * Applies a configurable split between immediate payout and holdback.
  * 
  * @param tcvUsd - Total Contract Value in USD
  * @param commissionRatePct - Commission rate as a percentage (e.g., 4 for 4%)
  * @param minThresholdUsd - Optional minimum threshold the deal must meet
+ * @param payoutOnBookingPct - Percentage paid on booking (default 75)
+ * @param payoutOnCollectionPct - Percentage held for collection (default 25)
  * @returns Commission breakdown with gross, paid, and holdback amounts
  */
 export function calculateDealCommission(
   tcvUsd: number,
   commissionRatePct: number,
-  minThresholdUsd: number | null = null
+  minThresholdUsd: number | null = null,
+  payoutOnBookingPct: number = 75,
+  payoutOnCollectionPct: number = 25
 ): { qualifies: boolean; gross: number; paid: number; holdback: number } {
   // Check if deal meets minimum threshold
   const qualifies = minThresholdUsd === null || tcvUsd >= minThresholdUsd;
@@ -43,9 +47,9 @@ export function calculateDealCommission(
   // Calculate gross commission
   const gross = tcvUsd * (commissionRatePct / 100);
   
-  // Apply 75/25 split
-  const paid = gross * 0.75;
-  const holdback = gross * 0.25;
+  // Apply configurable split (defaults to 75/25)
+  const paid = gross * (payoutOnBookingPct / 100);
+  const holdback = gross * (payoutOnCollectionPct / 100);
   
   return {
     qualifies,
