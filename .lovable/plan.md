@@ -1,150 +1,134 @@
 
-## Fix: Plan Lookup Using Exact Match
+# Fix Bulk Upload Validation for Managed Services
 
-### Current State Analysis
+## Problem Summary
+The bulk upload for **Deals** and **Closing ARR** fails when users provide `order_category_2` or `type_of_proposal` as "managed service" (with space) or "Managed Service" because the system currently only accepts exact matches like `managed_service` or `managed_services`.
 
-The **actuals fetching is already correct** - it uses Employee ID to check all 8 participant role columns:
-```typescript
-// Line 228-230 in useCurrentUserCompensation.ts
-(deals || []).forEach((deal: any) => {
-  const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
-```
+## Root Cause
+- **Closing ARR**: Uses `managed_service` (singular with underscore) as the internal value
+- **Deals**: Uses `managed_services` (plural with underscore) as the internal value
+- Validation logic doesn't normalize user input variations (spaces, casing, singular vs plural)
 
-The **problem** is the plan lookup on line 131:
-```typescript
-.ilike("name", `%${planName}%`)  // Returns multiple matches!
-```
+## Solution
 
-When `planName = "Farmer"`, this matches:
-- "Farmer" (correct)
-- "Farmer Retain" (wrong)
-- "Sales Head Farmer" (wrong)
+### 1. Standardize to Plural "Managed Services"
+Update both modules to use `managed_services` consistently as the internal value and "Managed Services" as the display label.
 
-With `maybeSingle()`, this returns null or the wrong plan, breaking all downstream data (metrics, multipliers, commissions).
-
----
-
-### Solution: Single Line Fix
-
-Change line 131 from fuzzy `ilike` to exact `eq`:
-
-**File**: `src/hooks/useCurrentUserCompensation.ts`
-
-```typescript
-// Line 127-132 - BEFORE:
-const { data: plan } = await supabase
-  .from("comp_plans")
-  .select("id, name")
-  .eq("effective_year", selectedYear)
-  .ilike("name", `%${planName}%`)  // BUG: Matches multiple plans
-  .maybeSingle();
-
-// AFTER:
-const { data: plan } = await supabase
-  .from("comp_plans")
-  .select("id, name")
-  .eq("effective_year", selectedYear)
-  .eq("name", planName)  // FIX: Exact match only
-  .maybeSingle();
-```
+### 2. Add Normalization Logic for Bulk Uploads
+Create a normalization function that maps all variations to the standard value:
+- "managed service" → "managed_services"
+- "managed_service" → "managed_services"  
+- "Managed Service" → "managed_services"
+- "Managed Services" → "managed_services"
 
 ---
 
-### Why This Works
+## Files to Modify
 
-The `SALES_FUNCTION_TO_PLAN` mapping (lines 8-21) already handles the translation:
-
-| Employee's sales_function | Maps To (planName) | Comp Plan Name (exact match) |
-|---------------------------|-------------------|------------------------------|
-| "Farming" | "Farmer" | "Farmer" |
-| "Hunting" | "Hunter" | "Hunter" |
-| "Farmer - Retain" | "Farmer Retain" | "Farmer Retain" |
-| "Sales Head - Farmer" | "Sales Head Farmer" | "Sales Head Farmer" |
-
-The mapping ensures `planName` matches the exact plan name in the database.
-
----
-
-### Additional Fix: Closing ARR Attribution
-
-While the deals table uses all 8 participant roles, the `closing_arr_actuals` query (line 248) only checks `sales_rep_employee_id`. Let me verify the table structure:
-
-The `closing_arr_actuals` table has `sales_rep_employee_id` and `sales_head_employee_id` columns. We should check both.
-
-**File**: `src/hooks/useCurrentUserCompensation.ts`
+### File 1: `src/hooks/useClosingARR.ts`
+**Change:** Update `ORDER_CATEGORY_2_OPTIONS` to use plural form
 
 ```typescript
-// Lines 245-250 - BEFORE:
-const { data: closingArr } = await supabase
-  .from("closing_arr_actuals")
-  .select("month_year, closing_arr")
-  .eq("sales_rep_employee_id", employeeId)
-  .gte("month_year", fiscalYearStart)
-  .lte("month_year", fiscalYearEnd);
+// Line 8 - Change from:
+{ value: "managed_service", label: "Managed Service" },
 
-// AFTER:
-const { data: closingArr } = await supabase
-  .from("closing_arr_actuals")
-  .select("month_year, closing_arr, sales_rep_employee_id, sales_head_employee_id")
-  .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
-  .gte("month_year", fiscalYearStart)
-  .lte("month_year", fiscalYearEnd);
+// To:
+{ value: "managed_services", label: "Managed Services" },
 ```
 
-And update the same in `useUserActuals.ts` (lines 108-114).
-
----
-
-### Commission Table Visibility Fix
-
-**File**: `src/components/dashboard/CommissionTable.tsx`
-
-Change to always show the section (even when empty):
+### File 2: `src/components/data-inputs/ClosingARRBulkUpload.tsx`
+**Changes:**
+1. Add normalization function for order_category_2
+2. Update validation error message
+3. Apply normalization before storing
 
 ```typescript
-// BEFORE (line 29-31):
-if (commissions.length === 0) {
-  return null;
+// Add normalization function
+const normalizeCategory = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const normalized = value.toLowerCase().trim().replace(/\s+/g, '_');
+  // Map singular to plural
+  if (normalized === 'managed_service') return 'managed_services';
+  return normalized;
+};
+
+// Update validation (around line 149-153):
+const normalizedCategory = normalizeCategory(row.order_category_2);
+if (normalizedCategory && !validCategories.has(normalizedCategory)) {
+  errors.push("order_category_2 must be 'software' or 'managed_services'");
 }
 
-// AFTER:
-if (commissions.length === 0) {
-  return (
-    <Card className="border-border/50 shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg text-foreground">
-          Commission Structure Summary
-        </CardTitle>
-        <CardDescription>
-          No commission transactions recorded for this period
-        </CardDescription>
-      </CardHeader>
-    </Card>
-  );
-}
+// Apply normalized value when building data (line 180):
+order_category_2: normalizeCategory(row.order_category_2),
+```
+
+### File 3: `src/components/data-inputs/DealsBulkUpload.tsx`
+**Changes:**
+1. Add normalization function for type_of_proposal
+2. Apply normalization during parsing and validation
+
+```typescript
+// Add normalization function
+const normalizeProposalType = (value: string | undefined): string => {
+  if (!value) return '';
+  const normalized = value.toLowerCase().trim().replace(/\s+/g, '_');
+  // Map singular to plural for managed services
+  if (normalized === 'managed_service') return 'managed_services';
+  return normalized;
+};
+
+// Update parseCSV function (line 220):
+type_of_proposal: normalizeProposalType(deal.type_of_proposal),
+
+// Update rowsToParsedDeals function (line 279):
+type_of_proposal: normalizeProposalType(deal.type_of_proposal),
+
+// Validation will now work correctly since normalization happens first
+```
+
+### File 4: `src/components/data-inputs/ClosingARRTable.tsx`
+**Change:** Update badge display label to "Managed Services"
+
+```typescript
+// Around line 151 - Change from:
+const label = category === "software" ? "Software" : "Managed Service";
+
+// To:
+const label = category === "software" ? "Software" : "Managed Services";
 ```
 
 ---
 
-### Files to Modify
+## Database Migration
+Normalize any existing records to use the plural form:
 
-| File | Changes |
-|------|---------|
-| `src/hooks/useCurrentUserCompensation.ts` | Line 131: Change `ilike` to `eq`; Lines 245-250: Add OR filter for closing ARR |
-| `src/hooks/useUserActuals.ts` | Lines 108-114: Add OR filter for closing ARR |
-| `src/components/dashboard/CommissionTable.tsx` | Lines 29-31: Always display section |
+```sql
+-- Update existing Closing ARR records
+UPDATE closing_arr_actuals 
+SET order_category_2 = 'managed_services' 
+WHERE order_category_2 = 'managed_service';
+
+-- Update existing Deals records (if any use singular)
+UPDATE deals 
+SET type_of_proposal = 'managed_services' 
+WHERE type_of_proposal = 'managed_service';
+```
 
 ---
 
-### Expected Results After Fix
+## Summary of Changes
 
-| Metric | Before | After |
-|--------|--------|-------|
-| Plan Lookup | Fails (null) | "Farmer" (ed01c7a6-...) |
-| New SW Booking ARR Actual | $0 | **$793,159** |
-| Achievement % | 0% | **132.2%** |
-| Multiplier | 1.0x (fallback) | **1.6x** (from grid) |
-| Commission Section | Not shown | **Always visible** |
-| Managed Services | -- | **$106,875 @ 1.5%** |
-| Perpetual License | -- | **$100,000 @ 4%** |
-| What-If Multiplier at 116% | 1.0x | **1.4x** |
+| Component | Current Value | New Value |
+|-----------|--------------|-----------|
+| Closing ARR Options | `managed_service` | `managed_services` |
+| Closing ARR Badge | "Managed Service" | "Managed Services" |
+| Closing ARR Bulk Upload | Strict validation | Normalized + flexible |
+| Deals Bulk Upload | Strict validation | Normalized + flexible |
+| Database Records | Mixed singular | All plural |
+
+## Accepted Input Variations (After Fix)
+Users will be able to upload data with any of these values:
+- `software`, `Software`, `SOFTWARE`
+- `managed_services`, `managed_service`, `Managed Services`, `Managed Service`, `managed services`, `managed service`
+
+All variations will be normalized to the canonical internal values: `software` or `managed_services`.
