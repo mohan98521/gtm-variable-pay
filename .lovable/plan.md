@@ -1,131 +1,112 @@
 
-# Update My Deals and My Closing ARR for Non-Sales Roles
+# Fix Month Filter for My Deals and My Closing ARR Reports
 
-## Problem
-Currently, the "My Deals" and "My Closing ARR" reports filter data based on the user's `employee_id` matching participant roles. However, users with non-sales roles (admin, gtm_ops, finance, executive) don't have targets assigned and should see **all data** instead of data linked to their employee_id.
+## Problem Identified
 
-## Current Behavior
-- **All users**: See only records where their `employee_id` matches a participant role
-- This returns empty or limited data for admin, gtm_ops, finance, and executive users
+The month filter in `useMyActualsData.ts` uses an invalid date format for months with fewer than 31 days.
 
-## Desired Behavior
-- **sales_rep and sales_head roles**: Continue to see only records linked to their employee_id
-- **admin, gtm_ops, finance, executive roles**: See ALL records (no employee filtering)
-
-## Solution
-
-### File 1: `src/hooks/useMyActualsData.ts`
-
-**Changes to `useMyDeals` hook:**
-1. Fetch user's roles from `user_roles` table
-2. Check if user has any "view all data" role (admin, gtm_ops, finance, executive)
-3. If yes, return ALL deals without employee filtering
-4. If no (sales_rep/sales_head), apply the existing participant role filtering
-
-**Changes to `useMyClosingARR` hook:**
-1. Fetch user's roles from `user_roles` table
-2. Check if user has any "view all data" role
-3. If yes, return ALL closing ARR records without employee filtering
-4. If no (sales_rep/sales_head), apply the existing sales_rep/sales_head filtering
-
-### Technical Implementation
-
+**Current Code (Lines 138-140):**
 ```typescript
-// Add helper to check for "view all data" roles
-const VIEW_ALL_ROLES = ['admin', 'gtm_ops', 'finance', 'executive'] as const;
-
-export function useMyDeals(selectedMonth: string | null) {
-  const { selectedYear } = useFiscalYear();
-
-  return useQuery({
-    queryKey: ["my_deals", selectedYear, selectedMonth],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-
-      // Check if user has "view all data" role
-      const { data: userRoles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id);
-      
-      const roles = (userRoles || []).map(r => r.role);
-      const canViewAll = VIEW_ALL_ROLES.some(role => roles.includes(role));
-
-      const fiscalYearStart = `${selectedYear}-01-01`;
-      const fiscalYearEnd = `${selectedYear}-12-31`;
-
-      // Build query for fiscal year
-      let query = supabase
-        .from("deals")
-        .select("*")
-        .gte("month_year", fiscalYearStart)
-        .lte("month_year", fiscalYearEnd)
-        .order("month_year", { ascending: false });
-
-      // Month filter if specified
-      if (selectedMonth) {
-        query = query
-          .gte("month_year", `${selectedMonth}-01`)
-          .lte("month_year", `${selectedMonth}-31`);
-      }
-
-      const { data: deals, error } = await query;
-      if (error) throw error;
-
-      // If user can view all, return all deals
-      if (canViewAll) {
-        return deals as DealRecord[];
-      }
-
-      // Otherwise, filter to deals where user is a participant
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("employee_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!profile?.employee_id) return [];
-
-      const employeeId = profile.employee_id;
-      const filteredDeals = (deals || []).filter((deal) => {
-        return PARTICIPANT_ROLES.some((role) => deal[role] === employeeId);
-      });
-
-      return filteredDeals as DealRecord[];
-    },
-  });
+if (selectedMonth) {
+  query = query.gte("month_year", `${selectedMonth}-01`).lte("month_year", `${selectedMonth}-31`);
 }
 ```
 
-Similar logic will be applied to `useMyClosingARR`.
+When `selectedMonth` is `2026-02`, this generates:
+- `gte("month_year", "2026-02-01")` - Valid
+- `lte("month_year", "2026-02-31")` - **Invalid date** (February has 28/29 days)
 
-### Report Component Updates
-
-The report components (`MyDealsReport.tsx` and `MyClosingARRReport.tsx`) will continue to work without changes since they just consume the data from the hooks. However, we should update the descriptions to be role-aware:
-- For sales roles: "Deals contributing to **your** incentive computation"
-- For admin roles: "**All** deals for the fiscal year"
-
-### Update `src/components/reports/MyDealsReport.tsx`
-- Import `useUserRole` hook
-- Conditionally update the card description based on role
-
-### Update `src/components/reports/MyClosingARRReport.tsx`
-- Import `useUserRole` hook  
-- Conditionally update the card description based on role
+The database query fails silently, returning no results for months like February, April, June, September, and November.
 
 ---
 
-## Summary of Changes
+## Solution
+
+Use proper date arithmetic to calculate the last day of the selected month instead of hardcoding `-31`.
+
+**Correct Approach:**
+```typescript
+if (selectedMonth) {
+  // selectedMonth is "YYYY-MM" format
+  const [year, month] = selectedMonth.split("-").map(Number);
+  
+  // First day of the month
+  const startDate = `${selectedMonth}-01`;
+  
+  // Last day of the month - use Date object to calculate correctly
+  const lastDay = new Date(year, month, 0).getDate(); // month is 1-indexed, but Date uses 0-indexed, so this gives last day
+  const endDate = `${selectedMonth}-${lastDay.toString().padStart(2, "0")}`;
+  
+  query = query.gte("month_year", startDate).lte("month_year", endDate);
+}
+```
+
+This correctly handles:
+- February (28 or 29 days depending on leap year)
+- April, June, September, November (30 days)
+- All other months (31 days)
+
+---
+
+## Files to Update
+
+### File 1: `src/hooks/useMyActualsData.ts`
+
+**Changes in `useMyDeals` function (lines 137-140):**
+Replace the hardcoded `-31` with proper last-day-of-month calculation.
+
+**Changes in `useMyClosingARR` function (lines 203-206):**
+Apply the same fix to the Closing ARR month filtering.
+
+---
+
+## Implementation Details
+
+Create a helper function to calculate the last day of a month:
+
+```typescript
+/**
+ * Get the last day of a month given YYYY-MM format
+ */
+function getMonthEndDate(yearMonth: string): string {
+  const [year, month] = yearMonth.split("-").map(Number);
+  // new Date(year, month, 0) gives the last day of the previous month
+  // Since month is 1-indexed in our format but 0-indexed in JS Date,
+  // passing month directly gives us the last day of that month
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${yearMonth}-${lastDay.toString().padStart(2, "0")}`;
+}
+```
+
+Then update both filter blocks:
+
+```typescript
+// In useMyDeals (around line 138)
+if (selectedMonth) {
+  const startDate = `${selectedMonth}-01`;
+  const endDate = getMonthEndDate(selectedMonth);
+  query = query.gte("month_year", startDate).lte("month_year", endDate);
+}
+
+// In useMyClosingARR (around line 204)
+if (selectedMonth) {
+  const startDate = `${selectedMonth}-01`;
+  const endDate = getMonthEndDate(selectedMonth);
+  query = query.gte("month_year", startDate).lte("month_year", endDate);
+}
+```
+
+---
+
+## Summary
 
 | File | Change |
 |------|--------|
-| `src/hooks/useMyActualsData.ts` | Add role check to return all data for admin/gtm_ops/finance/executive, filtered data for sales roles |
-| `src/components/reports/MyDealsReport.tsx` | Update description text based on user role |
-| `src/components/reports/MyClosingARRReport.tsx` | Update description text based on user role |
+| `src/hooks/useMyActualsData.ts` | Add `getMonthEndDate` helper function and fix month filter in both `useMyDeals` and `useMyClosingARR` hooks |
 
 ## Expected Outcome
 
-- **Admin/GTM Ops/Finance/Executive users**: See all Deals and all Closing ARR records for the fiscal year
-- **Sales Rep/Sales Head users**: Continue to see only records where they are a participant
-- Dynamic report descriptions reflect whether user is viewing "all data" or "my data"
+After this fix:
+- February 2026 deals will display correctly (using `2026-02-28` as end date)
+- All months will filter correctly regardless of their actual number of days
+- No more invalid date errors from the database
