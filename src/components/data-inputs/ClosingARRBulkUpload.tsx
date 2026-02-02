@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Download } from "lucide-react";
-import { useBulkUpsertClosingARR, ClosingARRInsert, ORDER_CATEGORY_2_OPTIONS } from "@/hooks/useClosingARR";
+import { useBulkUpsertClosingARR, ClosingARRInsert, ORDER_CATEGORY_2_OPTIONS, normalizeOrderCategory2 } from "@/hooks/useClosingARR";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 
@@ -146,10 +146,10 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
       }
     }
 
-    // Case-insensitive validation for order_category_2
-    const normalizedCategory = row.order_category_2?.toLowerCase().trim();
+    // Case-insensitive validation for order_category_2 with normalization
+    const normalizedCategory = normalizeOrderCategory2(row.order_category_2);
     if (normalizedCategory && !validCategories.has(normalizedCategory)) {
-      errors.push("order_category_2 must be 'software' or 'managed_service'");
+      errors.push("order_category_2 must be 'software' or 'managed_services'");
     }
 
     // Validate employee IDs
@@ -177,7 +177,7 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
       customer_name: row.customer_name,
       order_category: row.order_category || null,
       status: row.status || null,
-      order_category_2: row.order_category_2?.toLowerCase() || null,
+      order_category_2: normalizeOrderCategory2(row.order_category_2),
       opening_arr: parseNumber(row.opening_arr) || 0,
       cr: parseNumber(row.cr) || 0,
       als_others: parseNumber(row.als_others) || 0,
