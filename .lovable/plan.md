@@ -1,134 +1,164 @@
 
-# Fix Bulk Upload Validation for Managed Services
+# Fix Closing ARR Computation Logic
 
-## Problem Summary
-The bulk upload for **Deals** and **Closing ARR** fails when users provide `order_category_2` or `type_of_proposal` as "managed service" (with space) or "Managed Service" because the system currently only accepts exact matches like `managed_service` or `managed_services`.
+## Problems Identified
 
-## Root Cause
-- **Closing ARR**: Uses `managed_service` (singular with underscore) as the internal value
-- **Deals**: Uses `managed_services` (plural with underscore) as the internal value
-- Validation logic doesn't normalize user input variations (spaces, casing, singular vs plural)
+### Issue 1: Eligibility Filter Not Applied in Achievement Calculation
+Currently, the system sums ALL Closing ARR records for achievement. Per business rules, only **Eligible Closing ARR** (projects with `end_date > Dec 31, {fiscalYear}`) should be counted toward achievement.
 
-## Solution
+**Current:** Uses total Closing ARR = $2.08M (12 projects)  
+**Expected:** Uses Eligible Closing ARR = $181K (2 projects with end_date > 2026-12-31)
 
-### 1. Standardize to Plural "Managed Services"
-Update both modules to use `managed_services` consistently as the internal value and "Managed Services" as the display label.
+### Issue 2: Sales Head Attribution Missing for Closing ARR
+The Incentive Audit report only checks `sales_rep_employee_id` for Closing ARR attribution. Your bulk upload includes both `sales_rep_id` and `sales_head_id`, but the Sales Head is not being credited.
 
-### 2. Add Normalization Logic for Bulk Uploads
-Create a normalization function that maps all variations to the standard value:
-- "managed service" → "managed_services"
-- "managed_service" → "managed_services"  
-- "Managed Service" → "managed_services"
-- "Managed Services" → "managed_services"
+### Issue 3: Non-Cumulative Monthly Logic for Closing ARR
+Unlike Deals (which ARE cumulative), Closing ARR uploads are monthly **snapshots** of the ARR portfolio. When you upload Jan with $500K and Feb with $700K, the Feb value represents the current portfolio state, not an addition.
+
+**Current Logic:** YTD = Jan + Feb + ... (cumulative)  
+**Correct Logic:** Use only the **latest month's** eligible Closing ARR
 
 ---
 
-## Files to Modify
+## Solution Overview
 
-### File 1: `src/hooks/useClosingARR.ts`
-**Change:** Update `ORDER_CATEGORY_2_OPTIONS` to use plural form
+### Step 1: Update `useCurrentUserCompensation.ts`
+- Add eligibility filter: only include records where `end_date > Dec 31, {fiscalYear}`
+- Update query to use OR condition for both `sales_rep_employee_id` and `sales_head_employee_id`
+- Change aggregation logic: instead of summing all months, use only the **latest month** data
+
+### Step 2: Update `useUserActuals.ts`
+- Apply same eligibility filter and latest-month logic for Closing ARR
+- Ensure Sales Head attribution works correctly
+
+### Step 3: Update `useIncentiveAuditData.ts`
+- Apply eligibility filter in the Closing ARR query
+- Add `sales_head_employee_id` attribution for Closing ARR aggregation
+- Implement latest-month logic instead of cumulative sum
+
+### Step 4: Update Monthly Breakdown Display
+- Keep monthly breakdown showing each month's values for transparency
+- Clearly indicate which month is being used for achievement
+
+---
+
+## Technical Details
+
+### File 1: `src/hooks/useCurrentUserCompensation.ts`
+
+**Changes to Closing ARR query (lines 244-260):**
 
 ```typescript
-// Line 8 - Change from:
-{ value: "managed_service", label: "Managed Service" },
+// Before: Fetches ALL records and sums cumulatively
+const { data: closingArr } = await supabase
+  .from("closing_arr_actuals")
+  .select("month_year, closing_arr, sales_rep_employee_id, sales_head_employee_id")
+  .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
+  .gte("month_year", fiscalYearStart)
+  .lte("month_year", fiscalYearEnd);
 
-// To:
-{ value: "managed_services", label: "Managed Services" },
+// After: Add eligibility filter and use latest month only
+const { data: closingArr } = await supabase
+  .from("closing_arr_actuals")
+  .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id")
+  .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
+  .gte("month_year", fiscalYearStart)
+  .lte("month_year", fiscalYearEnd)
+  .gt("end_date", `${selectedYear}-12-31`); // ELIGIBILITY FILTER
+
+// New aggregation logic:
+// 1. Group by month
+// 2. Use only the LATEST month's total for achievement
+// 3. Keep all months for monthly breakdown display
 ```
 
-### File 2: `src/components/data-inputs/ClosingARRBulkUpload.tsx`
-**Changes:**
-1. Add normalization function for order_category_2
-2. Update validation error message
-3. Apply normalization before storing
-
+**New aggregation logic:**
 ```typescript
-// Add normalization function
-const normalizeCategory = (value: string | undefined): string | null => {
-  if (!value) return null;
-  const normalized = value.toLowerCase().trim().replace(/\s+/g, '_');
-  // Map singular to plural
-  if (normalized === 'managed_service') return 'managed_services';
-  return normalized;
-};
+const closingByMonth = new Map<string, number>();
+(closingArr || []).forEach((arr) => {
+  const monthKey = arr.month_year?.substring(0, 7) || "";
+  closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + (arr.closing_arr || 0));
+});
 
-// Update validation (around line 149-153):
-const normalizedCategory = normalizeCategory(row.order_category_2);
-if (normalizedCategory && !validCategories.has(normalizedCategory)) {
-  errors.push("order_category_2 must be 'software' or 'managed_services'");
-}
-
-// Apply normalized value when building data (line 180):
-order_category_2: normalizeCategory(row.order_category_2),
-```
-
-### File 3: `src/components/data-inputs/DealsBulkUpload.tsx`
-**Changes:**
-1. Add normalization function for type_of_proposal
-2. Apply normalization during parsing and validation
-
-```typescript
-// Add normalization function
-const normalizeProposalType = (value: string | undefined): string => {
-  if (!value) return '';
-  const normalized = value.toLowerCase().trim().replace(/\s+/g, '_');
-  // Map singular to plural for managed services
-  if (normalized === 'managed_service') return 'managed_services';
-  return normalized;
-};
-
-// Update parseCSV function (line 220):
-type_of_proposal: normalizeProposalType(deal.type_of_proposal),
-
-// Update rowsToParsedDeals function (line 279):
-type_of_proposal: normalizeProposalType(deal.type_of_proposal),
-
-// Validation will now work correctly since normalization happens first
-```
-
-### File 4: `src/components/data-inputs/ClosingARRTable.tsx`
-**Change:** Update badge display label to "Managed Services"
-
-```typescript
-// Around line 151 - Change from:
-const label = category === "software" ? "Software" : "Managed Service";
-
-// To:
-const label = category === "software" ? "Software" : "Managed Services";
+// Find the latest month with data
+const sortedMonths = Array.from(closingByMonth.keys()).sort();
+const latestMonth = sortedMonths[sortedMonths.length - 1];
+const closingYtd = latestMonth ? closingByMonth.get(latestMonth) || 0 : 0;
 ```
 
 ---
 
-## Database Migration
-Normalize any existing records to use the plural form:
+### File 2: `src/hooks/useUserActuals.ts`
 
-```sql
--- Update existing Closing ARR records
-UPDATE closing_arr_actuals 
-SET order_category_2 = 'managed_services' 
-WHERE order_category_2 = 'managed_service';
+**Changes to useUserActuals (lines 108-137):**
+- Add `end_date` to the select query
+- Apply eligibility filter: `.gt("end_date", `${selectedYear}-12-31`)`
+- Change aggregation to use latest month only
 
--- Update existing Deals records (if any use singular)
-UPDATE deals 
-SET type_of_proposal = 'managed_services' 
-WHERE type_of_proposal = 'managed_service';
+**Changes to useEmployeeActuals (lines 195-204):**
+- Add `sales_head_employee_id` to the OR condition
+- Add eligibility filter
+- Change to latest-month logic
+
+---
+
+### File 3: `src/hooks/useIncentiveAuditData.ts`
+
+**Changes (lines 245-259):**
+```typescript
+// Before
+const { data: closingArr } = await supabase
+  .from("closing_arr_actuals")
+  .select("sales_rep_employee_id, closing_arr")
+  ...
+
+// After
+const { data: closingArr } = await supabase
+  .from("closing_arr_actuals")
+  .select("month_year, sales_rep_employee_id, sales_head_employee_id, closing_arr, end_date")
+  .gte("month_year", fiscalYearStart)
+  .lte("month_year", fiscalYearEnd)
+  .gt("end_date", `${fiscalYear}-12-31`); // ELIGIBILITY FILTER
+
+// New aggregation: Group by employee, then take latest month's value
+const closingActualMap = new Map<string, Map<string, number>>(); // employee -> month -> value
+
+(closingArr || []).forEach(arr => {
+  // Credit BOTH sales_rep AND sales_head
+  [arr.sales_rep_employee_id, arr.sales_head_employee_id].forEach(empId => {
+    if (empId) {
+      const monthKey = arr.month_year?.substring(0, 7) || "";
+      const empMap = closingActualMap.get(empId) || new Map<string, number>();
+      empMap.set(monthKey, (empMap.get(monthKey) || 0) + (arr.closing_arr || 0));
+      closingActualMap.set(empId, empMap);
+    }
+  });
+});
+
+// For each employee, use only the latest month's value
+const employeeClosingActuals = new Map<string, number>();
+closingActualMap.forEach((monthMap, empId) => {
+  const sortedMonths = Array.from(monthMap.keys()).sort();
+  const latestMonth = sortedMonths[sortedMonths.length - 1];
+  employeeClosingActuals.set(empId, latestMonth ? monthMap.get(latestMonth) || 0 : 0);
+});
 ```
 
 ---
 
 ## Summary of Changes
 
-| Component | Current Value | New Value |
-|-----------|--------------|-----------|
-| Closing ARR Options | `managed_service` | `managed_services` |
-| Closing ARR Badge | "Managed Service" | "Managed Services" |
-| Closing ARR Bulk Upload | Strict validation | Normalized + flexible |
-| Deals Bulk Upload | Strict validation | Normalized + flexible |
-| Database Records | Mixed singular | All plural |
+| File | Change |
+|------|--------|
+| `useCurrentUserCompensation.ts` | Add eligibility filter + Sales Head attribution + latest-month logic |
+| `useUserActuals.ts` | Add eligibility filter + latest-month logic for both hooks |
+| `useIncentiveAuditData.ts` | Add eligibility filter + Sales Head attribution + latest-month aggregation |
 
-## Accepted Input Variations (After Fix)
-Users will be able to upload data with any of these values:
-- `software`, `Software`, `SOFTWARE`
-- `managed_services`, `managed_service`, `Managed Services`, `Managed Service`, `managed services`, `managed service`
+## Expected Outcome
 
-All variations will be normalized to the canonical internal values: `software` or `managed_services`.
+After implementation:
+- **Farming Sales Head** (DU0002) with Closing ARR target of $2M will show:
+  - **Actual:** ~$181K (only the 2 eligible projects: pid 220020001 + pid 180101078)
+  - **Achievement:** ~9% (not 129.8% as currently shown incorrectly)
+- **Both Sales Rep and Sales Head** will receive credit for Closing ARR records
+- Each month's upload is treated as a portfolio snapshot, not cumulative additions
