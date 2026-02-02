@@ -1,193 +1,312 @@
 
 
-# Add Payout Split to Metrics and Integrate Across System
+# Add "At Year End" Payout Split Component
 
-## Problem Summary
+## Summary
 
-The payout split fields (`payout_on_booking_pct` and `payout_on_collection_pct`) were added to the database and the MetricFormDialog, but:
+This implementation adds a third payout split component called **"At Year End"** to both metrics and commissions. This component will be held back for year-end adjustments (clawbacks, performance gaps, etc.) and will be released during **December payroll processing**.
 
-1. **Plan Builder metrics table** does not display the payout split columns
-2. **useCurrentUserCompensation hook** still uses hardcoded `0.75` and `0.25` instead of reading from plan metrics
-3. **lib/commissions.ts** uses hardcoded 75/25 split instead of reading from plan_commissions
-4. **MetricsTable (Dashboard)** shows hardcoded "Paid (75%)" and "Holding (25%)" labels
-5. **useIncentiveAuditData** doesn't pass dynamic splits to calculations
+The new three-way split: **Upon Bookings + Upon Collections + At Year End = 100%**
 
 ---
 
-## Changes Required
+## Database Schema Changes
 
-### 1. Plan Builder - Display Payout Split in Metrics Table
+### Migration: Add `payout_on_year_end_pct` Column
 
-**File:** `src/pages/PlanBuilder.tsx`
+**Tables to modify:**
+- `plan_metrics` - Add `payout_on_year_end_pct numeric DEFAULT 0`
+- `plan_commissions` - Add `payout_on_year_end_pct numeric DEFAULT 0`
 
-Add two new columns to the metrics table:
-- "Upon Bookings" 
-- "Upon Collections"
+```sql
+-- Add year-end payout split to plan_metrics
+ALTER TABLE plan_metrics 
+ADD COLUMN payout_on_year_end_pct numeric DEFAULT 0;
 
-```text
-| Metric Name | Weightage | Logic Type | Gate | Upon Bookings | Upon Collections | Actions |
+-- Add year-end payout split to plan_commissions
+ALTER TABLE plan_commissions 
+ADD COLUMN payout_on_year_end_pct numeric DEFAULT 0;
+
+-- Add constraint to ensure three-way split sums to 100%
+ALTER TABLE plan_metrics 
+ADD CONSTRAINT plan_metrics_payout_split_check 
+CHECK (payout_on_booking_pct + payout_on_collection_pct + payout_on_year_end_pct = 100);
+
+ALTER TABLE plan_commissions 
+ADD CONSTRAINT plan_commissions_payout_split_check 
+CHECK (payout_on_booking_pct + payout_on_collection_pct + payout_on_year_end_pct = 100);
 ```
 
-### 2. Update MetricCompensation Interface
+---
 
-**File:** `src/hooks/useCurrentUserCompensation.ts`
+## File Changes
 
-Add payout split fields to the `MetricCompensation` interface:
+### 1. MetricFormDialog.tsx - Add Third Split Field
+
+**Current state:** Two fields (Booking + Collection = 100%)
+**New state:** Three fields (Booking + Collection + Year End = 100%)
+
+**Changes:**
+- Add `payout_on_year_end_pct` to the zod schema
+- Update validation: sum of all three must equal 100%
+- Add third form field with label "At Year End (%)"
+- Update auto-calculation logic: when any field changes, intelligently adjust others
+- Add tooltip: "Held for year-end adjustments, clawbacks, performance reviews. Released in December payroll."
+
+### 2. CommissionFormDialog.tsx - Add Third Split Field
+
+**Same changes as MetricFormDialog:**
+- Add `payout_on_year_end_pct` to schema
+- Three-way validation
+- Third form field
+- Auto-calculation logic
+
+### 3. PlanBuilder.tsx - Add "Year End" Column
+
+**Current table columns:**
+| Metric Name | Weightage | Logic Type | Gate | Upon Bookings | Upon Collections | Actions |
+
+**New table columns:**
+| Metric Name | Weightage | Logic Type | Gate | Bookings | Collections | Year End | Actions |
+
+**Changes:**
+- Add `<TableHead>` for "Year End"
+- Add `<TableCell>` displaying `metric.payout_on_year_end_pct ?? 0}%`
+
+### 4. usePlanMetrics.ts - Update Interface
+
+```typescript
+export interface PlanMetric {
+  // ... existing fields
+  payout_on_year_end_pct: number;  // NEW
+}
+```
+
+### 5. usePlanCommissions.ts - Update Interface & Query
+
+```typescript
+export interface PlanCommission {
+  // ... existing fields
+  payout_on_year_end_pct: number;  // NEW
+}
+```
+
+Update select query to include the new column.
+
+### 6. useCurrentUserCompensation.ts - Three-Way Split Calculation
+
+**Update interfaces:**
 ```typescript
 export interface MetricCompensation {
   // ... existing fields
-  payoutOnBookingPct: number;
-  payoutOnCollectionPct: number;
+  payoutOnYearEndPct: number;      // NEW
+  yearEndHoldback: number;          // NEW - calculated amount
 }
-```
 
-### 3. Use Dynamic Payout Split in useCurrentUserCompensation
-
-**File:** `src/hooks/useCurrentUserCompensation.ts`
-
-Replace hardcoded 75/25:
-```typescript
-// Before (line 293-294)
-const amountPaid = eligiblePayout * 0.75;
-const holdback = eligiblePayout * 0.25;
-
-// After
-const amountPaid = eligiblePayout * (pm.payout_on_booking_pct / 100);
-const holdback = eligiblePayout * (pm.payout_on_collection_pct / 100);
-```
-
-### 4. Update CommissionCompensation Interface
-
-**File:** `src/hooks/useCurrentUserCompensation.ts`
-
-Add payout split fields:
-```typescript
 export interface CommissionCompensation {
   // ... existing fields
-  payoutOnBookingPct: number;
-  payoutOnCollectionPct: number;
+  payoutOnYearEndPct: number;      // NEW
+  yearEndHoldback: number;          // NEW
+}
+
+export interface CurrentUserCompensation {
+  // ... existing fields
+  totalYearEndHoldback: number;             // NEW
+  totalCommissionYearEndHoldback: number;   // NEW
 }
 ```
 
-Fetch and use dynamic splits from `plan_commissions`:
+**Update calculation logic:**
 ```typescript
-// Fetch plan commissions with payout split
-const { data: commissions } = await supabase
-  .from("plan_commissions")
-  .select("commission_type, commission_rate_pct, min_threshold_usd, payout_on_booking_pct, payout_on_collection_pct")
-  ...
+// Three-way split
+const payoutOnBookingPct = pm.payout_on_booking_pct ?? 75;
+const payoutOnCollectionPct = pm.payout_on_collection_pct ?? 25;
+const payoutOnYearEndPct = pm.payout_on_year_end_pct ?? 0;
+
+const amountPaid = eligiblePayout * (payoutOnBookingPct / 100);
+const holdback = eligiblePayout * (payoutOnCollectionPct / 100);
+const yearEndHoldback = eligiblePayout * (payoutOnYearEndPct / 100);
 ```
 
-### 5. Update Metrics Table UI to Show Dynamic Labels
+### 7. lib/commissions.ts - Add Year-End Parameter
 
-**File:** `src/components/dashboard/MetricsTable.tsx`
-
-- Change column headers from hardcoded "Paid (75%)" to dynamic based on metric data
-- Display actual booking/collection percentages per metric
-
-### 6. Update lib/commissions.ts to Accept Dynamic Split
-
-**File:** `src/lib/commissions.ts`
-
-Modify `calculateDealCommission` to accept split parameters:
 ```typescript
 export function calculateDealCommission(
   tcvUsd: number,
   commissionRatePct: number,
   minThresholdUsd: number | null = null,
-  payoutOnBookingPct: number = 75,  // NEW
-  payoutOnCollectionPct: number = 25  // NEW
-): { qualifies: boolean; gross: number; paid: number; holdback: number }
+  payoutOnBookingPct: number = 70,
+  payoutOnCollectionPct: number = 25,
+  payoutOnYearEndPct: number = 5  // NEW
+): { 
+  qualifies: boolean; 
+  gross: number; 
+  paid: number; 
+  holdback: number;
+  yearEndHoldback: number;  // NEW
+}
 ```
 
-### 7. Update useIncentiveAuditData for Dynamic Splits
+### 8. lib/compensationEngine.ts - Add Year-End to Results
 
-**File:** `src/hooks/useIncentiveAuditData.ts`
+```typescript
+export interface MetricPayoutResult {
+  // ... existing fields
+  payoutOnBookingPct: number;
+  payoutOnCollectionPct: number;
+  payoutOnYearEndPct: number;
+  bookingPayout: number;
+  collectionHoldback: number;
+  yearEndHoldback: number;
+}
+```
 
-Pass dynamic splits from plan_metrics and plan_commissions to calculations.
+### 9. MetricsTable.tsx (Dashboard) - Add Year End Column
 
-### 8. Update compensationEngine.ts
+**Current columns:**
+| Metric | Target | Actual | Achiev.% | Multiplier | Eligible | Booking | Holdback |
 
-**File:** `src/lib/compensationEngine.ts`
+**New columns:**
+| Metric | Target | Actual | Achiev.% | Multiplier | Eligible | Booking | Collection | Year End |
 
-Add payout split to `MetricPayoutResult` and use it in calculations.
+**Changes:**
+- Rename "Holdback" to "Collection" 
+- Add new "Year End" column
+- Update header logic to show dynamic percentages
+- Add `totalYearEndHoldback` to footer
 
 ---
 
-## File Changes Summary
+## Year-End Release Logic (December Payroll)
 
-| File | Change |
-|------|--------|
-| `src/pages/PlanBuilder.tsx` | Add "Upon Bookings" and "Upon Collections" columns to metrics table |
-| `src/hooks/useCurrentUserCompensation.ts` | Add payout split fields to interfaces, use dynamic splits from DB |
-| `src/components/dashboard/MetricsTable.tsx` | Show dynamic payout percentages in column headers |
-| `src/lib/commissions.ts` | Add optional payout split parameters to `calculateDealCommission` |
-| `src/lib/compensationEngine.ts` | Add payout split to calculation results |
-| `src/hooks/useIncentiveAuditData.ts` | Use dynamic splits in audit calculations |
-| `src/hooks/usePlanCommissions.ts` | Include payout split fields in select query |
+The year-end holdback will be released during December payroll processing. This requires:
+
+1. **Identification**: Track all year-end holdback amounts throughout the year
+2. **Processing Month Check**: When processing December payroll, release accumulated year-end holdbacks
+3. **Adjustments**: Allow for deductions (clawbacks, performance adjustments) before release
+
+**Implementation in payout processing:**
+```typescript
+// When processing payouts
+if (processingMonth === 12) {
+  // Release year-end holdbacks
+  const yearEndRelease = calculateYearEndRelease(employeeId, fiscalYear);
+  // Apply any deductions
+  const netYearEndPayout = yearEndRelease - clawbacks - adjustments;
+  // Include in December payout
+}
+```
 
 ---
 
 ## Visual Changes
 
-### Plan Builder Metrics Table (After)
+### Metric Form Dialog (After)
 
 ```text
-┌──────────────────────────┬──────────┬─────────────┬──────┬─────────────┬──────────────┬─────────┐
-│ Metric Name              │ Weightage│ Logic Type  │ Gate │Upon Bookings│Upon Collect. │ Actions │
-├──────────────────────────┼──────────┼─────────────┼──────┼─────────────┼──────────────┼─────────┤
-│ New Software Booking ARR │ 50%      │ Stepped Acc │ -    │ 75%         │ 25%          │ ✏️ 🗑️   │
-│ Closing ARR              │ 50%      │ Gated Thres │ 85%  │ 75%         │ 25%          │ ✏️ 🗑️   │
-└──────────────────────────┴──────────┴─────────────┴──────┴─────────────┴──────────────┴─────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Payout Split                                                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│ ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐      │
+│ │ Upon Bookings (%) │ │ Upon Collections  │ │ At Year End (%)   │      │
+│ │ [    70         ] │ │ [    25         ] │ │ [    5          ] │      │
+│ └───────────────────┘ └───────────────────┘ └───────────────────┘      │
+│ Paid immediately on   Held until           Year-end reserve.           │
+│ deal booking          collection           Released in December.       │
+│                                                                         │
+│ ⚠️ Must sum to 100%                                                     │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Dashboard Metrics Table (After)
+### Plan Builder - Metrics Table (After)
 
-Column headers will show:
-- "Paid (75%)" → "Booking (75%)" (or dynamic per metric if they differ)
-- "Holding (25%)" → "Collection (25%)" (or dynamic)
+```text
+┌──────────────────────────┬──────────┬─────────────┬──────┬──────────┬────────────┬──────────┬─────────┐
+│ Metric Name              │ Weightage│ Logic Type  │ Gate │ Bookings │ Collections│ Year End │ Actions │
+├──────────────────────────┼──────────┼─────────────┼──────┼──────────┼────────────┼──────────┼─────────┤
+│ New Software Booking ARR │ 50%      │ Stepped Acc │ -    │ 70%      │ 25%        │ 5%       │ ✏️ 🗑️   │
+│ Closing ARR              │ 50%      │ Gated Thres │ 85%  │ 70%      │ 25%        │ 5%       │ ✏️ 🗑️   │
+└──────────────────────────┴──────────┴─────────────┴──────┴──────────┴────────────┴──────────┴─────────┘
+```
+
+### Dashboard - Metrics Table (After)
+
+```text
+┌────────────┬────────────┬────────────┬──────────┬────────────┬──────────────┬────────────┬────────────┬──────────┐
+│ Metric     │ Target     │ Actual     │ Achiev.% │ Multiplier │ Eligible     │ Booking    │ Collection │ Year End │
+│            │            │            │          │            │ Payout       │ (70%)      │ (25%)      │ (5%)     │
+├────────────┼────────────┼────────────┼──────────┼────────────┼──────────────┼────────────┼────────────┼──────────┤
+│ New Soft...│ $1.5M      │ $1.8M      │ 120.0%   │ 1.40x      │ $42,000      │ $29,400    │ $10,500    │ $2,100   │
+│ Closing ARR│ $2.0M      │ $2.1M      │ 105.0%   │ 1.00x      │ $26,250      │ $18,375    │ $6,563     │ $1,312   │
+├────────────┼────────────┼────────────┼──────────┼────────────┼──────────────┼────────────┼────────────┼──────────┤
+│ TOTAL      │            │            │          │            │ $68,250      │ $47,775    │ $17,063    │ $3,412   │
+└────────────┴────────────┴────────────┴──────────┴────────────┴──────────────┴────────────┴────────────┴──────────┘
+```
 
 ---
 
 ## Data Flow
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           PAYOUT SPLIT FLOW                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-  Plan Builder (Admin)
-       │
-       ▼
-  ┌───────────────────┐
-  │   plan_metrics    │  ← payout_on_booking_pct, payout_on_collection_pct
-  │   plan_commissions│  ← payout_on_booking_pct, payout_on_collection_pct
-  └───────────────────┘
-       │
-       ▼
-  ┌───────────────────┐
-  │  Calculation      │  ← useCurrentUserCompensation reads dynamic split
-  │  Engine           │  ← useIncentiveAuditData reads dynamic split
-  └───────────────────┘
-       │
-       ├─────────────────────────────────────────────┐
-       │                                             │
-       ▼                                             ▼
-  ┌───────────────────┐                        ┌───────────────────┐
-  │  Dashboard        │                        │  Reports          │
-  │  (MetricsTable)   │                        │  (Incentive Audit)│
-  │  Shows dynamic %  │                        │  Shows dynamic %  │
-  └───────────────────┘                        └───────────────────┘
+              Eligible Payout (100%)
+                       │
+         ┌─────────────┼─────────────┐
+         │             │             │
+         ▼             ▼             ▼
+    ┌─────────┐   ┌─────────┐   ┌─────────┐
+    │ Booking │   │Collection│   │Year End │
+    │  (70%)  │   │  (25%)  │   │  (5%)   │
+    └─────────┘   └─────────┘   └─────────┘
+         │             │             │
+         ▼             ▼             ▼
+    ┌─────────┐   ┌─────────┐   ┌─────────┐
+    │  PAID   │   │  HELD   │   │RESERVED │
+    │Immediate│   │  Until  │   │  Until  │
+    │ on deal │   │collection│   │December │
+    └─────────┘   └─────────┘   └─────────┘
+         │             │             │
+         ▼             ▼             ▼
+    ┌─────────┐   ┌─────────┐   ┌─────────┐
+    │ Monthly │   │Collection│   │December │
+    │ Payroll │   │ Trigger │   │ Payroll │
+    └─────────┘   └─────────┘   └─────────┘
 ```
 
 ---
 
-## Impact
+## Files Modified Summary
 
-This implementation will:
-1. Allow admins to configure different booking/collection splits per metric
-2. Display the configured splits in the Plan Builder
-3. Use the configured splits in all payout calculations
-4. Show accurate percentages in Dashboard and Reports
-5. Remove all hardcoded 75/25 splits from the codebase
+| File | Action | Description |
+|------|--------|-------------|
+| New Migration | CREATE | Add `payout_on_year_end_pct` to `plan_metrics` and `plan_commissions` |
+| `src/components/admin/MetricFormDialog.tsx` | MODIFY | Add third split field, update validation |
+| `src/components/admin/CommissionFormDialog.tsx` | MODIFY | Add third split field, update validation |
+| `src/pages/PlanBuilder.tsx` | MODIFY | Add "Year End" column to metrics table |
+| `src/hooks/usePlanMetrics.ts` | MODIFY | Add `payout_on_year_end_pct` to interface |
+| `src/hooks/usePlanCommissions.ts` | MODIFY | Add `payout_on_year_end_pct` to interface and query |
+| `src/hooks/useCurrentUserCompensation.ts` | MODIFY | Add year-end split to calculations and totals |
+| `src/lib/commissions.ts` | MODIFY | Add `yearEndHoldback` to calculation function |
+| `src/lib/compensationEngine.ts` | MODIFY | Add year-end split to result interfaces |
+| `src/components/dashboard/MetricsTable.tsx` | MODIFY | Add "Year End" column with dynamic header |
+
+---
+
+## Backward Compatibility
+
+Existing data with two-way splits (booking + collection = 100%) will:
+- Have `payout_on_year_end_pct` default to 0
+- Continue working as before with 0% year-end holdback
+- Display as X%/Y%/0% in the UI
+
+When updating existing records, users can redistribute percentages to include year-end holdback.
+
+---
+
+## Default Values
+
+| Split Component | Default | Purpose |
+|-----------------|---------|---------|
+| Upon Bookings | 70% | Immediate payment on deal booking |
+| Upon Collections | 25% | Held until collection confirmed |
+| At Year End | 5% | Reserve for clawbacks, released in December |
 
