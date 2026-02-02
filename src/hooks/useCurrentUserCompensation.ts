@@ -241,23 +241,29 @@ export function useCurrentUserCompensation() {
         }
       });
 
-      // 9. Get closing ARR actuals (check both sales_rep and sales_head attribution)
+      // 9. Get ELIGIBLE closing ARR actuals (only records with end_date > fiscal year end)
+      // Attribution: Both sales_rep and sales_head receive credit
+      // Logic: Use LATEST month's value (not cumulative) since uploads are portfolio snapshots
       const { data: closingArr } = await supabase
         .from("closing_arr_actuals")
-        .select("month_year, closing_arr, sales_rep_employee_id, sales_head_employee_id")
+        .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id")
         .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
         .gte("month_year", fiscalYearStart)
-        .lte("month_year", fiscalYearEnd);
+        .lte("month_year", fiscalYearEnd)
+        .gt("end_date", `${selectedYear}-12-31`); // ELIGIBILITY FILTER
 
+      // Group eligible closing ARR by month
       const closingByMonth = new Map<string, number>();
-      let closingYtd = 0;
-
       (closingArr || []).forEach((arr) => {
         const monthKey = arr.month_year?.substring(0, 7) || "";
         const value = arr.closing_arr || 0;
         closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + value);
-        closingYtd += value;
       });
+
+      // Use only the LATEST month's eligible Closing ARR for achievement (not cumulative)
+      const sortedClosingMonths = Array.from(closingByMonth.keys()).sort();
+      const latestClosingMonth = sortedClosingMonths[sortedClosingMonths.length - 1];
+      const closingYtd = latestClosingMonth ? closingByMonth.get(latestClosingMonth) || 0 : 0;
 
       // 10. Build metrics with calculations
       const targetBonusUsd = employee.tvp_usd || 0;
