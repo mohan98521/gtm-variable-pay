@@ -16,6 +16,8 @@ export interface PlanMetric {
   weightage_percent: number;
   logic_type: "Stepped_Accelerator" | "Gated_Threshold" | "Linear";
   gate_threshold_percent: number | null;
+  payout_on_booking_pct: number;
+  payout_on_collection_pct: number;
   created_at: string;
   multiplier_grids?: MultiplierGrid[];
 }

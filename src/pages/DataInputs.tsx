@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Calendar, FileSpreadsheet, CheckCircle, Clock, Upload, BarChart3 } from "lucide-react";
+import { Plus, Calendar, FileSpreadsheet, CheckCircle, Clock, Upload, BarChart3, Wallet } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -20,8 +20,10 @@ import { ClosingARRTable } from "@/components/data-inputs/ClosingARRTable";
 import { ClosingARRFormDialog } from "@/components/data-inputs/ClosingARRFormDialog";
 import { ClosingARRBulkUpload } from "@/components/data-inputs/ClosingARRBulkUpload";
 import { ClosingARRSummary } from "@/components/data-inputs/ClosingARRSummary";
+import { CollectionsTable } from "@/components/data-inputs/CollectionsTable";
 import { useDeals, DealWithParticipants, PROPOSAL_TYPES } from "@/hooks/useDeals";
 import { useClosingARRData, ClosingARRActual } from "@/hooks/useClosingARR";
+import { useAllCollections, usePendingCollections } from "@/hooks/useCollections";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { format } from "date-fns";
 
@@ -35,7 +37,7 @@ export default function DataInputs() {
     return yearMatch ? currentMonth : (monthOptions[0]?.value || currentMonth);
   });
   const [selectedProposalType, setSelectedProposalType] = useState<string>("all");
-  const [activeSection, setActiveSection] = useState<"deals" | "closing-arr">("deals");
+  const [activeSection, setActiveSection] = useState<"deals" | "closing-arr" | "collections">("deals");
   
   // Deals state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,6 +57,15 @@ export default function DataInputs() {
 
   // Fetch Closing ARR data
   const { data: closingARRRecords = [], isLoading: isLoadingARR } = useClosingARRData(selectedMonth);
+
+  // Fetch Collections data
+  const { data: allCollections = [], isLoading: isLoadingCollections } = useAllCollections();
+  const { data: pendingCollections = [] } = usePendingCollections();
+
+  // Filter collections by selected month
+  const filteredCollections = useMemo(() => {
+    return allCollections.filter(c => c.booking_month === selectedMonth);
+  }, [allCollections, selectedMonth]);
 
   const handleAddDeal = () => {
     setEditingDeal(null);
@@ -130,8 +141,8 @@ export default function DataInputs() {
         </div>
 
         {/* Section Tabs */}
-        <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as "deals" | "closing-arr")}>
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+        <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as "deals" | "closing-arr" | "collections")}>
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="deals" className="flex items-center gap-2">
               <FileSpreadsheet className="h-4 w-4" />
               Deals
@@ -139,6 +150,15 @@ export default function DataInputs() {
             <TabsTrigger value="closing-arr" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               Closing ARR
+            </TabsTrigger>
+            <TabsTrigger value="collections" className="flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              Collections
+              {pendingCollections.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs">
+                  {pendingCollections.length}
+                </Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -301,6 +321,88 @@ export default function DataInputs() {
                   onEdit={handleEditARR}
                   isLoading={isLoadingARR}
                   fiscalYear={selectedYear}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Collections Section */}
+          <TabsContent value="collections" className="space-y-6 mt-6">
+            {/* Collections Stats */}
+            <div className="grid gap-4 sm:grid-cols-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Wallet className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Collections</p>
+                      <p className="text-2xl font-semibold text-foreground">{allCollections.length}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-warning/10 text-warning">
+                      <Clock className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Pending</p>
+                      <p className="text-2xl font-semibold text-foreground">
+                        {pendingCollections.length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-success/10 text-success">
+                      <CheckCircle className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Collected</p>
+                      <p className="text-2xl font-semibold text-foreground">
+                        {allCollections.filter(c => c.is_collected).length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+                      <Clock className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Clawbacks</p>
+                      <p className="text-2xl font-semibold text-foreground">
+                        {allCollections.filter(c => c.is_clawback_triggered).length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Collections Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Collection Status</CardTitle>
+                <CardDescription>
+                  Track collection status for deals. Collections are automatically created when deals are added.
+                  Mark as collected when payment is received, or trigger clawback if overdue.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CollectionsTable
+                  collections={filteredCollections}
+                  isLoading={isLoadingCollections}
                 />
               </CardContent>
             </Card>

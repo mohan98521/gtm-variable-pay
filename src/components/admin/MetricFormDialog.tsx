@@ -41,6 +41,11 @@ const metricSchema = z.object({
   weightage_percent: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
   logic_type: z.enum(["Linear", "Gated_Threshold", "Stepped_Accelerator"]),
   gate_threshold_percent: z.coerce.number().min(0).max(100).nullable().optional(),
+  payout_on_booking_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
+  payout_on_collection_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
+}).refine((data) => data.payout_on_booking_pct + data.payout_on_collection_pct === 100, {
+  message: "Booking and Collection percentages must sum to 100%",
+  path: ["payout_on_collection_pct"],
 });
 
 type MetricFormValues = z.infer<typeof metricSchema>;
@@ -52,6 +57,8 @@ export interface PlanMetric {
   weightage_percent: number;
   logic_type: "Linear" | "Gated_Threshold" | "Stepped_Accelerator";
   gate_threshold_percent: number | null;
+  payout_on_booking_pct: number;
+  payout_on_collection_pct: number;
   created_at: string;
 }
 
@@ -84,6 +91,8 @@ export function MetricFormDialog({
       weightage_percent: 0,
       logic_type: "Linear",
       gate_threshold_percent: null,
+      payout_on_booking_pct: 75,
+      payout_on_collection_pct: 25,
     },
   });
 
@@ -96,6 +105,8 @@ export function MetricFormDialog({
         weightage_percent: metric.weightage_percent,
         logic_type: metric.logic_type,
         gate_threshold_percent: metric.gate_threshold_percent,
+        payout_on_booking_pct: metric.payout_on_booking_pct ?? 75,
+        payout_on_collection_pct: metric.payout_on_collection_pct ?? 25,
       });
     } else {
       form.reset({
@@ -103,6 +114,8 @@ export function MetricFormDialog({
         weightage_percent: Math.min(maxWeightage, 50),
         logic_type: "Linear",
         gate_threshold_percent: null,
+        payout_on_booking_pct: 75,
+        payout_on_collection_pct: 25,
       });
     }
   }, [metric, form, maxWeightage]);
@@ -223,6 +236,62 @@ export function MetricFormDialog({
                 )}
               />
             )}
+
+            {/* Payout Split Section */}
+            <div className="pt-4 border-t">
+              <h4 className="text-sm font-medium mb-3">Payout Split</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="payout_on_booking_pct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Upon Bookings (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          {...field}
+                          onChange={(e) => {
+                            const booking = Number(e.target.value) || 0;
+                            field.onChange(booking);
+                            form.setValue("payout_on_collection_pct", 100 - booking);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>Paid immediately on booking</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="payout_on_collection_pct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Upon Collections (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          {...field}
+                          onChange={(e) => {
+                            const collection = Number(e.target.value) || 0;
+                            field.onChange(collection);
+                            form.setValue("payout_on_booking_pct", 100 - collection);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>Held until collection</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             <DialogFooter className="pt-4">
               <Button

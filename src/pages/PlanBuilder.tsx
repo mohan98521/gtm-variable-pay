@@ -47,6 +47,7 @@ import { toast } from "@/hooks/use-toast";
 import { MetricFormDialog, PlanMetric } from "@/components/admin/MetricFormDialog";
 import { MultiplierGridEditor } from "@/components/admin/MultiplierGridEditor";
 import { PlanCommissionEditor } from "@/components/admin/PlanCommissionEditor";
+import { PayoutSettingsCard } from "@/components/admin/PayoutSettingsCard";
 import { usePlanCommissions } from "@/hooks/usePlanCommissions";
 import { AssignedEmployeesCard } from "@/components/admin/AssignedEmployeesCard";
 
@@ -133,6 +134,8 @@ export default function PlanBuilder() {
       weightage_percent: number;
       logic_type: "Linear" | "Gated_Threshold" | "Stepped_Accelerator";
       gate_threshold_percent?: number | null;
+      payout_on_booking_pct?: number;
+      payout_on_collection_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_metrics")
@@ -142,6 +145,8 @@ export default function PlanBuilder() {
           weightage_percent: values.weightage_percent,
           logic_type: values.logic_type,
           gate_threshold_percent: values.gate_threshold_percent || null,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 75,
+          payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
         })
         .select()
         .single();
@@ -166,6 +171,8 @@ export default function PlanBuilder() {
       weightage_percent: number;
       logic_type: "Linear" | "Gated_Threshold" | "Stepped_Accelerator";
       gate_threshold_percent?: number | null;
+      payout_on_booking_pct?: number;
+      payout_on_collection_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_metrics")
@@ -174,6 +181,8 @@ export default function PlanBuilder() {
           weightage_percent: values.weightage_percent,
           logic_type: values.logic_type,
           gate_threshold_percent: values.gate_threshold_percent || null,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 75,
+          payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
         })
         .eq("id", values.id)
         .select()
@@ -491,6 +500,13 @@ export default function PlanBuilder() {
             </CardContent>
           </Card>
         )}
+
+        {/* Payout Settings Section */}
+        <PayoutSettingsCard
+          planId={planId!}
+          payoutFrequency={plan.payout_frequency || "monthly"}
+          clawbackPeriodDays={plan.clawback_period_days || 180}
+        />
 
         {/* Commission Structure Section */}
         <PlanCommissionEditor planId={planId!} />

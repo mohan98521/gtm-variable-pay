@@ -61,6 +61,8 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
     commission_rate_pct: number;
     min_threshold_usd?: number | null;
     is_active?: boolean;
+    payout_on_booking_pct?: number;
+    payout_on_collection_pct?: number;
   }) => {
     if (editingCommission) {
       updateMutation.mutate(
@@ -70,6 +72,8 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
           commission_rate_pct: values.commission_rate_pct,
           min_threshold_usd: values.min_threshold_usd,
           is_active: values.is_active,
+          payout_on_booking_pct: values.payout_on_booking_pct,
+          payout_on_collection_pct: values.payout_on_collection_pct,
         },
         {
           onSuccess: () => {
@@ -86,6 +90,8 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
           commission_rate_pct: values.commission_rate_pct,
           min_threshold_usd: values.min_threshold_usd,
           is_active: values.is_active,
+          payout_on_booking_pct: values.payout_on_booking_pct,
+          payout_on_collection_pct: values.payout_on_collection_pct,
         },
         {
           onSuccess: () => {
@@ -168,6 +174,7 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
                   <TableHead>Commission Type</TableHead>
                   <TableHead className="text-center">Rate (%)</TableHead>
                   <TableHead className="text-center">Min Threshold</TableHead>
+                  <TableHead className="text-center">Payout Split</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -188,6 +195,16 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
                     </TableCell>
                     <TableCell className="text-center">
                       {formatCurrency(commission.min_threshold_usd)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex flex-col items-center text-xs">
+                        <span className="text-muted-foreground">
+                          {commission.payout_on_booking_pct ?? 75}% Booking
+                        </span>
+                        <span className="text-muted-foreground">
+                          {commission.payout_on_collection_pct ?? 25}% Collection
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-center">
                       {commission.is_active ? (

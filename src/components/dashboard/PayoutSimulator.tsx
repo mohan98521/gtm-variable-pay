@@ -87,6 +87,8 @@ export function PayoutSimulator({ metrics, commissions, planMetrics, targetBonus
           weightage_percent: metric.weightagePercent,
           logic_type: metric.logicType as any,
           gate_threshold_percent: metric.gateThreshold,
+          payout_on_booking_pct: 75,
+          payout_on_collection_pct: 25,
           created_at: "",
           multiplier_grids: metric.multiplierGrids,
         };
