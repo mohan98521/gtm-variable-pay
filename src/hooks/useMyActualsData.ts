@@ -14,6 +14,9 @@ const PARTICIPANT_ROLES = [
   "solution_manager_head_employee_id",
 ] as const;
 
+// Roles that can view all data (non-sales roles without targets)
+const VIEW_ALL_ROLES = ["admin", "gtm_ops", "finance", "executive"] as const;
+
 export interface DealRecord {
   id: string;
   project_id: string;
@@ -90,7 +93,21 @@ export interface ClosingARRRecord {
 }
 
 /**
+ * Helper to check if user has "view all data" role
+ */
+async function canUserViewAllData(userId: string): Promise<boolean> {
+  const { data: userRoles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+
+  const roles = (userRoles || []).map((r) => r.role);
+  return VIEW_ALL_ROLES.some((role) => roles.includes(role));
+}
+
+/**
  * Hook to fetch deals where current user is ANY participant (8 roles)
+ * Admin/GTM Ops/Finance/Executive users see ALL deals
  */
 export function useMyDeals(selectedMonth: string | null) {
   const { selectedYear } = useFiscalYear();
@@ -98,23 +115,16 @@ export function useMyDeals(selectedMonth: string | null) {
   return useQuery({
     queryKey: ["my_deals", selectedYear, selectedMonth],
     queryFn: async () => {
-      // Get current user's employee_id
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("employee_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!profile?.employee_id) return [];
+      // Check if user can view all data
+      const canViewAll = await canUserViewAllData(user.id);
 
       const fiscalYearStart = `${selectedYear}-01-01`;
       const fiscalYearEnd = `${selectedYear}-12-31`;
-      const employeeId = profile.employee_id;
 
       // Build query - fetch ALL deals for the fiscal year
       let query = supabase
@@ -133,6 +143,22 @@ export function useMyDeals(selectedMonth: string | null) {
 
       if (error) throw error;
 
+      // If user can view all, return all deals
+      if (canViewAll) {
+        return (deals || []) as DealRecord[];
+      }
+
+      // Otherwise, get user's employee_id and filter to deals where user is a participant
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("employee_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!profile?.employee_id) return [];
+
+      const employeeId = profile.employee_id;
+
       // Client-side filter: only include deals where user is ANY participant
       const filteredDeals = (deals || []).filter((deal) => {
         return PARTICIPANT_ROLES.some((role) => deal[role] === employeeId);
@@ -145,6 +171,7 @@ export function useMyDeals(selectedMonth: string | null) {
 
 /**
  * Hook to fetch Closing ARR records attributed to current user
+ * Admin/GTM Ops/Finance/Executive users see ALL records
  * Includes eligibility calculation (end_date > Dec 31 of fiscal year)
  */
 export function useMyClosingARR(selectedMonth: string | null) {
@@ -153,30 +180,22 @@ export function useMyClosingARR(selectedMonth: string | null) {
   return useQuery({
     queryKey: ["my_closing_arr", selectedYear, selectedMonth],
     queryFn: async () => {
-      // Get current user's employee_id
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("employee_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!profile?.employee_id) return [];
+      // Check if user can view all data
+      const canViewAll = await canUserViewAllData(user.id);
 
       const fiscalYearStart = `${selectedYear}-01-01`;
       const fiscalYearEnd = `${selectedYear}-12-31`;
-      const employeeId = profile.employee_id;
       const eligibilityCutoff = `${selectedYear}-12-31`;
 
-      // Build query - fetch all closing ARR where user is sales_rep OR sales_head
+      // Build base query for fiscal year
       let query = supabase
         .from("closing_arr_actuals")
         .select("*")
-        .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd)
         .order("month_year", { ascending: false });
@@ -184,6 +203,20 @@ export function useMyClosingARR(selectedMonth: string | null) {
       // If specific month selected, filter to that month
       if (selectedMonth) {
         query = query.gte("month_year", `${selectedMonth}-01`).lte("month_year", `${selectedMonth}-31`);
+      }
+
+      // If user cannot view all, filter by employee_id
+      if (!canViewAll) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("employee_id")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!profile?.employee_id) return [];
+
+        const employeeId = profile.employee_id;
+        query = query.or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`);
       }
 
       const { data: records, error } = await query;
