@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Clock, RotateCcw, ShieldCheck } from "lucide-react";
+import { Loader2, Clock, RotateCcw, ShieldCheck, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -178,7 +178,7 @@ export function PayoutSettingsCard({
                   Clawback Exempt
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  When enabled, employees on this plan receive full payout on booking regardless of collection status.
+                  When enabled, employees receive their full payout regardless of collection status.
                 </p>
               </div>
             </div>
@@ -189,10 +189,22 @@ export function PayoutSettingsCard({
             />
           </div>
           {clawbackExempt && (
-            <div className="mt-2 p-3 bg-success/10 rounded-md">
-              <p className="text-sm text-success">
-                ✓ No clawback rules will apply to this plan. All payouts are 100% on booking.
+            <div className="mt-2 p-3 bg-success/10 rounded-md space-y-2">
+              <p className="text-sm text-success font-medium">
+                ✓ Clawback Exempt Plan
               </p>
+              <p className="text-xs text-muted-foreground">
+                Employees receive their full payout regardless of collection status. 
+                The payout split percentages defined in each metric and commission 
+                still apply for tracking and reporting purposes, but all portions 
+                are payable immediately with no clawback risk.
+              </p>
+              {clawbackDays > 0 && (
+                <p className="text-xs text-amber-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  The clawback period setting will be ignored for this exempt plan.
+                </p>
+              )}
             </div>
           )}
         </div>

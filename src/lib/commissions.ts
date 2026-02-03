@@ -53,7 +53,8 @@ export function calculateDealCommission(
   // Calculate gross commission
   const gross = tcvUsd * (commissionRatePct / 100);
   
-  // Apply configurable three-way split (defaults to 70/25/5)
+  // Apply configurable three-way split - values come from plan configuration
+  // Default parameters (70/25/5) match database schema defaults
   const paid = gross * (payoutOnBookingPct / 100);
   const holdback = gross * (payoutOnCollectionPct / 100);
   const yearEndHoldback = gross * (payoutOnYearEndPct / 100);
