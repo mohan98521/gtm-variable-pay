@@ -199,6 +199,7 @@ export type Database = {
           effective_year: number
           id: string
           is_active: boolean
+          is_clawback_exempt: boolean
           name: string
           payout_frequency: string | null
           updated_at: string
@@ -210,6 +211,7 @@ export type Database = {
           effective_year?: number
           id?: string
           is_active?: boolean
+          is_clawback_exempt?: boolean
           name: string
           payout_frequency?: string | null
           updated_at?: string
@@ -221,6 +223,7 @@ export type Database = {
           effective_year?: number
           id?: string
           is_active?: boolean
+          is_clawback_exempt?: boolean
           name?: string
           payout_frequency?: string | null
           updated_at?: string

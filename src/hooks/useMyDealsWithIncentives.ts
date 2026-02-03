@@ -74,6 +74,7 @@ export interface DealWithIncentives extends DealRecord {
   vp_payout_on_collection_usd: number | null;
   vp_payout_on_year_end_usd: number | null;
   vp_clawback_eligible_usd: number | null;
+  vp_is_clawback_exempt: boolean;
 }
 
 interface DealCollectionRow {
@@ -259,6 +260,8 @@ interface EmployeeVPConfig {
   metric: PlanMetric;
   targetUsd: number;
   bonusAllocationUsd: number;
+  planId: string;
+  isClawbackExempt: boolean;
 }
 
 /**
@@ -312,7 +315,7 @@ async function fetchAllEmployeeVPConfigs(
   
   const { data: plans } = await supabase
     .from("comp_plans")
-    .select("id, name")
+    .select("id, name, is_clawback_exempt")
     .in("name", planNames)
     .eq("effective_year", fiscalYear)
     .eq("is_active", true);
@@ -357,19 +360,19 @@ async function fetchAllEmployeeVPConfigs(
     gridsByMetric.get(g.plan_metric_id)!.push(g);
   });
   
-  // Build plan name -> plan id map
-  const planNameToId = new Map<string, string>();
-  plans.forEach(p => planNameToId.set(p.name, p.id));
+  // Build plan name -> plan data map
+  const planNameToData = new Map<string, { id: string; isClawbackExempt: boolean }>();
+  plans.forEach(p => planNameToData.set(p.name, { id: p.id, isClawbackExempt: p.is_clawback_exempt || false }));
   
   // Build final config for each employee
   employees.forEach(emp => {
     const planName = SALES_FUNCTION_TO_PLAN[emp.sales_function || ""];
     if (!planName) return;
     
-    const planId = planNameToId.get(planName);
-    if (!planId) return;
+    const planData = planNameToData.get(planName);
+    if (!planData) return;
     
-    const metric = planMetricMap.get(planId);
+    const metric = planMetricMap.get(planData.id);
     if (!metric) return;
     
     const grids = gridsByMetric.get(metric.id) || [];
@@ -385,6 +388,8 @@ async function fetchAllEmployeeVPConfigs(
       } as PlanMetric,
       targetUsd,
       bonusAllocationUsd: bonusAllocation,
+      planId: planData.id,
+      isClawbackExempt: planData.isClawbackExempt,
     });
   });
   
@@ -402,6 +407,11 @@ async function fetchEmployeeVPConfig(
   return configMap.get(employeeId) || null;
 }
 
+// Extended VP attribution with clawback exemption status
+interface VPAttributionWithExemption extends DealVariablePayAttribution {
+  isClawbackExempt: boolean;
+}
+
 /**
  * Calculate VP attributions for all employees in the deal set (admin view)
  */
@@ -410,8 +420,8 @@ async function calculateVPForAllEmployees(
   fiscalYear: number,
   fiscalYearStart: string,
   fiscalYearEnd: string
-): Promise<Map<string, DealVariablePayAttribution>> {
-  const vpMap = new Map<string, DealVariablePayAttribution>();
+): Promise<Map<string, VPAttributionWithExemption>> {
+  const vpMap = new Map<string, VPAttributionWithExemption>();
   
   // Extract unique employee IDs from sales_rep_employee_id
   const uniqueEmployeeIds = new Set<string>();
@@ -462,9 +472,12 @@ async function calculateVPForAllEmployees(
       calculationMonth
     );
     
-    // Add to map (keyed by deal_id)
+    // Add to map (keyed by deal_id) with clawback exemption status
     vpResult.attributions.forEach(attr => {
-      vpMap.set(attr.dealId, attr);
+      vpMap.set(attr.dealId, {
+        ...attr,
+        isClawbackExempt: config.isClawbackExempt,
+      });
     });
   }
   
@@ -562,7 +575,7 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
       }));
 
       // Calculate Variable Pay Attribution
-      let vpAttributionMap = new Map<string, DealVariablePayAttribution>();
+      let vpAttributionMap = new Map<string, VPAttributionWithExemption>();
       
       if (canViewAll) {
         // For admin users: calculate VP for ALL employees with deals
@@ -603,9 +616,12 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
             calculationMonth
           );
           
-          // Create a map for quick lookup
+          // Create a map for quick lookup with exemption status
           vpResult.attributions.forEach(attr => {
-            vpAttributionMap.set(attr.dealId, attr);
+            vpAttributionMap.set(attr.dealId, {
+              ...attr,
+              isClawbackExempt: vpConfig.isClawbackExempt,
+            });
           });
         }
       }
@@ -670,6 +686,7 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
           vp_payout_on_collection_usd: vpAttr?.payoutOnCollectionUsd ?? null,
           vp_payout_on_year_end_usd: vpAttr?.payoutOnYearEndUsd ?? null,
           vp_clawback_eligible_usd: vpAttr?.clawbackEligibleUsd ?? null,
+          vp_is_clawback_exempt: vpAttr?.isClawbackExempt ?? false,
         };
       });
 
@@ -707,9 +724,10 @@ export function calculateVPSummaryFromDeals(deals: DealWithIncentives[]): Variab
   const totalCollection = dealsWithVP.reduce((sum, d) => sum + (d.vp_payout_on_collection_usd || 0), 0);
   const totalYearEnd = dealsWithVP.reduce((sum, d) => sum + (d.vp_payout_on_year_end_usd || 0), 0);
   
-  // Pending clawback = booking portion of pending deals
+  // Pending clawback = booking portion of pending deals (exclude clawback exempt plans)
   const pendingDeals = dealsWithVP.filter(d => 
-    d.collection_status === "Pending" || d.collection_status === "Overdue"
+    (d.collection_status === "Pending" || d.collection_status === "Overdue") &&
+    !d.vp_is_clawback_exempt
   );
   const pendingClawback = pendingDeals.reduce((sum, d) => sum + (d.vp_clawback_eligible_usd || 0), 0);
   

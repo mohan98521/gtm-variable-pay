@@ -303,12 +303,17 @@ export default function PlanBuilder() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-semibold text-foreground">{plan.name}</h1>
                 {plan.is_active ? (
                   <Badge className="bg-success/10 text-success">Active</Badge>
                 ) : (
                   <Badge variant="secondary">Inactive</Badge>
+                )}
+                {plan.is_clawback_exempt && (
+                  <Badge className="bg-success/10 text-success border-success/20">
+                    Clawback Exempt
+                  </Badge>
                 )}
               </div>
               <p className="text-muted-foreground">{plan.description || "No description"}</p>
@@ -522,6 +527,7 @@ export default function PlanBuilder() {
           planId={planId!}
           payoutFrequency={plan.payout_frequency || "monthly"}
           clawbackPeriodDays={plan.clawback_period_days || 180}
+          isClawbackExempt={plan.is_clawback_exempt || false}
         />
 
         {/* Commission Structure Section */}
