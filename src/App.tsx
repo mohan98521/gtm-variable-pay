@@ -49,7 +49,7 @@ const App = () => (
             <Route
               path="/reports"
               element={
-                <ProtectedRoute allowedRoles={["admin", "gtm_ops", "finance", "executive"]}>
+                <ProtectedRoute permissionKey="page:reports">
                   <Reports />
                 </ProtectedRoute>
               }

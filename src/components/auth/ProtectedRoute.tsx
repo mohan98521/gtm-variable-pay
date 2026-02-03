@@ -1,20 +1,34 @@
 import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useUserRole, AppRole } from "@/hooks/useUserRole";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import type { PermissionKey } from "@/lib/permissions";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  allowedRoles: AppRole[];
+  /** @deprecated Use permissionKey instead for dynamic permissions */
+  allowedRoles?: AppRole[];
+  /** Dynamic permission key - preferred over allowedRoles */
+  permissionKey?: PermissionKey;
   redirectTo?: string;
 }
 
-export function ProtectedRoute({ children, allowedRoles, redirectTo = "/dashboard" }: ProtectedRouteProps) {
-  const { roles, isLoading, isAuthenticated } = useUserRole();
+export function ProtectedRoute({ 
+  children, 
+  allowedRoles, 
+  permissionKey,
+  redirectTo = "/dashboard" 
+}: ProtectedRouteProps) {
+  const { roles, isLoading: rolesLoading, isAuthenticated } = useUserRole();
+  const { canAccessPage, isLoading: permissionsLoading } = usePermissions();
   const navigate = useNavigate();
+
+  // Wait for both roles and permissions to load to prevent UI flicker
+  const isLoading = rolesLoading || permissionsLoading;
 
   if (isLoading) {
     return (
@@ -29,8 +43,10 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo = "/dashboar
     return <Navigate to="/auth" replace />;
   }
 
-  // Check if user has any of the allowed roles
-  const hasAccess = allowedRoles.some((role) => roles.includes(role));
+  // Check access using permission key (preferred) or legacy roles
+  const hasAccess = permissionKey 
+    ? canAccessPage(permissionKey)
+    : allowedRoles?.some((role) => roles.includes(role)) ?? false;
 
   if (!hasAccess) {
     return (
