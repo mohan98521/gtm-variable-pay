@@ -8,6 +8,7 @@ interface CommissionTableProps {
   totalGrossPayout: number;
   totalPaid: number;
   totalHoldback: number;
+  totalYearEndHoldback: number;
 }
 
 const formatCurrency = (value: number) => {
@@ -24,7 +25,8 @@ export function CommissionTable({
   commissions, 
   totalGrossPayout, 
   totalPaid, 
-  totalHoldback 
+  totalHoldback,
+  totalYearEndHoldback
 }: CommissionTableProps) {
   if (commissions.length === 0) {
     return (
@@ -40,6 +42,23 @@ export function CommissionTable({
       </Card>
     );
   }
+
+  // Check if all commissions have uniform split percentages
+  const firstCommission = commissions[0];
+  const hasUniformSplit = commissions.every(
+    c => c.payoutOnBookingPct === firstCommission.payoutOnBookingPct &&
+         c.payoutOnCollectionPct === firstCommission.payoutOnCollectionPct &&
+         c.payoutOnYearEndPct === firstCommission.payoutOnYearEndPct
+  );
+
+  // Get split percentages for headers (use first if uniform, otherwise show generic labels)
+  const bookingPct = hasUniformSplit ? firstCommission.payoutOnBookingPct : null;
+  const collectionPct = hasUniformSplit ? firstCommission.payoutOnCollectionPct : null;
+  const yearEndPct = hasUniformSplit ? firstCommission.payoutOnYearEndPct : null;
+
+  const bookingHeader = bookingPct !== null ? `Booking (${bookingPct}%)` : "Booking";
+  const collectionHeader = collectionPct !== null ? `Collection (${collectionPct}%)` : "Collection";
+  const yearEndHeader = yearEndPct !== null ? `Year-End (${yearEndPct}%)` : "Year-End";
 
   return (
     <Card className="border-border/50 shadow-sm">
@@ -57,8 +76,9 @@ export function CommissionTable({
                 <TableHead className="text-right font-semibold">Rate</TableHead>
                 <TableHead className="text-right font-semibold">Min Threshold</TableHead>
                 <TableHead className="text-right font-semibold">Gross Payout</TableHead>
-                <TableHead className="text-right font-semibold">Paid (75%)</TableHead>
-                <TableHead className="text-right font-semibold">Holding (25%)</TableHead>
+                <TableHead className="text-right font-semibold">{bookingHeader}</TableHead>
+                <TableHead className="text-right font-semibold">{collectionHeader}</TableHead>
+                <TableHead className="text-right font-semibold">{yearEndHeader}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -92,6 +112,9 @@ export function CommissionTable({
                   <TableCell className="text-right text-muted-foreground">
                     {formatCurrency(commission.holdback)}
                   </TableCell>
+                  <TableCell className="text-right text-amber-600">
+                    {formatCurrency(commission.yearEndHoldback)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -106,6 +129,9 @@ export function CommissionTable({
                 </TableCell>
                 <TableCell className="text-right font-bold text-muted-foreground">
                   {formatCurrency(totalHoldback)}
+                </TableCell>
+                <TableCell className="text-right font-bold text-amber-600">
+                  {formatCurrency(totalYearEndHoldback)}
                 </TableCell>
               </TableRow>
             </TableFooter>

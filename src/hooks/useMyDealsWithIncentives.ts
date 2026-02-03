@@ -644,13 +644,29 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
           linkedToImpl
         );
 
-        // Calculate actual paid based on collection status
-        let actualPaid = incentiveCalc.totalBooking; // Always get booking portion
-        if (isCollected) {
-          actualPaid += incentiveCalc.totalCollection; // Add collection portion if collected
+        // Get VP attribution for this deal (need to check exemption status)
+        const vpAttr = vpAttributionMap.get(deal.id);
+        const isClawbackExempt = vpAttr?.isClawbackExempt ?? false;
+
+        // Calculate actual paid based on collection status and exemption
+        let actualPaid = 0;
+        if (isClawbackExempt) {
+          // Clawback exempt: Full payout immediately regardless of collection status
+          actualPaid = incentiveCalc.totalEligible;
+        } else if (linkedToImpl) {
+          // Linked to implementation: 100% on collection only
+          actualPaid = isCollected ? incentiveCalc.totalEligible : 0;
+        } else {
+          // Standard: Booking paid immediately, rest on collection
+          actualPaid = incentiveCalc.totalBooking;
+          if (isCollected) {
+            actualPaid += incentiveCalc.totalCollection + incentiveCalc.totalYearEnd;
+          }
         }
-        if (isClawback) {
-          actualPaid = 0; // Clawback means no payout
+        
+        // Clawback zeroes out payout (unless exempt)
+        if (isClawback && !isClawbackExempt) {
+          actualPaid = 0;
         }
 
         const collectionStatus = getCollectionStatus(
@@ -658,9 +674,6 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
           isClawback,
           collection?.first_milestone_due_date ?? null
         );
-
-        // Get VP attribution for this deal
-        const vpAttr = vpAttributionMap.get(deal.id);
 
         return {
           ...(deal as DealRecord),

@@ -426,7 +426,7 @@ export default function Reports() {
           holdback: "-",
         });
       });
-      // Export commissions
+      // Export commissions (with three-way split: booking, collection, year-end)
       (row.commissions || []).forEach((comm) => {
         exportData.push({
           employee_name: row.employeeName,
@@ -442,12 +442,13 @@ export default function Reports() {
           allocation: "-",
           payout: comm.immediatePayout.toFixed(2),
           holdback: comm.holdback.toFixed(2),
+          year_end_holdback: comm.yearEndHoldback.toFixed(2),
         });
       });
     });
     exportToCSV(exportData, "incentive_audit", [
       "employee_name", "plan_name", "sales_function", "type", "metric_name", "target", 
-      "actual", "achievement_pct", "logic_type", "multiplier", "allocation", "payout", "holdback"
+      "actual", "achievement_pct", "logic_type", "multiplier", "allocation", "payout", "holdback", "year_end_holdback"
     ]);
   };
 

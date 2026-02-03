@@ -185,6 +185,7 @@ export default function Dashboard() {
           totalGrossPayout={compensation.totalCommissionPayout}
           totalPaid={compensation.totalCommissionPaid}
           totalHoldback={compensation.totalCommissionHoldback}
+          totalYearEndHoldback={compensation.totalCommissionYearEndHoldback}
         />
 
         {/* Table 3: Monthly Performance */}
