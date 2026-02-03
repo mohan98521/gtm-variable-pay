@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Download, FileSpreadsheet, Loader2, Link as LinkIcon, Info } from "lucide-react";
+import { Download, FileSpreadsheet, Loader2, Link as LinkIcon, Info, TrendingUp } from "lucide-react";
 import { DealRecord } from "@/hooks/useMyActualsData";
-import { useMyDealsWithIncentives, DealWithIncentives } from "@/hooks/useMyDealsWithIncentives";
+import { useMyDealsWithIncentives, DealWithIncentives, calculateVPSummaryFromDeals } from "@/hooks/useMyDealsWithIncentives";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { generateCSV, downloadCSV } from "@/lib/csvExport";
@@ -41,11 +41,18 @@ const DEAL_COLUMNS: { key: keyof DealWithIncentives | string; header: string; ge
   { key: "collection_date", header: "Collection Date" },
   { key: "linked_to_impl", header: "Linked to Implementation", getValue: (row) => row.linked_to_impl ? "Yes" : "No" },
   // New incentive columns
-  { key: "eligible_incentive_usd", header: "Eligible Incentive (USD)" },
-  { key: "payout_on_booking_usd", header: "Paid on Booking (USD)" },
-  { key: "payout_on_collection_usd", header: "Held for Collection (USD)" },
-  { key: "payout_on_year_end_usd", header: "Held for Year-End (USD)" },
-  { key: "actual_paid_usd", header: "Actual Paid (USD)" },
+  { key: "eligible_incentive_usd", header: "Eligible Commission (USD)" },
+  { key: "payout_on_booking_usd", header: "Commission Paid on Booking (USD)" },
+  { key: "payout_on_collection_usd", header: "Commission Held for Collection (USD)" },
+  { key: "payout_on_year_end_usd", header: "Commission Held for Year-End (USD)" },
+  { key: "actual_paid_usd", header: "Commission Actual Paid (USD)" },
+  // Variable Pay columns
+  { key: "vp_proportion_pct", header: "VP Proportion %" },
+  { key: "vp_eligible_usd", header: "VP Eligible (USD)" },
+  { key: "vp_payout_on_booking_usd", header: "VP Paid on Booking (USD)" },
+  { key: "vp_payout_on_collection_usd", header: "VP Held for Collection (USD)" },
+  { key: "vp_payout_on_year_end_usd", header: "VP Held for Year-End (USD)" },
+  { key: "vp_clawback_eligible_usd", header: "VP Clawback Eligible (USD)" },
   // Participant columns
   { key: "sales_rep_employee_id", header: "Sales Rep ID" },
   { key: "sales_rep_name", header: "Sales Rep Name" },
@@ -203,7 +210,7 @@ export function MyDealsReport() {
       newSoftwareBookingArr: deals.reduce((sum, d) => sum + (d.new_software_booking_arr_usd || 0), 0),
       tcv: deals.reduce((sum, d) => sum + (d.tcv_usd || 0), 0),
       
-      // Incentive totals
+      // Commission Incentive totals
       totalEligibleIncentive: deals.reduce((sum, d) => sum + d.eligible_incentive_usd, 0),
       totalPaidOnBooking: deals.reduce((sum, d) => sum + d.payout_on_booking_usd, 0),
       totalHeldForCollection: deals.reduce((sum, d) => sum + d.payout_on_collection_usd, 0),
@@ -215,6 +222,9 @@ export function MyDealsReport() {
       collectedPayout: collectedDeals.reduce((sum, d) => sum + d.payout_on_collection_usd, 0),
     };
   }, [deals]);
+
+  // Calculate Variable Pay summary
+  const vpSummary = useMemo(() => calculateVPSummaryFromDeals(deals), [deals]);
 
   const handleExportCSV = () => {
     const csv = generateCSV(deals, DEAL_COLUMNS);
@@ -304,10 +314,11 @@ export function MyDealsReport() {
                 )}
               </div>
 
-              {/* Incentive Totals Row */}
+              {/* Commission Incentive Totals Row */}
               <div className="p-4 bg-primary/5 rounded-lg flex flex-wrap gap-6">
+                <div className="font-medium text-sm text-muted-foreground">Commission:</div>
                 <div>
-                  <span className="text-sm text-muted-foreground">Total Eligible Incentive: </span>
+                  <span className="text-sm text-muted-foreground">Eligible: </span>
                   <span className="font-semibold text-primary">{formatCurrency(totals.totalEligibleIncentive)}</span>
                 </div>
                 <div>
@@ -315,18 +326,51 @@ export function MyDealsReport() {
                   <span className="font-semibold text-green-600">{formatCurrency(totals.totalPaidOnBooking)}</span>
                 </div>
                 <div>
-                  <span className="text-sm text-muted-foreground">Pending Collection Payout: </span>
+                  <span className="text-sm text-muted-foreground">Pending Collection: </span>
                   <span className="font-semibold text-yellow-600">{formatCurrency(totals.pendingCollectionPayout)}</span>
-                </div>
-                <div>
-                  <span className="text-sm text-muted-foreground">Collected Payout: </span>
-                  <span className="font-semibold text-green-600">{formatCurrency(totals.collectedPayout)}</span>
                 </div>
                 <div>
                   <span className="text-sm text-muted-foreground">Held for Year-End: </span>
                   <span className="font-semibold text-muted-foreground">{formatCurrency(totals.totalHeldForYearEnd)}</span>
                 </div>
               </div>
+
+              {/* Variable Pay Summary Row - Only show if VP data exists */}
+              {vpSummary && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="font-medium text-blue-800 dark:text-blue-200">Variable Pay (New Software Booking ARR)</span>
+                  </div>
+                  <div className="flex flex-wrap gap-6">
+                    <div>
+                      <span className="text-sm text-muted-foreground">Total VP: </span>
+                      <span className="font-semibold text-blue-700 dark:text-blue-300">{formatCurrency(vpSummary.totalVariablePayUsd)}</span>
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Paid on Booking: </span>
+                      <span className="font-semibold text-green-600">{formatCurrency(vpSummary.totalPayoutOnBookingUsd)}</span>
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Held for Collection: </span>
+                      <span className="font-semibold text-yellow-600">{formatCurrency(vpSummary.totalPayoutOnCollectionUsd)}</span>
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Held for Year-End: </span>
+                      <span className="font-semibold text-muted-foreground">{formatCurrency(vpSummary.totalPayoutOnYearEndUsd)}</span>
+                    </div>
+                    {vpSummary.pendingClawbackUsd > 0 && (
+                      <div className="border-l pl-4">
+                        <span className="text-sm text-muted-foreground">Clawback at Risk: </span>
+                        <span className="font-semibold text-orange-600">{formatCurrency(vpSummary.pendingClawbackUsd)}</span>
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({deals.filter(d => (d.collection_status === "Pending" || d.collection_status === "Overdue") && d.vp_eligible_usd).length} pending deals)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Table */}
@@ -352,15 +396,23 @@ export function MyDealsReport() {
                     <TableHead className="text-right">TCV (USD)</TableHead>
                     <TableHead className="text-right">Perpetual (USD)</TableHead>
                     <TableHead className="text-right">GP Margin %</TableHead>
-                    {/* New columns */}
+                    {/* Collection columns */}
                     <TableHead className="bg-muted/30">Collection Status</TableHead>
                     <TableHead className="bg-muted/30">Collection Date</TableHead>
                     <TableHead className="bg-muted/30">Linked to Impl</TableHead>
-                    <TableHead className="text-right bg-primary/10">Eligible Incentive</TableHead>
-                    <TableHead className="text-right bg-green-50 dark:bg-green-950">Paid (Booking)</TableHead>
-                    <TableHead className="text-right bg-yellow-50 dark:bg-yellow-950">Held (Collection)</TableHead>
-                    <TableHead className="text-right bg-muted/30">Held (Year-End)</TableHead>
-                    <TableHead className="text-right bg-green-100 dark:bg-green-900">Actual Paid</TableHead>
+                    {/* Commission columns */}
+                    <TableHead className="text-right bg-primary/10">Commission Eligible</TableHead>
+                    <TableHead className="text-right bg-green-50 dark:bg-green-950">Comm Paid (Booking)</TableHead>
+                    <TableHead className="text-right bg-yellow-50 dark:bg-yellow-950">Comm Held (Collection)</TableHead>
+                    <TableHead className="text-right bg-muted/30">Comm Held (Year-End)</TableHead>
+                    <TableHead className="text-right bg-green-100 dark:bg-green-900">Comm Actual Paid</TableHead>
+                    {/* Variable Pay columns */}
+                    <TableHead className="text-right bg-blue-50 dark:bg-blue-950">VP Proportion %</TableHead>
+                    <TableHead className="text-right bg-blue-100 dark:bg-blue-900">VP Eligible</TableHead>
+                    <TableHead className="text-right bg-green-50 dark:bg-green-950">VP Paid (Booking)</TableHead>
+                    <TableHead className="text-right bg-yellow-50 dark:bg-yellow-950">VP Held (Collection)</TableHead>
+                    <TableHead className="text-right bg-muted/30">VP Held (Year-End)</TableHead>
+                    <TableHead className="text-right bg-orange-50 dark:bg-orange-950">VP Clawback Risk</TableHead>
                     {/* Participant columns */}
                     <TableHead>Sales Rep</TableHead>
                     <TableHead>Sales Head</TableHead>
@@ -397,7 +449,7 @@ export function MyDealsReport() {
                       <TableCell className="text-right">{formatCurrency(deal.tcv_usd)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(deal.perpetual_license_usd)}</TableCell>
                       <TableCell className="text-right">{formatPercent(deal.gp_margin_percent)}</TableCell>
-                      {/* New columns */}
+                      {/* Collection columns */}
                       <TableCell className="bg-muted/30">
                         <CollectionStatusBadge status={deal.collection_status} collectionDate={deal.collection_date} />
                       </TableCell>
@@ -405,6 +457,7 @@ export function MyDealsReport() {
                       <TableCell className="bg-muted/30">
                         <LinkedToImplIndicator linked={deal.linked_to_impl} />
                       </TableCell>
+                      {/* Commission columns */}
                       <TableCell className="text-right bg-primary/10">
                         <IncentiveBreakdownTooltip deal={deal} />
                       </TableCell>
@@ -419,6 +472,27 @@ export function MyDealsReport() {
                       </TableCell>
                       <TableCell className="text-right bg-green-100 dark:bg-green-900 font-semibold text-green-800 dark:text-green-200">
                         {formatCurrency(deal.actual_paid_usd)}
+                      </TableCell>
+                      {/* Variable Pay columns */}
+                      <TableCell className="text-right bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                        {deal.vp_proportion_pct !== null ? `${deal.vp_proportion_pct.toFixed(2)}%` : "-"}
+                      </TableCell>
+                      <TableCell className="text-right bg-blue-100 dark:bg-blue-900 font-medium text-blue-800 dark:text-blue-200">
+                        {formatCurrency(deal.vp_eligible_usd)}
+                      </TableCell>
+                      <TableCell className="text-right bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300">
+                        {formatCurrency(deal.vp_payout_on_booking_usd)}
+                      </TableCell>
+                      <TableCell className="text-right bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300">
+                        {formatCurrency(deal.vp_payout_on_collection_usd)}
+                      </TableCell>
+                      <TableCell className="text-right bg-muted/30 text-muted-foreground">
+                        {formatCurrency(deal.vp_payout_on_year_end_usd)}
+                      </TableCell>
+                      <TableCell className="text-right bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-300">
+                        {deal.collection_status === "Pending" || deal.collection_status === "Overdue" 
+                          ? formatCurrency(deal.vp_clawback_eligible_usd) 
+                          : "-"}
                       </TableCell>
                       {/* Participant columns */}
                       <TableCell>{deal.sales_rep_name || deal.sales_rep_employee_id || "-"}</TableCell>
