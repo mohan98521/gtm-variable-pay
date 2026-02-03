@@ -1,269 +1,168 @@
 
 
-# Extend My Deals Report with Collections & Incentive Details
+# Fix: Reports Section Visibility for All Roles
 
-## Summary
+## Root Cause
 
-Enhance the "My Deals" report to show deal-level collection status and calculated incentive amounts, providing complete transparency into:
-- Whether each deal has been collected
-- Eligible incentive amounts per deal (commissions)
-- Payout breakdown: Booking vs Collection vs Year-End
-- Total paid vs pending amounts
+The Reports section is invisible for Sales Rep, Executive, and Sales Head roles because the codebase uses **hardcoded role arrays** instead of the dynamic permissions system stored in the database.
 
----
+| Location | Issue |
+|----------|-------|
+| `AppSidebar.tsx` | Hardcoded `allowedRoles: ["admin", "gtm_ops", "finance", "executive"]` |
+| `App.tsx` | Hardcoded `allowedRoles={["admin", "gtm_ops", "finance", "executive"]}` |
+| Database | **Correctly configured** - all 6 roles have `page:reports = true` |
 
-## What Users Will See
-
-### New Columns in the My Deals Table
-
-| Column | Description |
-|--------|-------------|
-| **Collection Status** | Pending / Collected / Clawback (with visual badge) |
-| **Collection Date** | Date when payment was received (if collected) |
-| **Linked to Impl** | Yes/No - affects payout timing (0% booking / 100% collection) |
-| **Eligible Incentive** | Total commission amount calculated for this deal |
-| **Paid (Booking)** | Amount paid immediately upon booking |
-| **Held (Collection)** | Amount held until collection confirmed |
-| **Held (Year-End)** | Amount reserved for year-end adjustments |
-| **Actual Paid** | Amount actually released (based on collection status) |
-
-### New Summary Metrics (Header Section)
-
-```text
-Total Deals: 22  |  Total ARR: $1.2M  |  Total TCV: $3.5M
-────────────────────────────────────────────────────────────
-Total Eligible Incentive: $45,000  |  Paid on Booking: $31,500
-Pending Collection Payout: $13,500  |  Collected Payout: $8,500
-```
+The database permissions are correct, but the code ignores them.
 
 ---
 
-## Data Flow
+## Solution
 
-```text
-deals table                deal_collections table           plan_commissions table
-     │                            │                               │
-     └──────────┬─────────────────┴───────────────────────────────┘
-                │
-                ▼
-    useMyDealsWithIncentives()
-                │
-                ▼
-    ┌───────────────────────────────────────────────────────────┐
-    │ For each deal:                                            │
-    │  1. Join with deal_collections → get collection status    │
-    │  2. Determine commission type from type_of_proposal       │
-    │  3. Look up commission rate from plan_commissions         │
-    │  4. Calculate: Eligible = Value × Rate                    │
-    │  5. Apply payout split based on linked_to_impl flag       │
-    │  6. Determine actual paid based on is_collected           │
-    └───────────────────────────────────────────────────────────┘
-                │
-                ▼
-        Enhanced DealRecord with incentive fields
-```
+Migrate the sidebar navigation and route protection to use the **dynamic permissions system** (`usePermissions` hook) that queries the `role_permissions` table.
 
 ---
 
-## Commission Calculation Logic Per Deal
+## Changes Required
 
-### Standard Deals (linked_to_impl = false)
+### 1. Update AppSidebar.tsx
 
-Uses plan's configured payout split (e.g., 70/25/5):
+Replace hardcoded role arrays with dynamic permission checks from the `usePermissions` hook.
 
-```text
-Eligible Incentive = Deal Value × Commission Rate %
-
-Paid on Booking    = Eligible × payout_on_booking_pct
-Held for Collection = Eligible × payout_on_collection_pct
-Held for Year-End  = Eligible × payout_on_year_end_pct
-```
-
-### Implementation-Linked Deals (linked_to_impl = true)
-
-Overrides to 0% booking / 100% collection:
-
-```text
-Paid on Booking    = $0
-Held for Collection = Eligible × 100%
-Held for Year-End  = $0
-```
-
-### Actual Paid Calculation
-
-```text
-If is_collected = true:
-  Actual Paid = Paid on Booking + Held for Collection
-
-If is_collected = false:
-  Actual Paid = Paid on Booking only (collection portion still held)
-```
-
----
-
-## Commission Type Mapping
-
-The deal's `type_of_proposal` and value columns map to commission types:
-
-| Deal Field | Commission Type | Value Column |
-|------------|----------------|--------------|
-| Any deal with `managed_services_usd > 0` | Managed Services | managed_services_usd |
-| Any deal with `perpetual_license_usd > 0` | Perpetual License | perpetual_license_usd |
-| Any deal with `implementation_usd > 0` | Implementation | implementation_usd |
-| Any deal with `cr_usd > 0` or `er_usd > 0` | CR/ER | cr_usd + er_usd |
-
-Each deal can generate multiple commission line items if it has values in multiple columns.
-
----
-
-## Files to Modify
-
-### 1. New Hook: useMyDealsWithIncentives
-
-**File:** `src/hooks/useMyActualsData.ts` (extend existing)
-
-| Addition | Description |
-|----------|-------------|
-| Extended DealRecord interface | Add collection and incentive fields |
-| useMyDealsWithIncentives hook | Joins deals + deal_collections + calculates commissions |
-
-### 2. Update Report Component
-
-**File:** `src/components/reports/MyDealsReport.tsx`
-
-| Change | Description |
-|--------|-------------|
-| Use new hook | Replace useMyDeals with useMyDealsWithIncentives |
-| Add new table columns | Collection Status, Eligible Incentive, Payout breakdown |
-| Add summary section | Total incentives, paid vs pending |
-| Update export columns | Include all new fields in CSV/XLSX exports |
-
----
-
-## Technical Implementation Details
-
-### Extended Deal Record Interface
-
+**Before:**
 ```typescript
-interface DealWithIncentives extends DealRecord {
-  // Collection fields (from deal_collections)
-  is_collected: boolean;
-  collection_date: string | null;
-  collection_month: string | null;
-  is_clawback_triggered: boolean;
-  first_milestone_due_date: string | null;
-  
-  // Calculated incentive fields
-  commission_type: string | null;        // Primary commission category
-  eligible_incentive_usd: number;        // Total commission for this deal
-  payout_on_booking_usd: number;         // Immediate payout portion
-  payout_on_collection_usd: number;      // Held until collection
-  payout_on_year_end_usd: number;        // Reserved for adjustments
-  actual_paid_usd: number;               // Amount actually released
-  
-  // Per-category breakdown (if deal has multiple commission types)
-  incentive_breakdown: {
-    type: string;
-    value: number;
-    rate: number;
-    amount: number;
-  }[];
+const navigation = [
+  { name: "Reports", href: "/reports", allowedRoles: ["admin", "gtm_ops", "finance", "executive"] },
+];
+
+const filteredNavigation = navigation.filter(item => 
+  item.allowedRoles.some(allowedRole => roles.includes(allowedRole))
+);
+```
+
+**After:**
+```typescript
+import { usePermissions } from "@/hooks/usePermissions";
+import { PAGE_PERMISSION_MAP } from "@/lib/permissions";
+
+const navigation = [
+  { name: "Reports", href: "/reports", permissionKey: "page:reports" },
+];
+
+const { canAccessPage, isLoading: permissionsLoading } = usePermissions();
+
+const filteredNavigation = navigation.filter(item => 
+  canAccessPage(item.permissionKey)
+);
+```
+
+### 2. Update ProtectedRoute Component
+
+Modify `ProtectedRoute` to support both:
+- Legacy `allowedRoles` prop (for backward compatibility)
+- New `permissionKey` prop (for dynamic permissions)
+
+**New Props Interface:**
+```typescript
+interface ProtectedRouteProps {
+  children: ReactNode;
+  // Legacy: hardcoded roles (still supported)
+  allowedRoles?: AppRole[];
+  // New: dynamic permission check
+  permissionKey?: PermissionKey;
+  redirectTo?: string;
 }
 ```
 
-### Query Strategy
+### 3. Update App.tsx Routes
 
-```sql
--- Conceptual join (implemented in hook)
-SELECT 
-  d.*,
-  dc.is_collected,
-  dc.collection_date,
-  dc.is_clawback_triggered,
-  dc.first_milestone_due_date
-FROM deals d
-LEFT JOIN deal_collections dc ON dc.deal_id = d.id
-WHERE d.month_year BETWEEN fiscal_year_start AND fiscal_year_end
+Update the `/reports` route to use the new permission-based approach.
+
+**Before:**
+```typescript
+<ProtectedRoute allowedRoles={["admin", "gtm_ops", "finance", "executive"]}>
+  <Reports />
+</ProtectedRoute>
 ```
 
-Commission rates are fetched separately from `plan_commissions` and applied client-side per deal.
+**After:**
+```typescript
+<ProtectedRoute permissionKey="page:reports">
+  <Reports />
+</ProtectedRoute>
+```
 
 ---
 
-## UI Visual Indicators
+## Implementation Details
 
-### Collection Status Badge
-
-| Status | Visual |
-|--------|--------|
-| Pending | Yellow badge: "Pending" |
-| Collected | Green badge: "Collected" with date |
-| Clawback | Red badge: "Clawback" |
-| Overdue | Orange badge: "Overdue" (past due date, not collected) |
-
-### Linked to Impl Indicator
-
-| Value | Visual |
-|-------|--------|
-| true | Icon + "100% on Collection" tooltip |
-| false | Standard split display |
-
----
-
-## Export Enhancements
-
-New columns added to CSV/XLSX exports:
-
-| Column | Description |
-|--------|-------------|
-| Collection Status | Pending/Collected/Clawback |
-| Collection Date | YYYY-MM-DD or empty |
-| Linked to Implementation | Yes/No |
-| Commission Type | MS/Perpetual/CR-ER/Impl |
-| Eligible Incentive (USD) | Calculated commission |
-| Paid on Booking (USD) | Immediate portion |
-| Held for Collection (USD) | Pending portion |
-| Held for Year-End (USD) | Reserved portion |
-| Actual Paid (USD) | Released amount |
-
----
-
-## Summary Totals Calculation
-
-The summary section will show:
+### Updated Navigation Structure
 
 ```typescript
-const totals = useMemo(() => ({
-  // Existing
-  count: deals.length,
-  totalArr: sum(new_software_booking_arr_usd),
-  totalTcv: sum(tcv_usd),
-  
-  // New incentive totals
-  totalEligibleIncentive: sum(eligible_incentive_usd),
-  totalPaidOnBooking: sum(payout_on_booking_usd),
-  totalHeldForCollection: sum(payout_on_collection_usd),
-  totalHeldForYearEnd: sum(payout_on_year_end_usd),
-  totalActualPaid: sum(actual_paid_usd),
-  
-  // Collection status counts
-  pendingCount: count where is_collected = false,
-  collectedCount: count where is_collected = true,
-  clawbackCount: count where is_clawback_triggered = true,
-}), [deals]);
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  permissionKey: PermissionKey;
+}
+
+const navigation: NavItem[] = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permissionKey: "page:dashboard" },
+  { name: "Team View", href: "/team", icon: Users, permissionKey: "page:team_view" },
+  { name: "Plan Config", href: "/admin", icon: Settings, permissionKey: "page:plan_config" },
+  { name: "Reports", href: "/reports", icon: BarChart3, permissionKey: "page:reports" },
+  { name: "Data Inputs", href: "/data-inputs", icon: FileSpreadsheet, permissionKey: "page:data_inputs" },
+];
+```
+
+### Updated ProtectedRoute Logic
+
+```typescript
+export function ProtectedRoute({ 
+  children, 
+  allowedRoles, 
+  permissionKey,
+  redirectTo = "/dashboard" 
+}: ProtectedRouteProps) {
+  const { roles, isLoading: rolesLoading, isAuthenticated } = useUserRole();
+  const { canAccessPage, isLoading: permissionsLoading } = usePermissions();
+
+  // Wait for both roles and permissions to load
+  if (rolesLoading || permissionsLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  // Check access using permission key (preferred) or legacy roles
+  const hasAccess = permissionKey 
+    ? canAccessPage(permissionKey)
+    : allowedRoles?.some(role => roles.includes(role)) ?? false;
+
+  if (!hasAccess) {
+    return <AccessDeniedCard />;
+  }
+
+  return <>{children}</>;
+}
 ```
 
 ---
 
-## Edge Cases Handled
+## Loading State Handling
 
-| Scenario | Handling |
-|----------|----------|
-| No plan assignment | Show deal data but no incentive calculation (N/A) |
-| Commission type not configured | Show deal value but $0 eligible incentive |
-| Multiple commission types per deal | Sum all applicable commissions |
-| Deal not in deal_collections | Treat as pending (collection tracking started later) |
-| Clawback triggered | Show negative adjustment in Actual Paid |
+The solution addresses the race condition mentioned in the Stack Overflow guidance by:
+
+1. Checking **both** `rolesLoading` and `permissionsLoading` before rendering
+2. Showing a loading spinner until all permission data is available
+3. Only then evaluating access based on the fully loaded permissions
+
+```typescript
+if (rolesLoading || permissionsLoading) {
+  return <LoadingSpinner />; // Prevents flash of incorrect UI
+}
+```
 
 ---
 
@@ -271,6 +170,16 @@ const totals = useMemo(() => ({
 
 | File | Action | Description |
 |------|--------|-------------|
-| `src/hooks/useMyActualsData.ts` | MODIFY | Add useMyDealsWithIncentives hook with extended interface |
-| `src/components/reports/MyDealsReport.tsx` | MODIFY | Add new columns, summary section, visual indicators |
+| `src/components/layout/AppSidebar.tsx` | MODIFY | Use `usePermissions` hook instead of hardcoded role arrays |
+| `src/components/auth/ProtectedRoute.tsx` | MODIFY | Add `permissionKey` prop support with proper loading state |
+| `src/App.tsx` | MODIFY | Update `/reports` route to use `permissionKey` |
+
+---
+
+## Result
+
+After this fix:
+- Reports section will appear in sidebar for all roles with `page:reports` enabled in database
+- Admins can dynamically enable/disable Reports access via the Permissions tab
+- No code changes needed to modify access - just update the database
 
