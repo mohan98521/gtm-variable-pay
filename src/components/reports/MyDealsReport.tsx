@@ -4,16 +4,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Download, FileSpreadsheet, Loader2 } from "lucide-react";
-import { useMyDeals, DealRecord } from "@/hooks/useMyActualsData";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Download, FileSpreadsheet, Loader2, Link as LinkIcon, Info } from "lucide-react";
+import { DealRecord } from "@/hooks/useMyActualsData";
+import { useMyDealsWithIncentives, DealWithIncentives } from "@/hooks/useMyDealsWithIncentives";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { generateCSV, downloadCSV } from "@/lib/csvExport";
 import { generateXLSX, downloadXLSX } from "@/lib/xlsxExport";
 import { format } from "date-fns";
 
-// All deal columns for export and display
-const DEAL_COLUMNS: { key: keyof DealRecord | string; header: string; getValue?: (row: DealRecord) => string | number | null }[] = [
+// All deal columns for export including new incentive columns
+const DEAL_COLUMNS: { key: keyof DealWithIncentives | string; header: string; getValue?: (row: DealWithIncentives) => string | number | null }[] = [
   { key: "project_id", header: "Project ID" },
   { key: "customer_code", header: "Customer Code" },
   { key: "customer_name", header: "Customer Name" },
@@ -33,6 +36,17 @@ const DEAL_COLUMNS: { key: keyof DealRecord | string; header: string; getValue?:
   { key: "tcv_usd", header: "TCV (USD)" },
   { key: "perpetual_license_usd", header: "Perpetual License (USD)" },
   { key: "gp_margin_percent", header: "GP Margin %" },
+  // New collection columns
+  { key: "collection_status", header: "Collection Status" },
+  { key: "collection_date", header: "Collection Date" },
+  { key: "linked_to_impl", header: "Linked to Implementation", getValue: (row) => row.linked_to_impl ? "Yes" : "No" },
+  // New incentive columns
+  { key: "eligible_incentive_usd", header: "Eligible Incentive (USD)" },
+  { key: "payout_on_booking_usd", header: "Paid on Booking (USD)" },
+  { key: "payout_on_collection_usd", header: "Held for Collection (USD)" },
+  { key: "payout_on_year_end_usd", header: "Held for Year-End (USD)" },
+  { key: "actual_paid_usd", header: "Actual Paid (USD)" },
+  // Participant columns
   { key: "sales_rep_employee_id", header: "Sales Rep ID" },
   { key: "sales_rep_name", header: "Sales Rep Name" },
   { key: "sales_head_employee_id", header: "Sales Head ID" },
@@ -69,13 +83,102 @@ function getMonthOptions(year: number) {
   return months;
 }
 
+// Collection status badge component
+function CollectionStatusBadge({ status, collectionDate }: { status: string; collectionDate: string | null }) {
+  const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className: string }> = {
+    Pending: { variant: "secondary", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+    Collected: { variant: "default", className: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+    Clawback: { variant: "destructive", className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+    Overdue: { variant: "outline", className: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+  };
+
+  const { variant, className } = variants[status] || { variant: "secondary", className: "" };
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant={variant} className={className}>
+            {status}
+          </Badge>
+        </TooltipTrigger>
+        {status === "Collected" && collectionDate && (
+          <TooltipContent>
+            <p>Collected on {collectionDate}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// Linked to Impl indicator
+function LinkedToImplIndicator({ linked }: { linked: boolean }) {
+  if (!linked) return <span className="text-muted-foreground">-</span>;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1 text-primary">
+            <LinkIcon className="h-3.5 w-3.5" />
+            Yes
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>100% on Collection (0% on Booking)</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// Incentive breakdown tooltip
+function IncentiveBreakdownTooltip({ deal }: { deal: DealWithIncentives }) {
+  if (deal.incentive_breakdown.length === 0) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1 cursor-help">
+            {formatCurrency(deal.eligible_incentive_usd)}
+            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <div className="space-y-1">
+            {deal.incentive_breakdown.map((b, i) => (
+              <div key={i} className="text-xs">
+                <span className="font-medium">{b.type}:</span> ${b.value.toLocaleString()} × {b.rate}% = ${b.amount.toLocaleString()}
+              </div>
+            ))}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+const formatCurrency = (value: number | null) => {
+  if (value === null || value === undefined) return "-";
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+};
+
+const formatPercent = (value: number | null) => {
+  if (value === null || value === undefined) return "-";
+  return `${value.toFixed(1)}%`;
+};
+
 export function MyDealsReport() {
   const { selectedYear } = useFiscalYear();
   const { canViewAllData } = useUserRole();
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   
   const monthParam = selectedMonth === "all" ? null : selectedMonth;
-  const { data: deals = [], isLoading } = useMyDeals(monthParam);
+  const { data: deals = [], isLoading } = useMyDealsWithIncentives(monthParam);
   
   const monthOptions = useMemo(() => getMonthOptions(selectedYear), [selectedYear]);
   
@@ -83,12 +186,33 @@ export function MyDealsReport() {
     ? `All deals for fiscal year ${selectedYear}`
     : `Deals contributing to your incentive computation for ${selectedYear}`;
 
-  // Calculate totals
+  // Calculate totals including incentive metrics
   const totals = useMemo(() => {
+    const pendingDeals = deals.filter((d) => d.collection_status === "Pending" || d.collection_status === "Overdue");
+    const collectedDeals = deals.filter((d) => d.collection_status === "Collected");
+    const clawbackDeals = deals.filter((d) => d.collection_status === "Clawback");
+
     return {
+      // Deal counts
+      count: deals.length,
+      pendingCount: pendingDeals.length,
+      collectedCount: collectedDeals.length,
+      clawbackCount: clawbackDeals.length,
+      
+      // Value totals
       newSoftwareBookingArr: deals.reduce((sum, d) => sum + (d.new_software_booking_arr_usd || 0), 0),
       tcv: deals.reduce((sum, d) => sum + (d.tcv_usd || 0), 0),
-      count: deals.length,
+      
+      // Incentive totals
+      totalEligibleIncentive: deals.reduce((sum, d) => sum + d.eligible_incentive_usd, 0),
+      totalPaidOnBooking: deals.reduce((sum, d) => sum + d.payout_on_booking_usd, 0),
+      totalHeldForCollection: deals.reduce((sum, d) => sum + d.payout_on_collection_usd, 0),
+      totalHeldForYearEnd: deals.reduce((sum, d) => sum + d.payout_on_year_end_usd, 0),
+      totalActualPaid: deals.reduce((sum, d) => sum + d.actual_paid_usd, 0),
+      
+      // Collection-based breakdown
+      pendingCollectionPayout: pendingDeals.reduce((sum, d) => sum + d.payout_on_collection_usd, 0),
+      collectedPayout: collectedDeals.reduce((sum, d) => sum + d.payout_on_collection_usd, 0),
     };
   }, [deals]);
 
@@ -100,16 +224,6 @@ export function MyDealsReport() {
   const handleExportXLSX = () => {
     const blob = generateXLSX(deals, DEAL_COLUMNS, "My Deals");
     downloadXLSX(blob, `my_deals_${selectedYear}_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
-  };
-
-  const formatCurrency = (value: number | null) => {
-    if (value === null || value === undefined) return "-";
-    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  };
-
-  const formatPercent = (value: number | null) => {
-    if (value === null || value === undefined) return "-";
-    return `${value.toFixed(1)}%`;
   };
 
   return (
@@ -155,19 +269,63 @@ export function MyDealsReport() {
           </div>
         ) : (
           <>
-            {/* Summary */}
-            <div className="mb-4 p-4 bg-muted/50 rounded-lg flex gap-8">
-              <div>
-                <span className="text-sm text-muted-foreground">Total Deals: </span>
-                <span className="font-semibold">{totals.count}</span>
+            {/* Summary Section */}
+            <div className="mb-4 space-y-3">
+              {/* Deal Totals Row */}
+              <div className="p-4 bg-muted/50 rounded-lg flex flex-wrap gap-6">
+                <div>
+                  <span className="text-sm text-muted-foreground">Total Deals: </span>
+                  <span className="font-semibold">{totals.count}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Total ARR: </span>
+                  <span className="font-semibold">{formatCurrency(totals.newSoftwareBookingArr)}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Total TCV: </span>
+                  <span className="font-semibold">{formatCurrency(totals.tcv)}</span>
+                </div>
+                <div className="border-l pl-6">
+                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                    {totals.pendingCount} Pending
+                  </Badge>
+                </div>
+                <div>
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    {totals.collectedCount} Collected
+                  </Badge>
+                </div>
+                {totals.clawbackCount > 0 && (
+                  <div>
+                    <Badge variant="destructive">
+                      {totals.clawbackCount} Clawback
+                    </Badge>
+                  </div>
+                )}
               </div>
-              <div>
-                <span className="text-sm text-muted-foreground">Total ARR: </span>
-                <span className="font-semibold">{formatCurrency(totals.newSoftwareBookingArr)}</span>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground">Total TCV: </span>
-                <span className="font-semibold">{formatCurrency(totals.tcv)}</span>
+
+              {/* Incentive Totals Row */}
+              <div className="p-4 bg-primary/5 rounded-lg flex flex-wrap gap-6">
+                <div>
+                  <span className="text-sm text-muted-foreground">Total Eligible Incentive: </span>
+                  <span className="font-semibold text-primary">{formatCurrency(totals.totalEligibleIncentive)}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Paid on Booking: </span>
+                  <span className="font-semibold text-green-600">{formatCurrency(totals.totalPaidOnBooking)}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Pending Collection Payout: </span>
+                  <span className="font-semibold text-yellow-600">{formatCurrency(totals.pendingCollectionPayout)}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Collected Payout: </span>
+                  <span className="font-semibold text-green-600">{formatCurrency(totals.collectedPayout)}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Held for Year-End: </span>
+                  <span className="font-semibold text-muted-foreground">{formatCurrency(totals.totalHeldForYearEnd)}</span>
+                </div>
               </div>
             </div>
 
@@ -194,6 +352,16 @@ export function MyDealsReport() {
                     <TableHead className="text-right">TCV (USD)</TableHead>
                     <TableHead className="text-right">Perpetual (USD)</TableHead>
                     <TableHead className="text-right">GP Margin %</TableHead>
+                    {/* New columns */}
+                    <TableHead className="bg-muted/30">Collection Status</TableHead>
+                    <TableHead className="bg-muted/30">Collection Date</TableHead>
+                    <TableHead className="bg-muted/30">Linked to Impl</TableHead>
+                    <TableHead className="text-right bg-primary/10">Eligible Incentive</TableHead>
+                    <TableHead className="text-right bg-green-50 dark:bg-green-950">Paid (Booking)</TableHead>
+                    <TableHead className="text-right bg-yellow-50 dark:bg-yellow-950">Held (Collection)</TableHead>
+                    <TableHead className="text-right bg-muted/30">Held (Year-End)</TableHead>
+                    <TableHead className="text-right bg-green-100 dark:bg-green-900">Actual Paid</TableHead>
+                    {/* Participant columns */}
                     <TableHead>Sales Rep</TableHead>
                     <TableHead>Sales Head</TableHead>
                     <TableHead>SE</TableHead>
@@ -229,6 +397,30 @@ export function MyDealsReport() {
                       <TableCell className="text-right">{formatCurrency(deal.tcv_usd)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(deal.perpetual_license_usd)}</TableCell>
                       <TableCell className="text-right">{formatPercent(deal.gp_margin_percent)}</TableCell>
+                      {/* New columns */}
+                      <TableCell className="bg-muted/30">
+                        <CollectionStatusBadge status={deal.collection_status} collectionDate={deal.collection_date} />
+                      </TableCell>
+                      <TableCell className="bg-muted/30">{deal.collection_date || "-"}</TableCell>
+                      <TableCell className="bg-muted/30">
+                        <LinkedToImplIndicator linked={deal.linked_to_impl} />
+                      </TableCell>
+                      <TableCell className="text-right bg-primary/10">
+                        <IncentiveBreakdownTooltip deal={deal} />
+                      </TableCell>
+                      <TableCell className="text-right bg-green-50 dark:bg-green-950 font-medium text-green-700 dark:text-green-300">
+                        {formatCurrency(deal.payout_on_booking_usd)}
+                      </TableCell>
+                      <TableCell className="text-right bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300">
+                        {formatCurrency(deal.payout_on_collection_usd)}
+                      </TableCell>
+                      <TableCell className="text-right bg-muted/30 text-muted-foreground">
+                        {formatCurrency(deal.payout_on_year_end_usd)}
+                      </TableCell>
+                      <TableCell className="text-right bg-green-100 dark:bg-green-900 font-semibold text-green-800 dark:text-green-200">
+                        {formatCurrency(deal.actual_paid_usd)}
+                      </TableCell>
+                      {/* Participant columns */}
                       <TableCell>{deal.sales_rep_name || deal.sales_rep_employee_id || "-"}</TableCell>
                       <TableCell>{deal.sales_head_name || deal.sales_head_employee_id || "-"}</TableCell>
                       <TableCell>{deal.sales_engineering_name || deal.sales_engineering_employee_id || "-"}</TableCell>
