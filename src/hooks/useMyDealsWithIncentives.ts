@@ -247,87 +247,228 @@ function getCollectionStatus(
   return "Pending";
 }
 
+// Map sales_function to plan name
+const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
+  "Farming": "Farmer",
+  "Hunting": "Hunter",
+  "Overlay": "Overlay",
+};
+
+interface EmployeeVPConfig {
+  employeeId: string;
+  metric: PlanMetric;
+  targetUsd: number;
+  bonusAllocationUsd: number;
+}
+
 /**
- * Fetch the New Software Booking ARR metric config for an employee
+ * Batch fetch VP configurations for multiple employees (optimized for admin view)
+ */
+async function fetchAllEmployeeVPConfigs(
+  employeeIds: string[],
+  fiscalYear: number
+): Promise<Map<string, EmployeeVPConfig>> {
+  const configMap = new Map<string, EmployeeVPConfig>();
+  
+  if (employeeIds.length === 0) return configMap;
+  
+  // Batch fetch all employees
+  const { data: employees } = await supabase
+    .from("employees")
+    .select("employee_id, tvp_usd, sales_function")
+    .in("employee_id", employeeIds);
+  
+  if (!employees?.length) return configMap;
+  
+  // Batch fetch all performance targets
+  const { data: perfTargets } = await supabase
+    .from("performance_targets")
+    .select("employee_id, target_value_usd")
+    .in("employee_id", employeeIds)
+    .eq("effective_year", fiscalYear)
+    .eq("metric_type", "New Software Booking ARR");
+  
+  // Create lookup maps
+  const targetMap = new Map<string, number>();
+  (perfTargets || []).forEach(pt => {
+    targetMap.set(pt.employee_id, pt.target_value_usd);
+  });
+  
+  // Group employees by plan name
+  const employeesByPlan = new Map<string, typeof employees>();
+  employees.forEach(emp => {
+    const planName = SALES_FUNCTION_TO_PLAN[emp.sales_function || ""];
+    if (!planName) return;
+    
+    if (!employeesByPlan.has(planName)) {
+      employeesByPlan.set(planName, []);
+    }
+    employeesByPlan.get(planName)!.push(emp);
+  });
+  
+  // Fetch all relevant plans
+  const planNames = Array.from(employeesByPlan.keys());
+  if (planNames.length === 0) return configMap;
+  
+  const { data: plans } = await supabase
+    .from("comp_plans")
+    .select("id, name")
+    .in("name", planNames)
+    .eq("effective_year", fiscalYear)
+    .eq("is_active", true);
+  
+  if (!plans?.length) return configMap;
+  
+  // Fetch all plan metrics
+  const planIds = plans.map(p => p.id);
+  const { data: allMetrics } = await supabase
+    .from("plan_metrics")
+    .select("*")
+    .in("plan_id", planIds);
+  
+  if (!allMetrics?.length) return configMap;
+  
+  // Filter to ARR metrics and create plan->metric map
+  const planMetricMap = new Map<string, typeof allMetrics[0]>();
+  allMetrics.forEach(m => {
+    if (
+      m.metric_name === "New Software Booking ARR" ||
+      m.metric_name.toLowerCase().includes("new software") ||
+      m.metric_name.toLowerCase().includes("booking arr")
+    ) {
+      planMetricMap.set(m.plan_id, m);
+    }
+  });
+  
+  // Fetch all multiplier grids for relevant metrics
+  const metricIds = Array.from(planMetricMap.values()).map(m => m.id);
+  const { data: allGrids } = await supabase
+    .from("multiplier_grids")
+    .select("*")
+    .in("plan_metric_id", metricIds)
+    .order("min_pct");
+  
+  // Group grids by metric
+  const gridsByMetric = new Map<string, typeof allGrids>();
+  (allGrids || []).forEach(g => {
+    if (!gridsByMetric.has(g.plan_metric_id)) {
+      gridsByMetric.set(g.plan_metric_id, []);
+    }
+    gridsByMetric.get(g.plan_metric_id)!.push(g);
+  });
+  
+  // Build plan name -> plan id map
+  const planNameToId = new Map<string, string>();
+  plans.forEach(p => planNameToId.set(p.name, p.id));
+  
+  // Build final config for each employee
+  employees.forEach(emp => {
+    const planName = SALES_FUNCTION_TO_PLAN[emp.sales_function || ""];
+    if (!planName) return;
+    
+    const planId = planNameToId.get(planName);
+    if (!planId) return;
+    
+    const metric = planMetricMap.get(planId);
+    if (!metric) return;
+    
+    const grids = gridsByMetric.get(metric.id) || [];
+    const targetUsd = targetMap.get(emp.employee_id) || 0;
+    const tvpUsd = emp.tvp_usd || 0;
+    const bonusAllocation = (tvpUsd * metric.weightage_percent) / 100;
+    
+    configMap.set(emp.employee_id, {
+      employeeId: emp.employee_id,
+      metric: {
+        ...metric,
+        multiplier_grids: grids,
+      } as PlanMetric,
+      targetUsd,
+      bonusAllocationUsd: bonusAllocation,
+    });
+  });
+  
+  return configMap;
+}
+
+/**
+ * Fetch the New Software Booking ARR metric config for a single employee
  */
 async function fetchEmployeeVPConfig(
   employeeId: string,
   fiscalYear: number
-): Promise<{ metric: PlanMetric; targetUsd: number; bonusAllocationUsd: number } | null> {
-  // Get employee record
-  const { data: employee } = await supabase
-    .from("employees")
-    .select("id, tvp_usd, sales_function")
-    .eq("employee_id", employeeId)
-    .maybeSingle();
+): Promise<EmployeeVPConfig | null> {
+  const configMap = await fetchAllEmployeeVPConfigs([employeeId], fiscalYear);
+  return configMap.get(employeeId) || null;
+}
+
+/**
+ * Calculate VP attributions for all employees in the deal set (admin view)
+ */
+async function calculateVPForAllEmployees(
+  deals: DealRecord[],
+  fiscalYear: number,
+  fiscalYearStart: string,
+  fiscalYearEnd: string
+): Promise<Map<string, DealVariablePayAttribution>> {
+  const vpMap = new Map<string, DealVariablePayAttribution>();
   
-  if (!employee) return null;
+  // Extract unique employee IDs from sales_rep_employee_id
+  const uniqueEmployeeIds = new Set<string>();
+  deals.forEach(deal => {
+    if (deal.sales_rep_employee_id) {
+      uniqueEmployeeIds.add(deal.sales_rep_employee_id);
+    }
+  });
   
-  // Map sales_function to plan name
-  const planNameMap: Record<string, string> = {
-    "Farming": "Farmer",
-    "Hunting": "Hunter",
-    "Overlay": "Overlay",
-  };
-  const planName = planNameMap[employee.sales_function || ""] || null;
+  if (uniqueEmployeeIds.size === 0) return vpMap;
   
-  if (!planName) return null;
+  // Batch fetch all VP configs
+  const employeeIds = Array.from(uniqueEmployeeIds);
+  const vpConfigs = await fetchAllEmployeeVPConfigs(employeeIds, fiscalYear);
   
-  // Get plan by name and year
-  const { data: plan } = await supabase
-    .from("comp_plans")
-    .select("id")
-    .eq("name", planName)
-    .eq("effective_year", fiscalYear)
-    .eq("is_active", true)
-    .maybeSingle();
+  if (vpConfigs.size === 0) return vpMap;
   
-  if (!plan) return null;
+  // Fetch ALL YTD deals for VP calculation (need full context for each employee)
+  const { data: ytdDeals } = await supabase
+    .from("deals")
+    .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id")
+    .gte("month_year", fiscalYearStart)
+    .lte("month_year", fiscalYearEnd);
   
-  // Get plan metrics
-  const { data: metrics } = await supabase
-    .from("plan_metrics")
-    .select("*")
-    .eq("plan_id", plan.id);
+  if (!ytdDeals?.length) return vpMap;
   
-  if (!metrics?.length) return null;
+  // Calculate today's month for calculation
+  const today = new Date();
+  const calculationMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
   
-  // Find New Software Booking ARR metric
-  const arrMetric = metrics.find(m => 
-    m.metric_name === "New Software Booking ARR" || 
-    m.metric_name.toLowerCase().includes("new software") ||
-    m.metric_name.toLowerCase().includes("booking arr")
-  );
+  // For each employee with a valid config, calculate their VP attributions
+  for (const [empId, config] of vpConfigs) {
+    if (config.targetUsd <= 0) continue;
+    
+    // Filter to this employee's deals (where they are sales_rep)
+    const employeeDeals = ytdDeals.filter(d => d.sales_rep_employee_id === empId);
+    
+    if (employeeDeals.length === 0) continue;
+    
+    // Calculate VP attributions for this employee
+    const vpResult = calculateDealVariablePayAttributions(
+      employeeDeals as DealForAttribution[],
+      empId,
+      config.metric,
+      config.targetUsd,
+      config.bonusAllocationUsd,
+      fiscalYear,
+      calculationMonth
+    );
+    
+    // Add to map (keyed by deal_id)
+    vpResult.attributions.forEach(attr => {
+      vpMap.set(attr.dealId, attr);
+    });
+  }
   
-  if (!arrMetric) return null;
-  
-  // Get multiplier grids
-  const { data: grids } = await supabase
-    .from("multiplier_grids")
-    .select("*")
-    .eq("plan_metric_id", arrMetric.id)
-    .order("min_pct");
-  
-  // Get target from performance_targets
-  const { data: perfTarget } = await supabase
-    .from("performance_targets")
-    .select("target_value_usd")
-    .eq("employee_id", employeeId)
-    .eq("effective_year", fiscalYear)
-    .eq("metric_type", "New Software Booking ARR")
-    .maybeSingle();
-  
-  const tvpUsd = employee.tvp_usd || 0;
-  const bonusAllocation = (tvpUsd * arrMetric.weightage_percent) / 100;
-  
-  return {
-    metric: {
-      ...arrMetric,
-      multiplier_grids: grids || [],
-    } as PlanMetric,
-    targetUsd: perfTarget?.target_value_usd || 0,
-    bonusAllocationUsd: bonusAllocation,
-  };
+  return vpMap;
 }
 
 /**
@@ -420,11 +561,19 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
         payout_on_year_end_pct: pc.payout_on_year_end_pct ?? 5,
       }));
 
-      // Calculate Variable Pay Attribution if user has employee_id
+      // Calculate Variable Pay Attribution
       let vpAttributionMap = new Map<string, DealVariablePayAttribution>();
       
-      if (employeeId) {
-        // Fetch VP config for the employee
+      if (canViewAll) {
+        // For admin users: calculate VP for ALL employees with deals
+        vpAttributionMap = await calculateVPForAllEmployees(
+          filteredDeals as DealRecord[],
+          selectedYear,
+          fiscalYearStart,
+          fiscalYearEnd
+        );
+      } else if (employeeId) {
+        // For sales users: calculate VP for their own deals only
         const vpConfig = await fetchEmployeeVPConfig(employeeId, selectedYear);
         
         if (vpConfig && vpConfig.targetUsd > 0) {
