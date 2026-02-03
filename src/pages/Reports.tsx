@@ -17,6 +17,8 @@ import { useIncentiveAuditData } from "@/hooks/useIncentiveAuditData";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { MyDealsReport } from "@/components/reports/MyDealsReport";
 import { MyClosingARRReport } from "@/components/reports/MyClosingARRReport";
+import { useUserRole } from "@/hooks/useUserRole";
+
 const SALES_FUNCTIONS = [
   "All",
   "Farmer",
@@ -112,6 +114,7 @@ interface UserTarget {
 
 export default function Reports() {
   const { selectedYear } = useFiscalYear();
+  const { roles, canViewAllData } = useUserRole();
   const [activeTab, setActiveTab] = useState("employees");
   const [searchTerm, setSearchTerm] = useState("");
   const [salesFunctionFilter, setSalesFunctionFilter] = useState("All");
@@ -119,24 +122,63 @@ export default function Reports() {
     ALL_EMPLOYEE_COLUMNS.filter((c) => c.default).map((c) => c.key)
   );
 
-  // Fetch employees
+  // Fetch employees with role-based filtering
   const { data: employees = [] } = useQuery({
-    queryKey: ["employees-report"],
+    queryKey: ["employees-report", roles],
     queryFn: async () => {
+      // Get current user for filtering
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      // Admins, GTM Ops, Finance, Executive see all
+      if (canViewAllData()) {
+        const { data, error } = await supabase
+          .from("employees")
+          .select("*")
+          .order("full_name");
+        if (error) throw error;
+        return data as Employee[];
+      }
+
+      // Get user's employee_id from profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("employee_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!profile?.employee_id) return [];
+
+      // Sales Head: self + direct reports
+      if (roles.includes("sales_head")) {
+        const { data, error } = await supabase
+          .from("employees")
+          .select("*")
+          .or(`employee_id.eq.${profile.employee_id},manager_employee_id.eq.${profile.employee_id}`)
+          .order("full_name");
+        if (error) throw error;
+        return data as Employee[];
+      }
+
+      // Sales Rep: self only
       const { data, error } = await supabase
         .from("employees")
         .select("*")
-        .order("full_name");
+        .eq("employee_id", profile.employee_id);
       if (error) throw error;
       return data as Employee[];
     },
   });
 
-  // Fetch user targets with profiles
+  // Fetch user targets with profiles - with role-based filtering
   const { data: userTargets = [] } = useQuery({
-    queryKey: ["user-targets-report", selectedYear],
+    queryKey: ["user-targets-report", selectedYear, roles],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      // Base query
+      let query = supabase
         .from("user_targets")
         .select(`
           *,
@@ -145,13 +187,47 @@ export default function Reports() {
             full_name,
             sales_function,
             local_currency,
-            date_of_hire
+            date_of_hire,
+            employee_id
           )
         `)
         .gte("effective_end_date", `${selectedYear}-01-01`)
         .lte("effective_start_date", `${selectedYear}-12-31`);
+
+      const { data, error } = await query;
       if (error) throw error;
-      return data as UserTarget[];
+
+      // Admins, GTM Ops, Finance, Executive see all
+      if (canViewAllData()) {
+        return data as UserTarget[];
+      }
+
+      // Get user's employee_id
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("employee_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!profile?.employee_id) return [];
+
+      // Sales Head: filter to self + direct reports
+      if (roles.includes("sales_head")) {
+        const { data: teamMembers } = await supabase
+          .from("employees")
+          .select("employee_id")
+          .or(`employee_id.eq.${profile.employee_id},manager_employee_id.eq.${profile.employee_id}`);
+        
+        const allowedIds = new Set((teamMembers || []).map(e => e.employee_id));
+        return (data as any[]).filter(ut => 
+          ut.profiles?.employee_id && allowedIds.has(ut.profiles.employee_id)
+        ) as UserTarget[];
+      }
+
+      // Sales Rep: self only
+      return (data as any[]).filter(ut => 
+        ut.profiles?.employee_id === profile.employee_id
+      ) as UserTarget[];
     },
   });
 
