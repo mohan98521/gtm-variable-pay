@@ -3,6 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { DealRecord } from "./useMyActualsData";
 import { calculateDealCommission, PlanCommission } from "@/lib/commissions";
+import { 
+  calculateDealVariablePayAttributions,
+  DealForAttribution,
+  DealVariablePayAttribution,
+  AggregateVariablePayContext,
+} from "@/lib/dealVariablePayAttribution";
+import { PlanMetric } from "@/hooks/usePlanMetrics";
 
 // All 8 participant role columns in the deals table
 const PARTICIPANT_ROLES = [
@@ -47,7 +54,7 @@ export interface DealWithIncentives extends DealRecord {
   first_milestone_due_date: string | null;
   linked_to_impl: boolean;
 
-  // Calculated incentive fields
+  // Calculated commission incentive fields
   eligible_incentive_usd: number;
   payout_on_booking_usd: number;
   payout_on_collection_usd: number;
@@ -59,6 +66,14 @@ export interface DealWithIncentives extends DealRecord {
 
   // Collection status display
   collection_status: "Pending" | "Collected" | "Clawback" | "Overdue";
+
+  // NEW: Variable Pay Attribution fields
+  vp_proportion_pct: number | null;
+  vp_eligible_usd: number | null;
+  vp_payout_on_booking_usd: number | null;
+  vp_payout_on_collection_usd: number | null;
+  vp_payout_on_year_end_usd: number | null;
+  vp_clawback_eligible_usd: number | null;
 }
 
 interface DealCollectionRow {
@@ -233,6 +248,89 @@ function getCollectionStatus(
 }
 
 /**
+ * Fetch the New Software Booking ARR metric config for an employee
+ */
+async function fetchEmployeeVPConfig(
+  employeeId: string,
+  fiscalYear: number
+): Promise<{ metric: PlanMetric; targetUsd: number; bonusAllocationUsd: number } | null> {
+  // Get employee record
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("id, tvp_usd, sales_function")
+    .eq("employee_id", employeeId)
+    .maybeSingle();
+  
+  if (!employee) return null;
+  
+  // Map sales_function to plan name
+  const planNameMap: Record<string, string> = {
+    "Farming": "Farmer",
+    "Hunting": "Hunter",
+    "Overlay": "Overlay",
+  };
+  const planName = planNameMap[employee.sales_function || ""] || null;
+  
+  if (!planName) return null;
+  
+  // Get plan by name and year
+  const { data: plan } = await supabase
+    .from("comp_plans")
+    .select("id")
+    .eq("name", planName)
+    .eq("effective_year", fiscalYear)
+    .eq("is_active", true)
+    .maybeSingle();
+  
+  if (!plan) return null;
+  
+  // Get plan metrics
+  const { data: metrics } = await supabase
+    .from("plan_metrics")
+    .select("*")
+    .eq("plan_id", plan.id);
+  
+  if (!metrics?.length) return null;
+  
+  // Find New Software Booking ARR metric
+  const arrMetric = metrics.find(m => 
+    m.metric_name === "New Software Booking ARR" || 
+    m.metric_name.toLowerCase().includes("new software") ||
+    m.metric_name.toLowerCase().includes("booking arr")
+  );
+  
+  if (!arrMetric) return null;
+  
+  // Get multiplier grids
+  const { data: grids } = await supabase
+    .from("multiplier_grids")
+    .select("*")
+    .eq("plan_metric_id", arrMetric.id)
+    .order("min_pct");
+  
+  // Get target from performance_targets
+  const { data: perfTarget } = await supabase
+    .from("performance_targets")
+    .select("target_value_usd")
+    .eq("employee_id", employeeId)
+    .eq("effective_year", fiscalYear)
+    .eq("metric_type", "New Software Booking ARR")
+    .maybeSingle();
+  
+  const tvpUsd = employee.tvp_usd || 0;
+  const bonusAllocation = (tvpUsd * arrMetric.weightage_percent) / 100;
+  
+  return {
+    metric: {
+      ...arrMetric,
+      multiplier_grids: grids || [],
+    } as PlanMetric,
+    targetUsd: perfTarget?.target_value_usd || 0,
+    bonusAllocationUsd: bonusAllocation,
+  };
+}
+
+/**
  * Hook to fetch deals with collection status and calculated incentives
  */
 export function useMyDealsWithIncentives(selectedMonth: string | null) {
@@ -307,7 +405,6 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
       });
 
       // Fetch plan commissions - get all active plan commissions
-      // We'll use the first active plan's commissions for now (can be enhanced to use user's assigned plan)
       const { data: planCommissions } = await supabase
         .from("plan_commissions")
         .select("*")
@@ -323,6 +420,47 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
         payout_on_year_end_pct: pc.payout_on_year_end_pct ?? 5,
       }));
 
+      // Calculate Variable Pay Attribution if user has employee_id
+      let vpAttributionMap = new Map<string, DealVariablePayAttribution>();
+      
+      if (employeeId) {
+        // Fetch VP config for the employee
+        const vpConfig = await fetchEmployeeVPConfig(employeeId, selectedYear);
+        
+        if (vpConfig && vpConfig.targetUsd > 0) {
+          // Get ALL YTD deals for VP calculation (not just filtered by month)
+          const { data: ytdDeals } = await supabase
+            .from("deals")
+            .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id")
+            .gte("month_year", fiscalYearStart)
+            .lte("month_year", fiscalYearEnd);
+          
+          // Filter to employee's deals
+          const employeeYtdDeals = (ytdDeals || []).filter(deal =>
+            PARTICIPANT_ROLES.some(role => deal[role] === employeeId)
+          );
+          
+          // Calculate VP attributions
+          const today = new Date();
+          const calculationMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+          
+          const vpResult = calculateDealVariablePayAttributions(
+            employeeYtdDeals as DealForAttribution[],
+            employeeId,
+            vpConfig.metric,
+            vpConfig.targetUsd,
+            vpConfig.bonusAllocationUsd,
+            selectedYear,
+            calculationMonth
+          );
+          
+          // Create a map for quick lookup
+          vpResult.attributions.forEach(attr => {
+            vpAttributionMap.set(attr.dealId, attr);
+          });
+        }
+      }
+
       // Enhance each deal with collection and incentive data
       const dealsWithIncentives: DealWithIncentives[] = filteredDeals.map((deal) => {
         const collection = collectionsMap.get(deal.id);
@@ -330,7 +468,7 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
         const isCollected = collection?.is_collected ?? false;
         const isClawback = collection?.is_clawback_triggered ?? false;
 
-        // Calculate incentive breakdown
+        // Calculate commission incentive breakdown
         const incentiveCalc = calculateIncentiveBreakdown(
           deal as DealRecord,
           commissionsList,
@@ -352,6 +490,9 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
           collection?.first_milestone_due_date ?? null
         );
 
+        // Get VP attribution for this deal
+        const vpAttr = vpAttributionMap.get(deal.id);
+
         return {
           ...(deal as DealRecord),
           // Collection fields
@@ -363,7 +504,7 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
           linked_to_impl: linkedToImpl,
           collection_status: collectionStatus,
 
-          // Calculated incentive fields
+          // Calculated commission incentive fields
           eligible_incentive_usd: Math.round(incentiveCalc.totalEligible * 100) / 100,
           payout_on_booking_usd: Math.round(incentiveCalc.totalBooking * 100) / 100,
           payout_on_collection_usd: Math.round(incentiveCalc.totalCollection * 100) / 100,
@@ -372,10 +513,70 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
 
           // Breakdown
           incentive_breakdown: incentiveCalc.breakdowns,
+
+          // Variable Pay Attribution
+          vp_proportion_pct: vpAttr?.proportionPct ?? null,
+          vp_eligible_usd: vpAttr?.variablePaySplitUsd ?? null,
+          vp_payout_on_booking_usd: vpAttr?.payoutOnBookingUsd ?? null,
+          vp_payout_on_collection_usd: vpAttr?.payoutOnCollectionUsd ?? null,
+          vp_payout_on_year_end_usd: vpAttr?.payoutOnYearEndUsd ?? null,
+          vp_clawback_eligible_usd: vpAttr?.clawbackEligibleUsd ?? null,
         };
       });
 
       return dealsWithIncentives;
     },
   });
+}
+
+/**
+ * Variable Pay Summary for the deals report
+ */
+export interface VariablePayReportSummary {
+  totalArrUsd: number;
+  achievementPct: number;
+  multiplier: number;
+  totalVariablePayUsd: number;
+  totalPayoutOnBookingUsd: number;
+  totalPayoutOnCollectionUsd: number;
+  totalPayoutOnYearEndUsd: number;
+  pendingClawbackUsd: number;
+  dealsWithVP: number;
+}
+
+/**
+ * Calculate VP summary from deals
+ */
+export function calculateVPSummaryFromDeals(deals: DealWithIncentives[]): VariablePayReportSummary | null {
+  const dealsWithVP = deals.filter(d => d.vp_eligible_usd !== null && d.vp_eligible_usd > 0);
+  
+  if (dealsWithVP.length === 0) return null;
+  
+  const totalArrUsd = deals.reduce((sum, d) => sum + (d.new_software_booking_arr_usd || 0), 0);
+  const totalVpEligible = dealsWithVP.reduce((sum, d) => sum + (d.vp_eligible_usd || 0), 0);
+  const totalBooking = dealsWithVP.reduce((sum, d) => sum + (d.vp_payout_on_booking_usd || 0), 0);
+  const totalCollection = dealsWithVP.reduce((sum, d) => sum + (d.vp_payout_on_collection_usd || 0), 0);
+  const totalYearEnd = dealsWithVP.reduce((sum, d) => sum + (d.vp_payout_on_year_end_usd || 0), 0);
+  
+  // Pending clawback = booking portion of pending deals
+  const pendingDeals = dealsWithVP.filter(d => 
+    d.collection_status === "Pending" || d.collection_status === "Overdue"
+  );
+  const pendingClawback = pendingDeals.reduce((sum, d) => sum + (d.vp_clawback_eligible_usd || 0), 0);
+  
+  // Calculate achievement & multiplier (from first deal with data)
+  // This is aggregate context - ideally we'd store this, but we can derive it
+  const totalProportion = dealsWithVP.reduce((sum, d) => sum + (d.vp_proportion_pct || 0), 0);
+  
+  return {
+    totalArrUsd,
+    achievementPct: totalProportion > 0 ? Math.round(totalProportion) : 0,
+    multiplier: totalVpEligible > 0 && totalArrUsd > 0 ? Math.round((totalVpEligible / totalArrUsd) * 100) / 100 : 0,
+    totalVariablePayUsd: totalVpEligible,
+    totalPayoutOnBookingUsd: totalBooking,
+    totalPayoutOnCollectionUsd: totalCollection,
+    totalPayoutOnYearEndUsd: totalYearEnd,
+    pendingClawbackUsd: pendingClawback,
+    dealsWithVP: dealsWithVP.length,
+  };
 }

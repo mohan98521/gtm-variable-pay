@@ -380,6 +380,102 @@ export type Database = {
           },
         ]
       }
+      deal_variable_pay_attribution: {
+        Row: {
+          achievement_pct: number
+          calculation_month: string
+          clawback_amount_usd: number | null
+          clawback_date: string | null
+          clawback_eligible_usd: number
+          created_at: string | null
+          deal_id: string
+          deal_value_usd: number
+          employee_id: string
+          fiscal_year: number
+          id: string
+          is_clawback_triggered: boolean | null
+          metric_name: string
+          multiplier: number
+          payout_on_booking_usd: number
+          payout_on_collection_usd: number
+          payout_on_year_end_usd: number
+          plan_id: string | null
+          proportion_pct: number
+          target_usd: number
+          total_actual_usd: number
+          total_variable_pay_usd: number
+          updated_at: string | null
+          variable_pay_split_usd: number
+        }
+        Insert: {
+          achievement_pct: number
+          calculation_month: string
+          clawback_amount_usd?: number | null
+          clawback_date?: string | null
+          clawback_eligible_usd: number
+          created_at?: string | null
+          deal_id: string
+          deal_value_usd: number
+          employee_id: string
+          fiscal_year: number
+          id?: string
+          is_clawback_triggered?: boolean | null
+          metric_name: string
+          multiplier: number
+          payout_on_booking_usd: number
+          payout_on_collection_usd: number
+          payout_on_year_end_usd: number
+          plan_id?: string | null
+          proportion_pct: number
+          target_usd: number
+          total_actual_usd: number
+          total_variable_pay_usd: number
+          updated_at?: string | null
+          variable_pay_split_usd: number
+        }
+        Update: {
+          achievement_pct?: number
+          calculation_month?: string
+          clawback_amount_usd?: number | null
+          clawback_date?: string | null
+          clawback_eligible_usd?: number
+          created_at?: string | null
+          deal_id?: string
+          deal_value_usd?: number
+          employee_id?: string
+          fiscal_year?: number
+          id?: string
+          is_clawback_triggered?: boolean | null
+          metric_name?: string
+          multiplier?: number
+          payout_on_booking_usd?: number
+          payout_on_collection_usd?: number
+          payout_on_year_end_usd?: number
+          plan_id?: string | null
+          proportion_pct?: number
+          target_usd?: number
+          total_actual_usd?: number
+          total_variable_pay_usd?: number
+          updated_at?: string | null
+          variable_pay_split_usd?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_variable_pay_attribution_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_variable_pay_attribution_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "comp_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           bu: string
