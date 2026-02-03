@@ -103,6 +103,44 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
       const fiscalYearStart = `${fiscalYear}-01-01`;
       const fiscalYearEnd = `${fiscalYear}-12-31`;
 
+      // Get current user and roles for filtering
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data: userRoles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+
+      const roles = (userRoles || []).map(r => r.role as string);
+      const canViewAll = ["admin", "gtm_ops", "finance", "executive"].some(role => roles.includes(role));
+
+      // Determine allowed employee IDs if restricted
+      let allowedEmployeeIds: string[] | null = null;
+
+      if (!canViewAll) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("employee_id")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!profile?.employee_id) return [];
+
+        if (roles.includes("sales_head")) {
+          // Sales Head: self + direct reports
+          const { data: teamMembers } = await supabase
+            .from("employees")
+            .select("employee_id")
+            .or(`employee_id.eq.${profile.employee_id},manager_employee_id.eq.${profile.employee_id}`);
+
+          allowedEmployeeIds = (teamMembers || []).map(e => e.employee_id);
+        } else {
+          // Sales Rep: self only
+          allowedEmployeeIds = [profile.employee_id];
+        }
+      }
+
       // 1. Fetch all user targets with plan info and profiles
       const { data: userTargets, error: targetsError } = await supabase
         .from("user_targets")
@@ -127,8 +165,15 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
       if (targetsError) throw targetsError;
       if (!userTargets || userTargets.length === 0) return [];
 
+      // Early filter user targets if restricted
+      const filteredUserTargets = allowedEmployeeIds
+        ? userTargets.filter(ut => ut.profiles?.employee_id && allowedEmployeeIds!.includes(ut.profiles.employee_id))
+        : userTargets;
+
+      if (filteredUserTargets.length === 0) return [];
+
       // 2. Get all unique plan IDs
-      const planIds = [...new Set(userTargets.map(ut => ut.plan_id))];
+      const planIds = [...new Set(filteredUserTargets.map(ut => ut.plan_id))];
 
       // 3. Fetch all plan metrics
       const { data: allMetrics, error: metricsError } = await supabase
@@ -179,7 +224,7 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
       });
 
       // 6. Fetch performance targets for all employees
-      const employeeIds = userTargets
+      const employeeIds = filteredUserTargets
         .map(ut => ut.profiles?.employee_id)
         .filter((id): id is string => !!id);
 
@@ -283,7 +328,7 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
       // 9. Calculate incentive for each employee
       const auditData: IncentiveAuditRow[] = [];
 
-      for (const userTarget of userTargets) {
+      for (const userTarget of filteredUserTargets) {
         const profile = userTarget.profiles;
         const plan = userTarget.comp_plans;
         
