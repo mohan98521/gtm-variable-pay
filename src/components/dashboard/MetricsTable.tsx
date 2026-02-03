@@ -25,6 +25,7 @@ const formatCurrency = (value: number) => {
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
 // Helper to determine if all metrics have the same payout split
+// Note: Uses actual metric values, not assuming defaults. Each plan defines its own splits.
 const getUniformPayoutSplit = (metrics: MetricCompensation[]) => {
   if (metrics.length === 0) return { uniform: true, bookingPct: 70, collectionPct: 25, yearEndPct: 5 };
   

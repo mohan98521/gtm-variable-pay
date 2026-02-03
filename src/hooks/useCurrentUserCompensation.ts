@@ -303,7 +303,8 @@ export function useCurrentUserCompensation() {
           const belowGate = isGated && pm.gate_threshold_percent && achievementPct <= pm.gate_threshold_percent;
           const eligiblePayout = belowGate ? 0 : (achievementPct / 100) * allocation * multiplier;
 
-          // Use dynamic payout split from plan metric (fallback to 70/25/5)
+          // Use dynamic payout split from plan metric configuration
+          // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
           const payoutOnBookingPct = pm.payout_on_booking_pct ?? 70;
           const payoutOnCollectionPct = pm.payout_on_collection_pct ?? 25;
           const payoutOnYearEndPct = pm.payout_on_year_end_pct ?? 5;
@@ -333,6 +334,7 @@ export function useCurrentUserCompensation() {
         });
       } else {
         // Fallback: create metrics from performance targets if no plan metrics
+        // Note: Fallback splits (70/25/5) match database schema defaults - these should only apply when no plan is configured
         const metricNames = ["New Software Booking ARR", "Closing ARR"];
         const defaultWeightage = 50;
         const defaultBookingPct = 70;
@@ -387,7 +389,8 @@ export function useCurrentUserCompensation() {
         const meetsThreshold = !pc.min_threshold_usd || dealValue >= pc.min_threshold_usd;
         const grossPayout = meetsThreshold ? dealValue * rate : 0;
         
-        // Use dynamic payout split from plan commission (fallback to 70/25/5)
+        // Use dynamic payout split from plan commission configuration
+        // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
         const payoutOnBookingPct = pc.payout_on_booking_pct ?? 70;
         const payoutOnCollectionPct = pc.payout_on_collection_pct ?? 25;
         const payoutOnYearEndPct = pc.payout_on_year_end_pct ?? 5;

@@ -145,6 +145,7 @@ function calculateIncentiveBreakdown(
 
       if (commission) {
         // Determine payout percentages based on linked_to_impl
+        // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
         const bookingPct = linkedToImpl ? 0 : (commission.payout_on_booking_pct ?? 70);
         const collectionPct = linkedToImpl ? 100 : (commission.payout_on_collection_pct ?? 25);
         const yearEndPct = linkedToImpl ? 0 : (commission.payout_on_year_end_pct ?? 5);
@@ -186,6 +187,7 @@ function calculateIncentiveBreakdown(
     );
 
     if (commission) {
+      // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
       const bookingPct = linkedToImpl ? 0 : (commission.payout_on_booking_pct ?? 70);
       const collectionPct = linkedToImpl ? 100 : (commission.payout_on_collection_pct ?? 25);
       const yearEndPct = linkedToImpl ? 0 : (commission.payout_on_year_end_pct ?? 5);
@@ -564,6 +566,8 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
         .select("*")
         .eq("is_active", true);
 
+      // Map plan commissions with payout splits
+      // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
       const commissionsList: PlanCommission[] = (planCommissions || []).map((pc) => ({
         commission_type: pc.commission_type,
         commission_rate_pct: pc.commission_rate_pct,

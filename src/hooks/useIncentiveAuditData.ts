@@ -437,8 +437,9 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
           );
           
           if (commConfig) {
-            // Use dynamic payout split from plan commission (fallback to 75/25)
-            const payoutOnBookingPct = commConfig.payout_on_booking_pct ?? 75;
+            // Use dynamic payout split from plan commission configuration
+            // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
+            const payoutOnBookingPct = commConfig.payout_on_booking_pct ?? 70;
             const payoutOnCollectionPct = commConfig.payout_on_collection_pct ?? 25;
             
             const calcResult = calculateDealCommission(

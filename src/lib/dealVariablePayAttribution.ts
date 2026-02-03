@@ -146,7 +146,8 @@ export function calculateDealVariablePayAttributions(
     metric
   );
   
-  // Get payout split percentages from metric
+  // Get payout split percentages from metric configuration
+  // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
   const payoutOnBookingPct = metric.payout_on_booking_pct ?? 70;
   const payoutOnCollectionPct = metric.payout_on_collection_pct ?? 25;
   const payoutOnYearEndPct = metric.payout_on_year_end_pct ?? 5;
