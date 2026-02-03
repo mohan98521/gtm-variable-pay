@@ -32,6 +32,7 @@ export interface CommissionDetail {
   grossCommission: number;
   immediatePayout: number;
   holdback: number;
+  yearEndHoldback: number;
 }
 
 export interface IncentiveAuditRow {
@@ -61,6 +62,7 @@ export interface IncentiveAuditRow {
   totalCommissionGross: number;
   totalCommissionPaid: number;
   totalCommissionHoldback: number;
+  totalCommissionYearEndHoldback: number;
 }
 
 interface DealRow {
@@ -90,6 +92,7 @@ interface PlanCommissionRow {
   is_active: boolean;
   payout_on_booking_pct: number | null;
   payout_on_collection_pct: number | null;
+  payout_on_year_end_pct: number | null;
 }
 
 /**
@@ -196,10 +199,10 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         allGrids = grids || [];
       }
 
-      // 5. Fetch all plan commissions with payout split fields
+      // 5. Fetch all plan commissions with payout split fields (including year-end)
       const { data: allCommissions, error: commissionsError } = await supabase
         .from("plan_commissions")
-        .select("id, plan_id, commission_type, commission_rate_pct, min_threshold_usd, is_active, payout_on_booking_pct, payout_on_collection_pct")
+        .select("id, plan_id, commission_type, commission_rate_pct, min_threshold_usd, is_active, payout_on_booking_pct, payout_on_collection_pct, payout_on_year_end_pct")
         .in("plan_id", planIds);
 
       if (commissionsError) throw commissionsError;
@@ -400,6 +403,7 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
         let totalCommissionGross = 0;
         let totalCommissionPaid = 0;
         let totalCommissionHoldback = 0;
+        let totalCommissionYearEndHoldback = 0;
 
         // Calculate commissions for each deal type
         // Standard commission type mappings (excluding CR/ER which needs special handling)
@@ -441,13 +445,15 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
             // Note: Fallbacks (70/25/5) match database schema defaults - each plan should have its own splits defined
             const payoutOnBookingPct = commConfig.payout_on_booking_pct ?? 70;
             const payoutOnCollectionPct = commConfig.payout_on_collection_pct ?? 25;
+            const payoutOnYearEndPct = commConfig.payout_on_year_end_pct ?? 5;
             
             const calcResult = calculateDealCommission(
               dealValue,
               commConfig.commission_rate_pct,
               commConfig.min_threshold_usd,
               payoutOnBookingPct,
-              payoutOnCollectionPct
+              payoutOnCollectionPct,
+              payoutOnYearEndPct
             );
             
             if (calcResult.qualifies && calcResult.gross > 0) {
@@ -458,11 +464,13 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
                 grossCommission: calcResult.gross,
                 immediatePayout: calcResult.paid,
                 holdback: calcResult.holdback,
+                yearEndHoldback: calcResult.yearEndHoldback,
               });
               
               totalCommissionGross += calcResult.gross;
               totalCommissionPaid += calcResult.paid;
               totalCommissionHoldback += calcResult.holdback;
+              totalCommissionYearEndHoldback += calcResult.yearEndHoldback;
             }
           }
         });
@@ -493,6 +501,7 @@ export function useIncentiveAuditData(fiscalYear: number = 2026) {
           totalCommissionGross,
           totalCommissionPaid,
           totalCommissionHoldback,
+          totalCommissionYearEndHoldback,
         });
       }
 
