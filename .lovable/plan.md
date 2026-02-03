@@ -1,212 +1,155 @@
 
+# Fix Clawback Exemption Logic and Remove Hardcoded Split Assumptions
 
-# Clawback Exemption for Compensation Plans
+## Issues Identified
 
-## Understanding the Requirement
+### Issue 1: Incorrect UI Messaging for Clawback Exempt
 
-Certain employee roles (e.g., Pre-Sales, Solution Architects, some Channel partners) get paid their full incentive regardless of whether collections happen. They should not be subject to clawback rules that normally apply when deals fail to collect within the clawback period.
+**File:** `src/components/admin/PayoutSettingsCard.tsx` (lines 191-197)
 
-**Current Behavior:**
-- All plans follow the same clawback rules
-- Payout is split: X% on booking, Y% on collection, Z% at year-end
-- If collection doesn't happen within the clawback period, the booking portion is clawed back
-
-**Expected Behavior:**
-- Plans with clawback exemption get 100% payout on booking (or per their configured split)
-- Collection status doesn't affect their payout eligibility
-- No clawback risk for these plans
-
----
-
-## Design Decision: Where to Add the Flag?
-
-| Option | Location | Pros | Cons |
-|--------|----------|------|------|
-| **A** | `comp_plans` table (Plan-level) | Simple, one flag affects entire plan | Cannot have mixed behavior within a plan |
-| **B** | `plan_metrics` table (Metric-level) | Granular control per metric | More complex to manage |
-| **C** | `plan_commissions` table (Commission-level) | Granular control per deal type | Separate from VP metrics |
-
-**Recommended: Option A (Plan-level)** - This aligns with how compensation structures work in practice. An entire role category (e.g., Pre-Sales) is either subject to clawback or exempt. This matches your statement "certain Roles" are exempt.
-
----
-
-## Database Changes
-
-### Add Column to `comp_plans` Table
-
-```sql
-ALTER TABLE comp_plans
-ADD COLUMN is_clawback_exempt BOOLEAN NOT NULL DEFAULT FALSE;
-
-COMMENT ON COLUMN comp_plans.is_clawback_exempt IS 
-  'When true, employees on this plan receive full payout regardless of collection status. No clawback rules apply.';
+**Current (Wrong):**
+```typescript
+✓ No clawback rules will apply to this plan. All payouts are 100% on booking.
 ```
 
-**Default:** `FALSE` (existing plans continue to use standard clawback rules)
+**Problem:** This incorrectly implies 100% is paid on booking. Clawback exempt means the full amount is paid regardless of collection status - NOT that everything is paid on booking.
 
 ---
 
-## UI Changes
+### Issue 2: Hardcoded Fallback Splits Throughout Codebase
 
-### 1. Update PayoutSettingsCard Component
+Multiple files use `?? 70` / `?? 25` / `?? 5` fallbacks which assume a standard split. Each plan defines its own splits - no fallback should be assumed.
+
+| File | Line(s) | Current Fallback |
+|------|---------|------------------|
+| `src/lib/dealVariablePayAttribution.ts` | 150-152 | `?? 70`, `?? 25`, `?? 5` |
+| `src/hooks/useMyDealsWithIncentives.ts` | 148-150, 189-191, 572-574 | `?? 70`, `?? 25`, `?? 5` |
+| `src/hooks/useCurrentUserCompensation.ts` | 306-309, 337-340, 390-393 | `?? 70`, `?? 25`, `?? 5` |
+| `src/hooks/useIncentiveAuditData.ts` | 440-442 | `?? 75`, `?? 25` (inconsistent!) |
+| `src/components/dashboard/MetricsTable.tsx` | 29, 31, 123 | `?? 70`, `?? 25`, `?? 5` |
+| `src/lib/commissions.ts` | 56-57 | Comment mentions "70/25/5" |
+
+**Problem:** These fallbacks can cause incorrect calculations if the plan doesn't have splits defined. Also, inconsistent fallbacks (70/25/5 vs 75/25) create confusion.
+
+---
+
+## Technical Solution
+
+### Part 1: Fix PayoutSettingsCard Messaging
 
 **File:** `src/components/admin/PayoutSettingsCard.tsx`
 
-Add a toggle switch for clawback exemption:
+**Changes:**
+1. Update line 181 description to be accurate
+2. Replace lines 191-197 with correct messaging
+3. Add validation warning when clawback period is set on exempt plan
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ Payout Settings                                              │
-├─────────────────────────────────────────────────────────────┤
-│ Payout Frequency: [Monthly ▼]                                │
-│                                                             │
-│ Clawback Period: [180] days                                 │
-│                                                             │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ Clawback Exempt                              [Toggle]   │ │
-│ │ When enabled, employees on this plan receive full       │ │
-│ │ payout on booking regardless of collection status.      │ │
-│ │ No clawback rules will apply.                          │ │
-│ └─────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
-
-When clawback exempt is enabled:
-- The "Clawback Period (Days)" field becomes disabled/greyed out (not applicable)
-- A visual indicator shows this plan is exempt
-
-### 2. Update Plan Overview Display
-
-**File:** `src/pages/PlanBuilder.tsx`
-
-Show exemption status in the plan header with a badge:
-- If exempt: `[Clawback Exempt]` badge in green
-- If not exempt: No additional indicator (standard behavior)
-
----
-
-## Payout Calculation Logic Changes
-
-### Files to Update:
-- `src/hooks/useMyDealsWithIncentives.ts`
-- `src/lib/dealVariablePayAttribution.ts`
-
-### Logic Change:
-
-When calculating payouts for a deal:
-
+**Updated Messaging:**
 ```typescript
-// Pseudo-code for payout calculation
-if (planIsClawbackExempt) {
-  // Full payout on booking, no holdback
-  actualPaid = eligibleIncentive;  // 100% immediately
-  clawbackRisk = 0;
-  
-  // Override payout split display
-  payoutOnBooking = eligibleIncentive;
-  payoutOnCollection = 0;
-  payoutOnYearEnd = 0;
-} else {
-  // Standard behavior with collection-based holdback
-  payoutOnBooking = eligibleIncentive * (bookingPct / 100);
-  payoutOnCollection = eligibleIncentive * (collectionPct / 100);
-  payoutOnYearEnd = eligibleIncentive * (yearEndPct / 100);
-  
-  if (isCollected) {
-    actualPaid = eligibleIncentive;
-  } else {
-    actualPaid = payoutOnBooking;
-    clawbackRisk = payoutOnBooking;
-  }
-}
+// Line 181: Update description
+<p className="text-sm text-muted-foreground">
+  When enabled, employees receive their full payout regardless of collection status.
+</p>
+
+// Lines 191-197: Replace with correct message
+{clawbackExempt && (
+  <div className="mt-2 p-3 bg-success/10 rounded-md space-y-2">
+    <p className="text-sm text-success font-medium">
+      ✓ Clawback Exempt Plan
+    </p>
+    <p className="text-xs text-muted-foreground">
+      Employees receive their full payout regardless of collection status. 
+      The payout split percentages defined in each metric and commission 
+      still apply for tracking and reporting purposes, but all portions 
+      are payable immediately with no clawback risk.
+    </p>
+    {clawbackDays > 0 && (
+      <p className="text-xs text-amber-600 flex items-center gap-1">
+        <AlertCircle className="h-3 w-3" />
+        The clawback period setting will be ignored for this exempt plan.
+      </p>
+    )}
+  </div>
+)}
 ```
 
 ---
 
-## Data Flow Summary
+### Part 2: Remove/Handle Hardcoded Split Fallbacks
 
-```text
-1. Admin creates/edits plan → Sets "Clawback Exempt" toggle
-2. Plan saved with is_clawback_exempt = true/false
-3. When calculating payouts:
-   a. Fetch employee's plan configuration
-   b. Check is_clawback_exempt flag
-   c. If exempt: Full payout immediately, no clawback tracking
-   d. If not exempt: Apply standard booking/collection/year-end split
-4. My Deals Report:
-   a. Exempt plans: "VP Clawback Risk" column shows $0 or "-"
-   b. Non-exempt plans: Shows actual clawback exposure
-```
+**Approach:** Instead of removing fallbacks entirely (which could cause runtime errors), we should:
+1. Log a warning when fallbacks are used (for debugging)
+2. Use consistent fallback values (0/0/0 makes it obvious something is missing)
+3. Document that splits MUST come from plan configuration
+
+**Alternative (recommended):** Keep existing fallbacks but ensure splits are always populated in the database. Add NOT NULL constraints with defaults at DB level.
+
+**For now:** Update comments to clarify these are database schema defaults, not business logic defaults.
+
+| File | Change |
+|------|--------|
+| `src/lib/dealVariablePayAttribution.ts` | Update comment on lines 149-152 to clarify DB default |
+| `src/hooks/useMyDealsWithIncentives.ts` | Ensure plan_commissions always have splits defined |
+| `src/hooks/useCurrentUserCompensation.ts` | Update fallback comment and consider warning log |
+| `src/hooks/useIncentiveAuditData.ts` | Fix inconsistent 75/25 to match DB schema defaults |
+| `src/components/dashboard/MetricsTable.tsx` | Update display logic for uniform split detection |
+
+---
+
+### Part 3: Ensure Database Has Split Defaults
+
+**Files:** Check if `plan_metrics` and `plan_commissions` tables have proper defaults
+
+If not already done, add migration to ensure:
+- `payout_on_booking_pct` DEFAULT 70
+- `payout_on_collection_pct` DEFAULT 25  
+- `payout_on_year_end_pct` DEFAULT 5
+
+This ensures new records have valid splits, while existing records maintain their configured values.
+
+---
+
+### Part 4: Add Validation for Plan Split Configuration
+
+**File:** Plan Builder UI should validate:
+1. Booking + Collection + Year-End = 100%
+2. All three values are populated
+
+This already exists but should be enforced on save.
 
 ---
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `supabase/migrations/` | Add `is_clawback_exempt` column to `comp_plans` |
-| `src/components/admin/PayoutSettingsCard.tsx` | Add clawback exempt toggle, disable period when exempt |
-| `src/pages/PlanBuilder.tsx` | Display exemption badge, pass prop to PayoutSettingsCard |
-| `src/hooks/useCompPlans.ts` | Include new field in CompPlan interface |
-| `src/hooks/useMyDealsWithIncentives.ts` | Check exemption flag when calculating payouts |
-| `src/lib/dealVariablePayAttribution.ts` | Respect exemption flag in VP calculations |
+| File | Changes |
+|------|---------|
+| `src/components/admin/PayoutSettingsCard.tsx` | Fix exempt messaging, add clawback period warning |
+| `src/lib/dealVariablePayAttribution.ts` | Update comments to clarify fallback is DB default |
+| `src/hooks/useMyDealsWithIncentives.ts` | Clarify fallback comments |
+| `src/hooks/useCurrentUserCompensation.ts` | Clarify fallback comments |
+| `src/hooks/useIncentiveAuditData.ts` | Fix 75/25 inconsistency to 70/25/5 |
+| `src/components/dashboard/MetricsTable.tsx` | Clarify uniform split detection uses actual values |
 
 ---
 
-## Updated Interfaces
+## Summary of Behavioral Changes
 
-### CompPlan Interface
-```typescript
-export interface CompPlan {
-  id: string;
-  name: string;
-  description: string | null;
-  is_active: boolean;
-  effective_year: number;
-  payout_frequency: string | null;
-  clawback_period_days: number | null;
-  is_clawback_exempt: boolean;  // NEW
-  created_at: string;
-  updated_at: string;
-}
-```
-
-### VP Attribution Update
-When fetching plan config for VP calculation, include the exemption flag and adjust payout display accordingly.
+| Before | After |
+|--------|-------|
+| UI says "100% on booking" for exempt | UI correctly explains full payout regardless of collection |
+| Inconsistent fallback 75/25 in audit | Consistent DB default 70/25/5 across all files |
+| No warning for clawback period on exempt | Warning shows clawback period will be ignored |
 
 ---
 
-## Expected Behavior After Implementation
+## What Does NOT Change
 
-| Plan Type | Collection Status | Payout | Clawback Risk |
-|-----------|------------------|--------|---------------|
-| Standard (not exempt) | Pending | Booking portion only | = Booking portion |
-| Standard (not exempt) | Collected | 100% | $0 |
-| Standard (not exempt) | Clawback triggered | $0 | N/A |
-| **Clawback Exempt** | Pending | 100% | $0 |
-| **Clawback Exempt** | Collected | 100% | $0 |
-| **Clawback Exempt** | N/A (no tracking) | 100% | $0 |
+- **Actual payout calculations** - These already use plan-defined splits correctly when available
+- **Database schema** - Splits are already stored per metric/commission
+- **VP attribution logic** - Already reads from plan_metrics configuration
+- **Clawback risk calculation** - Already correctly shows $0 for exempt plans
 
----
-
-## UI Behavior Notes
-
-1. **PayoutSettingsCard with Exempt ON:**
-   - "Clawback Period" input is disabled with a note: "Not applicable for exempt plans"
-   - Visual indication that this plan is exempt
-
-2. **My Deals Report for Exempt Plans:**
-   - "VP Clawback Risk" column shows "-" or "$0"
-   - "Paid on Booking" shows full eligible amount
-   - "Held for Collection" and "Held for Year-End" show $0
-
-3. **Collections Table:**
-   - Deals under exempt plans don't show clawback warnings even if overdue
-
----
-
-## Migration Safety
-
-- Default value is `FALSE`, so existing plans continue with current behavior
-- No data loss or breaking changes for existing configurations
-
+The core calculation logic is correct. The issues are:
+1. Misleading UI messaging
+2. Inconsistent/confusing fallback values in code comments
+3. Missing validation warning for conflicting settings
