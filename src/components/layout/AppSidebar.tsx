@@ -4,13 +4,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AzentioLogo } from "@/components/AzentioLogo";
-import { useUserRole, AppRole } from "@/hooks/useUserRole";
+import { usePermissions } from "@/hooks/usePermissions";
+import type { PermissionKey } from "@/lib/permissions";
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  allowedRoles: AppRole[];
+  permissionKey: PermissionKey;
 }
 
 const navigation: NavItem[] = [
@@ -18,38 +19,38 @@ const navigation: NavItem[] = [
     name: "Dashboard", 
     href: "/dashboard", 
     icon: LayoutDashboard,
-    allowedRoles: ["admin", "gtm_ops", "finance", "executive", "sales_head", "sales_rep"]
+    permissionKey: "page:dashboard"
   },
   { 
     name: "Team View", 
     href: "/team", 
     icon: Users,
-    allowedRoles: ["admin", "gtm_ops", "finance", "executive", "sales_head"]
+    permissionKey: "page:team_view"
   },
   { 
     name: "Plan Config", 
     href: "/admin", 
     icon: Settings,
-    allowedRoles: ["admin", "gtm_ops", "finance", "executive"]
+    permissionKey: "page:plan_config"
   },
   { 
     name: "Reports", 
     href: "/reports", 
     icon: BarChart3,
-    allowedRoles: ["admin", "gtm_ops", "finance", "executive"]
+    permissionKey: "page:reports"
   },
   { 
     name: "Data Inputs", 
     href: "/data-inputs", 
     icon: FileSpreadsheet,
-    allowedRoles: ["admin", "gtm_ops"]
+    permissionKey: "page:data_inputs"
   },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { roles, isLoading } = useUserRole();
+  const { canAccessPage, isLoading } = usePermissions();
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -60,9 +61,9 @@ export function AppSidebar() {
     }
   };
 
-  // Filter navigation items based on user roles
+  // Filter navigation items based on dynamic permissions from database
   const filteredNavigation = navigation.filter(item => 
-    item.allowedRoles.some(allowedRole => roles.includes(allowedRole))
+    canAccessPage(item.permissionKey)
   );
 
   return (
