@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Loader2, Clock, RotateCcw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Clock, RotateCcw, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,23 +29,27 @@ interface PayoutSettingsCardProps {
   planId: string;
   payoutFrequency?: string;
   clawbackPeriodDays?: number;
+  isClawbackExempt?: boolean;
 }
 
 export function PayoutSettingsCard({
   planId,
   payoutFrequency = "monthly",
   clawbackPeriodDays = 180,
+  isClawbackExempt = false,
 }: PayoutSettingsCardProps) {
   const queryClient = useQueryClient();
   const [frequency, setFrequency] = useState(payoutFrequency);
   const [clawbackDays, setClawbackDays] = useState(clawbackPeriodDays);
+  const [clawbackExempt, setClawbackExempt] = useState(isClawbackExempt);
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     setFrequency(payoutFrequency);
     setClawbackDays(clawbackPeriodDays);
+    setClawbackExempt(isClawbackExempt);
     setIsDirty(false);
-  }, [payoutFrequency, clawbackPeriodDays]);
+  }, [payoutFrequency, clawbackPeriodDays, isClawbackExempt]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -53,6 +58,7 @@ export function PayoutSettingsCard({
         .update({
           payout_frequency: frequency,
           clawback_period_days: clawbackDays,
+          is_clawback_exempt: clawbackExempt,
         })
         .eq("id", planId);
 
@@ -86,6 +92,11 @@ export function PayoutSettingsCard({
     setIsDirty(true);
   };
 
+  const handleClawbackExemptChange = (checked: boolean) => {
+    setClawbackExempt(checked);
+    setIsDirty(true);
+  };
+
   const handleSave = () => {
     updateMutation.mutate();
   };
@@ -93,6 +104,7 @@ export function PayoutSettingsCard({
   const handleReset = () => {
     setFrequency(payoutFrequency);
     setClawbackDays(clawbackPeriodDays);
+    setClawbackExempt(isClawbackExempt);
     setIsDirty(false);
   };
 
@@ -131,9 +143,11 @@ export function PayoutSettingsCard({
 
           {/* Clawback Period */}
           <div className="space-y-2">
-            <Label htmlFor="clawback-period">Clawback Period (Days)</Label>
+            <Label htmlFor="clawback-period" className={clawbackExempt ? "text-muted-foreground" : ""}>
+              Clawback Period (Days)
+            </Label>
             <div className="relative">
-              <RotateCcw className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <RotateCcw className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${clawbackExempt ? "text-muted-foreground/50" : "text-muted-foreground"}`} />
               <Input
                 id="clawback-period"
                 type="number"
@@ -142,13 +156,45 @@ export function PayoutSettingsCard({
                 value={clawbackDays}
                 onChange={(e) => handleClawbackChange(e.target.value)}
                 className="pl-10"
+                disabled={clawbackExempt}
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              First invoice must be collected within this period from booking month end.
-              Default: 180 days. If not collected, payout is clawed back.
+              {clawbackExempt 
+                ? "Not applicable for clawback exempt plans"
+                : "First invoice must be collected within this period from booking month end. Default: 180 days. If not collected, payout is clawed back."
+              }
             </p>
           </div>
+        </div>
+
+        {/* Clawback Exempt Toggle */}
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className={`h-5 w-5 ${clawbackExempt ? "text-success" : "text-muted-foreground"}`} />
+              <div>
+                <Label htmlFor="clawback-exempt" className="text-base font-medium cursor-pointer">
+                  Clawback Exempt
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  When enabled, employees on this plan receive full payout on booking regardless of collection status.
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="clawback-exempt"
+              checked={clawbackExempt}
+              onCheckedChange={handleClawbackExemptChange}
+            />
+          </div>
+          {clawbackExempt && (
+            <div className="mt-2 p-3 bg-success/10 rounded-md">
+              <p className="text-sm text-success">
+                ✓ No clawback rules will apply to this plan. All payouts are 100% on booking.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Save Button */}

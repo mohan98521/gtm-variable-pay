@@ -7,6 +7,9 @@ export interface CompPlan {
   description: string | null;
   is_active: boolean;
   effective_year: number;
+  payout_frequency: string | null;
+  clawback_period_days: number | null;
+  is_clawback_exempt: boolean;
   created_at: string;
   updated_at: string;
 }
