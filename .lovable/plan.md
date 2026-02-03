@@ -1,221 +1,212 @@
 
-# Fix: Multi-Employee Variable Pay Attribution for Admin Users
 
-## Problem Statement
+# Clawback Exemption for Compensation Plans
 
-When admin/gtm_ops/finance/executive users view the My Deals report, the Variable Pay columns show empty/null values because the current implementation only calculates VP for the logged-in user's employee_id.
+## Understanding the Requirement
 
-**Current behavior:**
-- Sales Rep/Sales Head: VP is calculated correctly (using their employee_id)
-- Admin/GTM Ops/Finance/Executive: VP columns are empty (no calculation happens)
+Certain employee roles (e.g., Pre-Sales, Solution Architects, some Channel partners) get paid their full incentive regardless of whether collections happen. They should not be subject to clawback rules that normally apply when deals fail to collect within the clawback period.
 
-**Expected behavior:**
-- Admin users should see VP attribution for ALL deals, calculated separately for each employee's deals
+**Current Behavior:**
+- All plans follow the same clawback rules
+- Payout is split: X% on booking, Y% on collection, Z% at year-end
+- If collection doesn't happen within the clawback period, the booking portion is clawed back
 
----
-
-## Solution Overview
-
-For admin users viewing all deals, the system needs to:
-
-1. Identify all unique employees who participate in the displayed deals
-2. For each employee, fetch their VP configuration (plan, target, TVP)
-3. Calculate VP attributions for each employee's deals separately
-4. Merge all attributions back into the main deal list
+**Expected Behavior:**
+- Plans with clawback exemption get 100% payout on booking (or per their configured split)
+- Collection status doesn't affect their payout eligibility
+- No clawback risk for these plans
 
 ---
 
-## Calculation Logic for Multi-Employee View
+## Design Decision: Where to Add the Flag?
+
+| Option | Location | Pros | Cons |
+|--------|----------|------|------|
+| **A** | `comp_plans` table (Plan-level) | Simple, one flag affects entire plan | Cannot have mixed behavior within a plan |
+| **B** | `plan_metrics` table (Metric-level) | Granular control per metric | More complex to manage |
+| **C** | `plan_commissions` table (Commission-level) | Granular control per deal type | Separate from VP metrics |
+
+**Recommended: Option A (Plan-level)** - This aligns with how compensation structures work in practice. An entire role category (e.g., Pre-Sales) is either subject to clawback or exempt. This matches your statement "certain Roles" are exempt.
+
+---
+
+## Database Changes
+
+### Add Column to `comp_plans` Table
+
+```sql
+ALTER TABLE comp_plans
+ADD COLUMN is_clawback_exempt BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN comp_plans.is_clawback_exempt IS 
+  'When true, employees on this plan receive full payout regardless of collection status. No clawback rules apply.';
+```
+
+**Default:** `FALSE` (existing plans continue to use standard clawback rules)
+
+---
+
+## UI Changes
+
+### 1. Update PayoutSettingsCard Component
+
+**File:** `src/components/admin/PayoutSettingsCard.tsx`
+
+Add a toggle switch for clawback exemption:
 
 ```text
-For Admin Users:
-
-1. Fetch ALL deals for the fiscal year
-2. Extract unique employee IDs from all 8 participant role columns
-3. For EACH unique employee:
-   a. Fetch their VP config (sales_function -> plan -> metric -> target -> TVP)
-   b. Filter deals where they are a participant
-   c. Calculate pro-rata VP attribution for their deals
-   d. Store attributions keyed by (deal_id, employee_id)
-4. When building the deal list, attach VP data based on sales_rep_employee_id
-   (since that's the primary role for variable pay)
+┌─────────────────────────────────────────────────────────────┐
+│ Payout Settings                                              │
+├─────────────────────────────────────────────────────────────┤
+│ Payout Frequency: [Monthly ▼]                                │
+│                                                             │
+│ Clawback Period: [180] days                                 │
+│                                                             │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Clawback Exempt                              [Toggle]   │ │
+│ │ When enabled, employees on this plan receive full       │ │
+│ │ payout on booking regardless of collection status.      │ │
+│ │ No clawback rules will apply.                          │ │
+│ └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+When clawback exempt is enabled:
+- The "Clawback Period (Days)" field becomes disabled/greyed out (not applicable)
+- A visual indicator shows this plan is exempt
+
+### 2. Update Plan Overview Display
+
+**File:** `src/pages/PlanBuilder.tsx`
+
+Show exemption status in the plan header with a badge:
+- If exempt: `[Clawback Exempt]` badge in green
+- If not exempt: No additional indicator (standard behavior)
 
 ---
 
-## Which Employee Gets VP Attribution on a Deal?
+## Payout Calculation Logic Changes
 
-A deal can have up to 8 participant roles. For the purpose of VP display in the report:
+### Files to Update:
+- `src/hooks/useMyDealsWithIncentives.ts`
+- `src/lib/dealVariablePayAttribution.ts`
 
-| Scenario | VP Attribution Displayed |
-|----------|-------------------------|
-| Sales Rep views their own deals | Their own VP attribution |
-| Admin views all deals | VP attribution for the **Sales Rep** on each deal |
+### Logic Change:
 
-This is because the primary role for New Software Booking ARR variable pay is typically the Sales Rep. The report shows one VP value per deal row.
-
----
-
-## File Changes
-
-### 1. Update `useMyDealsWithIncentives.ts`
-
-**Current code (lines 423-462):**
-```typescript
-// Calculate Variable Pay Attribution if user has employee_id
-let vpAttributionMap = new Map<string, DealVariablePayAttribution>();
-
-if (employeeId) {
-  // Fetch VP config for the employee
-  const vpConfig = await fetchEmployeeVPConfig(employeeId, selectedYear);
-  // ... calculate attributions
-}
-```
-
-**New code:**
-```typescript
-// Calculate Variable Pay Attribution
-let vpAttributionMap = new Map<string, DealVariablePayAttribution>();
-
-if (canViewAll) {
-  // For admin users: calculate VP for ALL employees with deals
-  vpAttributionMap = await calculateVPForAllEmployees(
-    filteredDeals,
-    selectedYear,
-    fiscalYearStart,
-    fiscalYearEnd
-  );
-} else if (employeeId) {
-  // For sales users: calculate VP for their own deals only
-  // ... existing logic
-}
-```
-
-### 2. New Helper Function: `calculateVPForAllEmployees`
+When calculating payouts for a deal:
 
 ```typescript
-async function calculateVPForAllEmployees(
-  deals: Deal[],
-  fiscalYear: number,
-  fiscalYearStart: string,
-  fiscalYearEnd: string
-): Promise<Map<string, DealVariablePayAttribution>> {
-  const vpMap = new Map<string, DealVariablePayAttribution>();
+// Pseudo-code for payout calculation
+if (planIsClawbackExempt) {
+  // Full payout on booking, no holdback
+  actualPaid = eligibleIncentive;  // 100% immediately
+  clawbackRisk = 0;
   
-  // Step 1: Extract unique employee IDs from sales_rep_employee_id column
-  const uniqueEmployeeIds = new Set<string>();
-  deals.forEach(deal => {
-    if (deal.sales_rep_employee_id) {
-      uniqueEmployeeIds.add(deal.sales_rep_employee_id);
-    }
-  });
+  // Override payout split display
+  payoutOnBooking = eligibleIncentive;
+  payoutOnCollection = 0;
+  payoutOnYearEnd = 0;
+} else {
+  // Standard behavior with collection-based holdback
+  payoutOnBooking = eligibleIncentive * (bookingPct / 100);
+  payoutOnCollection = eligibleIncentive * (collectionPct / 100);
+  payoutOnYearEnd = eligibleIncentive * (yearEndPct / 100);
   
-  // Step 2: Fetch all YTD deals for VP calculation
-  const { data: ytdDeals } = await supabase
-    .from("deals")
-    .select("id, new_software_booking_arr_usd, month_year, ...")
-    .gte("month_year", fiscalYearStart)
-    .lte("month_year", fiscalYearEnd);
-  
-  // Step 3: For each unique employee, calculate their VP attribution
-  for (const empId of uniqueEmployeeIds) {
-    const vpConfig = await fetchEmployeeVPConfig(empId, fiscalYear);
-    if (!vpConfig || vpConfig.targetUsd <= 0) continue;
-    
-    // Filter to this employee's deals
-    const employeeDeals = ytdDeals.filter(d => 
-      d.sales_rep_employee_id === empId
-    );
-    
-    // Calculate VP attributions
-    const vpResult = calculateDealVariablePayAttributions(
-      employeeDeals,
-      empId,
-      vpConfig.metric,
-      vpConfig.targetUsd,
-      vpConfig.bonusAllocationUsd,
-      fiscalYear,
-      calculationMonth
-    );
-    
-    // Add to map (keyed by deal_id)
-    vpResult.attributions.forEach(attr => {
-      vpMap.set(attr.dealId, attr);
-    });
+  if (isCollected) {
+    actualPaid = eligibleIncentive;
+  } else {
+    actualPaid = payoutOnBooking;
+    clawbackRisk = payoutOnBooking;
   }
-  
-  return vpMap;
 }
 ```
 
 ---
 
-## Edge Cases Handled
+## Data Flow Summary
 
-| Scenario | Handling |
-|----------|----------|
-| Employee has no sales_function | Skip VP calculation (no plan mapping) |
-| Employee has no performance_target | Skip VP calculation (target = 0) |
-| Employee has no TVP | VP = 0 (no bonus allocation) |
-| Deal has no sales_rep_employee_id | VP columns show null/empty |
-| Multiple employees on same deal | VP shown for Sales Rep role only |
-
----
-
-## Performance Considerations
-
-**Concern:** Fetching VP config for each employee in a loop could be slow.
-
-**Optimizations:**
-1. Batch fetch all employees' data in a single query
-2. Batch fetch all plans and metrics
-3. Create lookup maps for efficient access
-
-```typescript
-// Batch fetch instead of N individual queries
-const employeeIds = Array.from(uniqueEmployeeIds);
-const { data: employees } = await supabase
-  .from("employees")
-  .select("employee_id, tvp_usd, sales_function")
-  .in("employee_id", employeeIds);
-
-const { data: perfTargets } = await supabase
-  .from("performance_targets")
-  .select("employee_id, target_value_usd")
-  .in("employee_id", employeeIds)
-  .eq("effective_year", fiscalYear)
-  .eq("metric_type", "New Software Booking ARR");
+```text
+1. Admin creates/edits plan → Sets "Clawback Exempt" toggle
+2. Plan saved with is_clawback_exempt = true/false
+3. When calculating payouts:
+   a. Fetch employee's plan configuration
+   b. Check is_clawback_exempt flag
+   c. If exempt: Full payout immediately, no clawback tracking
+   d. If not exempt: Apply standard booking/collection/year-end split
+4. My Deals Report:
+   a. Exempt plans: "VP Clawback Risk" column shows $0 or "-"
+   b. Non-exempt plans: Shows actual clawback exposure
 ```
 
 ---
 
-## Implementation Steps
+## Files to Modify
 
-| Step | Description |
-|------|-------------|
-| 1 | Create optimized batch fetch helper function `fetchAllEmployeeVPConfigs` |
-| 2 | Create `calculateVPForAllEmployees` function |
-| 3 | Modify main hook to use new logic when `canViewAll` is true |
-| 4 | Ensure VP summary in report aggregates correctly across all employees |
-
----
-
-## Modified File Summary
-
-| File | Action | Description |
-|------|--------|-------------|
-| `src/hooks/useMyDealsWithIncentives.ts` | MODIFY | Add multi-employee VP calculation for admin users |
+| File | Change |
+|------|--------|
+| `supabase/migrations/` | Add `is_clawback_exempt` column to `comp_plans` |
+| `src/components/admin/PayoutSettingsCard.tsx` | Add clawback exempt toggle, disable period when exempt |
+| `src/pages/PlanBuilder.tsx` | Display exemption badge, pass prop to PayoutSettingsCard |
+| `src/hooks/useCompPlans.ts` | Include new field in CompPlan interface |
+| `src/hooks/useMyDealsWithIncentives.ts` | Check exemption flag when calculating payouts |
+| `src/lib/dealVariablePayAttribution.ts` | Respect exemption flag in VP calculations |
 
 ---
 
-## Expected Result
+## Updated Interfaces
 
-After implementation:
+### CompPlan Interface
+```typescript
+export interface CompPlan {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  effective_year: number;
+  payout_frequency: string | null;
+  clawback_period_days: number | null;
+  is_clawback_exempt: boolean;  // NEW
+  created_at: string;
+  updated_at: string;
+}
+```
 
-| User Type | VP Columns Display |
-|-----------|-------------------|
-| Sales Rep | Their own VP values per deal |
-| Sales Head | Their own VP values per deal |
-| Admin/GTM Ops/Finance/Executive | VP values for the Sales Rep on each deal |
+### VP Attribution Update
+When fetching plan config for VP calculation, include the exemption flag and adjust payout display accordingly.
 
-The Variable Pay Summary section will aggregate VP across all displayed deals, showing the total clawback exposure across the organization.
+---
+
+## Expected Behavior After Implementation
+
+| Plan Type | Collection Status | Payout | Clawback Risk |
+|-----------|------------------|--------|---------------|
+| Standard (not exempt) | Pending | Booking portion only | = Booking portion |
+| Standard (not exempt) | Collected | 100% | $0 |
+| Standard (not exempt) | Clawback triggered | $0 | N/A |
+| **Clawback Exempt** | Pending | 100% | $0 |
+| **Clawback Exempt** | Collected | 100% | $0 |
+| **Clawback Exempt** | N/A (no tracking) | 100% | $0 |
+
+---
+
+## UI Behavior Notes
+
+1. **PayoutSettingsCard with Exempt ON:**
+   - "Clawback Period" input is disabled with a note: "Not applicable for exempt plans"
+   - Visual indication that this plan is exempt
+
+2. **My Deals Report for Exempt Plans:**
+   - "VP Clawback Risk" column shows "-" or "$0"
+   - "Paid on Booking" shows full eligible amount
+   - "Held for Collection" and "Held for Year-End" show $0
+
+3. **Collections Table:**
+   - Deals under exempt plans don't show clawback warnings even if overdue
+
+---
+
+## Migration Safety
+
+- Default value is `FALSE`, so existing plans continue with current behavior
+- No data loss or breaking changes for existing configurations
+
