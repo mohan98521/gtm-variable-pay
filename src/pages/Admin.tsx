@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Copy, Target } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Copy, Target, DollarSign } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -33,6 +33,7 @@ import { RoleManagement } from "@/components/admin/RoleManagement";
 import { BulkUpload } from "@/components/admin/BulkUpload";
 import { PermissionsManagement } from "@/components/admin/PermissionsManagement";
 import { PerformanceTargetsManagement } from "@/components/admin/PerformanceTargetsManagement";
+import { ExchangeRateManagement } from "@/components/admin/ExchangeRateManagement";
 import { CompPlanFormDialog } from "@/components/admin/CompPlanFormDialog";
 import { CompPlanDetailsDialog } from "@/components/admin/CompPlanDetailsDialog";
 import { CopyPlansDialog } from "@/components/admin/CopyPlansDialog";
@@ -221,6 +222,12 @@ export default function Admin() {
               <TabsTrigger value="roles" className="gap-2">
                 <Shield className="h-4 w-4" />
                 Role Management
+              </TabsTrigger>
+            )}
+            {(isAdmin() || canAccessTab("tab:bulk_upload")) && (
+              <TabsTrigger value="exchange-rates" className="gap-2">
+                <DollarSign className="h-4 w-4" />
+                Exchange Rates
               </TabsTrigger>
             )}
             {isAdmin() && (
@@ -440,6 +447,13 @@ export default function Admin() {
           {canAccessTab("tab:performance_targets") && (
             <TabsContent value="performance-targets">
               <PerformanceTargetsManagement />
+            </TabsContent>
+          )}
+
+          {/* Exchange Rates Tab */}
+          {(isAdmin() || canAccessTab("tab:bulk_upload")) && (
+            <TabsContent value="exchange-rates">
+              <ExchangeRateManagement />
             </TabsContent>
           )}
 
