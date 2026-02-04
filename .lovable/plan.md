@@ -1,211 +1,126 @@
 
+# Fix: Assign Employee Dialog from Plan Page
 
-# Fix Collection Logic, Payout Eligibility, and Three-Way Splits in Reports & Dashboard
+## Problem
 
-## Problem Summary
+When clicking "Assign Employee" from the Compensation Plan page, the dialog incorrectly shows:
+- **Current (Wrong):** "Compensation Plan" dropdown (to select a plan)
+- **Expected:** "Select Employee" list (to choose which employee to assign)
 
-Several components in the Reports and Dashboard sections are **NOT correctly displaying the three-way payout split** (Booking/Collection/Year-End). Instead, they use a legacy two-way split (75/25) which is incorrect.
+This is because both dialogs are rendered simultaneously, and the `PlanAssignmentDialog` opens before an employee is selected.
 
-## Issues to Fix
+## Root Cause
 
-### Issue 1: CommissionTable.tsx - Missing Year-End Column
-
-**Current State (WRONG):**
-```
-| Commission Type | Deal Value | Rate | Gross Payout | Paid (75%) | Holding (25%) |
-```
-
-**Correct State:**
-```
-| Commission Type | Deal Value | Rate | Gross Payout | Booking (X%) | Collection (Y%) | Year-End (Z%) |
-```
-
-**Problem:** The component only shows 2 payout columns with hardcoded "75%" and "25%" labels. It doesn't:
-- Accept `totalYearEndHoldback` prop
-- Show the year-end holdback column
-- Use plan-defined split percentages in the header
-
-### Issue 2: useIncentiveAuditData.ts - Commission Calculation Missing Year-End
-
-**Current State (lines 443-451):**
+In `AssignedEmployeesCard.tsx`:
 ```typescript
-const calcResult = calculateDealCommission(
-  dealValue,
-  commConfig.commission_rate_pct,
-  commConfig.min_threshold_usd,
-  payoutOnBookingPct,
-  payoutOnCollectionPct  // ← Missing payoutOnYearEndPct!
-);
+// Line 222: Dialog opens when showAssignDialog is true, regardless of employee selection
+<PlanAssignmentDialog
+  open={showAssignDialog}  // ← Bug: Should only open after employee is selected
+  ...
+/>
+
+// Line 236: Employee selection dialog also renders
+{showAssignDialog && !selectedEmployee && !editingAssignment && (
+  <SelectEmployeeForAssignment ... />
+)}
 ```
 
-**Problems:**
-1. Not fetching `payout_on_year_end_pct` from plan_commissions query (line 202)
-2. Not passing year-end pct to `calculateDealCommission`
-3. `CommissionDetail` interface missing `yearEndHoldback` field
-4. Not tracking `totalCommissionYearEndHoldback`
+Both dialogs are shown when `showAssignDialog` is true and no employee is selected. The `PlanAssignmentDialog` should wait until an employee is chosen.
 
-### Issue 3: Reports.tsx - Export Missing Year-End Column
+## Solution
 
-**Current export (lines 430-445):**
+### 1. Fix AssignedEmployeesCard.tsx - Dialog Open Condition
+
+Change the `PlanAssignmentDialog` to only open when an employee is selected:
+
 ```typescript
-exportData.push({
-  // ...
-  payout: comm.immediatePayout.toFixed(2),
-  holdback: comm.holdback.toFixed(2),
-  // ← Missing yearEndHoldback!
-});
+// Line 222: Only open after employee is selected
+<PlanAssignmentDialog
+  open={showAssignDialog && (selectedEmployee !== null || editingAssignment !== null)}
+  ...
+/>
 ```
 
-### Issue 4: useMyDealsWithIncentives.ts - Commission Actual Paid Missing Exempt Logic
+### 2. Fix PlanAssignmentDialog.tsx - Show Plan Name When Preselected
 
-**Current logic (lines 647-654):**
-```typescript
-let actualPaid = incentiveCalc.totalBooking;
-if (isCollected) {
-  actualPaid += incentiveCalc.totalCollection;
-}
-if (isClawback) {
-  actualPaid = 0;
-}
-```
-
-**Missing:** Clawback exempt plans should receive full payout immediately, but this logic doesn't check for exemption status on commissions.
-
----
-
-## Technical Implementation
-
-### 1. Update CommissionTable.tsx
+When `preselectedPlanId` is provided (from plan page), the dialog should:
+- Show the plan name as static text instead of a dropdown
+- Update the dialog title/description to reflect the context
 
 **Changes:**
-- Add `totalYearEndHoldback` prop
-- Update column headers to show plan-defined percentages (similar to MetricsTable)
-- Add Year-End column
-
-```typescript
-interface CommissionTableProps {
-  commissions: CommissionCompensation[];
-  totalGrossPayout: number;
-  totalPaid: number;
-  totalHoldback: number;
-  totalYearEndHoldback: number;  // NEW
-}
-
-// Table header should show:
-<TableHead className="text-right font-semibold">Booking (X%)</TableHead>
-<TableHead className="text-right font-semibold">Collection (Y%)</TableHead>
-<TableHead className="text-right font-semibold">Year-End (Z%)</TableHead>  // NEW
-
-// Each row should show:
-<TableCell className="text-right text-success">
-  {formatCurrency(commission.amountPaid)}
-</TableCell>
-<TableCell className="text-right text-muted-foreground">
-  {formatCurrency(commission.holdback)}
-</TableCell>
-<TableCell className="text-right text-warning">  // NEW
-  {formatCurrency(commission.yearEndHoldback)}
-</TableCell>
-```
-
-### 2. Update useIncentiveAuditData.ts
-
-**Changes:**
-- Update `PlanCommissionRow` interface to include `payout_on_year_end_pct`
-- Update query to fetch `payout_on_year_end_pct`
-- Update `CommissionDetail` interface to include `yearEndHoldback`
-- Pass all 6 parameters to `calculateDealCommission`
-- Track `totalCommissionYearEndHoldback`
-
-```typescript
-// Update interface
-interface PlanCommissionRow {
-  // ... existing fields
-  payout_on_year_end_pct: number | null;  // NEW
-}
-
-export interface CommissionDetail {
-  // ... existing fields
-  yearEndHoldback: number;  // NEW
-}
-
-// Update query (line 202)
-.select("id, plan_id, commission_type, commission_rate_pct, min_threshold_usd, is_active, payout_on_booking_pct, payout_on_collection_pct, payout_on_year_end_pct")
-
-// Update calculation
-const payoutOnYearEndPct = commConfig.payout_on_year_end_pct ?? 5;
-
-const calcResult = calculateDealCommission(
-  dealValue,
-  commConfig.commission_rate_pct,
-  commConfig.min_threshold_usd,
-  payoutOnBookingPct,
-  payoutOnCollectionPct,
-  payoutOnYearEndPct  // NEW
-);
-```
-
-### 3. Update IncentiveAuditRow Interface
-
-Add `totalCommissionYearEndHoldback` to the interface and calculations.
-
-### 4. Update Reports.tsx Export
-
-Add year-end holdback column to the export.
-
-### 5. Update Dashboard.tsx
-
-Pass `totalCommissionYearEndHoldback` prop to CommissionTable.
-
-### 6. Update useMyDealsWithIncentives.ts - Commission Actual Paid
-
-Add exemption logic for commission actual paid calculation:
-
-```typescript
-// Get clawback exempt status for this deal's plan
-const isCommissionClawbackExempt = vpAttr?.isClawbackExempt ?? false;
-
-// Calculate actual paid based on exemption and collection status
-let actualPaid = 0;
-if (isCommissionClawbackExempt) {
-  // Exempt: Full payout immediately
-  actualPaid = incentiveCalc.totalEligible;
-} else if (linkedToImpl) {
-  // Linked to impl: 100% on collection
-  actualPaid = isCollected ? incentiveCalc.totalEligible : 0;
-} else {
-  // Standard: Booking paid immediately, rest on collection
-  actualPaid = incentiveCalc.totalBooking;
-  if (isCollected) {
-    actualPaid += incentiveCalc.totalCollection + incentiveCalc.totalYearEnd;
-  }
-}
-
-if (isClawback && !isCommissionClawbackExempt) {
-  actualPaid = 0;
-}
-```
-
----
+1. Add logic to determine if we're assigning from a plan page (when `preselectedPlanId` is set and no employee was initially passed)
+2. When plan is preselected, show plan name as a read-only field instead of dropdown
+3. Update dialog description to be appropriate for both flows
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/components/dashboard/CommissionTable.tsx` | Add year-end column, update header labels to use plan splits |
-| `src/pages/Dashboard.tsx` | Pass `totalCommissionYearEndHoldback` prop |
-| `src/hooks/useIncentiveAuditData.ts` | Add year-end split to commission calculation, update interfaces |
-| `src/pages/Reports.tsx` | Add year-end column to export |
-| `src/hooks/useMyDealsWithIncentives.ts` | Add exempt logic to commission actual_paid calculation |
+| File | Change |
+|------|--------|
+| `src/components/admin/AssignedEmployeesCard.tsx` | Fix `open` prop condition for `PlanAssignmentDialog` |
+| `src/components/admin/PlanAssignmentDialog.tsx` | When `preselectedPlanId` is set, show plan name as static info instead of dropdown |
 
----
+## Expected Behavior After Fix
 
-## Summary of Changes
+### Flow from Plan Page:
+1. Click "Assign Employee" → **SelectEmployeeForAssignment** dialog appears
+2. Select an employee → **PlanAssignmentDialog** opens with:
+   - Plan name shown as static text (already selected)
+   - Employee name in header
+   - Compensation fields pre-populated from employee data
 
-| Area | Before | After |
-|------|--------|-------|
-| CommissionTable columns | 2 (75%/25%) | 3 (Booking/Collection/Year-End with plan splits) |
-| Commission calculations | Missing year-end | Full three-way split |
-| Incentive Audit export | 2 columns | 3 columns |
-| Commission actual paid | No exempt logic | Respects clawback exemption |
+### Flow from Employee Page:
+1. Click "Assign to Plan" → **PlanAssignmentDialog** opens with:
+   - Plan dropdown (to select a plan)
+   - Employee name in header
+   - Compensation fields pre-populated from employee data
 
+## Implementation Details
+
+### AssignedEmployeesCard.tsx (Line 222)
+```typescript
+<PlanAssignmentDialog
+  open={showAssignDialog && (selectedEmployee !== null || editingAssignment !== null)}
+  onOpenChange={(open) => {
+    setShowAssignDialog(open);
+    if (!open) {
+      setSelectedEmployee(null);
+      setEditingAssignment(null);
+    }
+  }}
+  employee={selectedEmployee}
+  existingAssignment={editingAssignment}
+  preselectedPlanId={planId}
+/>
+```
+
+### PlanAssignmentDialog.tsx - Plan Selection Section
+```typescript
+{/* When plan is preselected (from plan page), show as static info */}
+{preselectedPlanId ? (
+  <div className="space-y-2">
+    <FormLabel>Compensation Plan</FormLabel>
+    <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/50">
+      <span className="font-medium">
+        {plans.find(p => p.id === preselectedPlanId)?.name || "Loading..."}
+      </span>
+      <Badge variant="outline" className="text-xs">Pre-selected</Badge>
+    </div>
+  </div>
+) : (
+  <FormField
+    control={form.control}
+    name="plan_id"
+    render={({ field }) => (
+      // ... existing plan dropdown
+    )}
+  />
+)}
+```
+
+## Visual Summary
+
+| Context | Dialog Title | First Field |
+|---------|-------------|-------------|
+| From Employee Page | "Assign Employee to Plan" | Plan dropdown |
+| From Plan Page (after employee select) | "Assign Employee to Plan" | Plan name (static) |
+| Edit mode | "Edit Plan Assignment" | Plan name (disabled) |
