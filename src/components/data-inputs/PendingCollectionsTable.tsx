@@ -23,6 +23,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle,
@@ -32,8 +38,10 @@ import {
   Download,
   Upload,
   ChevronDown,
+  Lock,
 } from "lucide-react";
 import { DealCollection, useUpdateCollectionStatus } from "@/hooks/useCollections";
+import { useMonthLockStatuses } from "@/hooks/useMonthLockStatus";
 import { CollectionFormDialog } from "./CollectionFormDialog";
 import { CollectionsBulkUpload } from "./CollectionsBulkUpload";
 import { generateXLSX, downloadXLSX } from "@/lib/xlsxExport";
@@ -48,6 +56,13 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
   const [editingCollection, setEditingCollection] = useState<DealCollection | null>(null);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const updateMutation = useUpdateCollectionStatus();
+
+  // Get all unique booking months and check their lock status
+  const bookingMonths = useMemo(
+    () => collections.map((c) => c.booking_month),
+    [collections]
+  );
+  const { lockStatusMap } = useMonthLockStatuses(bookingMonths);
 
   const formatCurrency = (value: number | null | undefined) => {
     if (value == null) return "-";
@@ -271,11 +286,17 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
               const status = getCollectionStatus(collection);
               const monthsPending = getMonthsPending(collection.booking_month);
               const isLinkedToImpl = collection.deal?.linked_to_impl;
+              const isMonthLocked = lockStatusMap.get(collection.booking_month) ?? false;
               
               return (
                 <TableRow key={collection.id}>
                   <TableCell className="font-medium">
-                    {formatMonth(collection.booking_month)}
+                    <div className="flex items-center gap-2">
+                      {formatMonth(collection.booking_month)}
+                      {isMonthLocked && (
+                        <Lock className="h-3 w-3 text-warning" />
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge variant={monthsPending > 2 ? "destructive" : monthsPending > 0 ? "secondary" : "outline"}>
@@ -320,39 +341,67 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Select
-                      value="no"
-                      onValueChange={(value) => handleQuickUpdate(collection.id, value === "yes")}
-                      disabled={updateMutation.isPending}
-                    >
-                      <SelectTrigger className="w-24 h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="yes">
-                          <span className="flex items-center gap-1">
-                            <Check className="h-3 w-3 text-success" />
-                            Yes
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Select
+                              value="no"
+                              onValueChange={(value) => handleQuickUpdate(collection.id, value === "yes")}
+                              disabled={updateMutation.isPending || isMonthLocked}
+                            >
+                              <SelectTrigger className={`w-24 h-8 ${isMonthLocked ? 'opacity-50' : ''}`}>
+                                {isMonthLocked && <Lock className="h-3 w-3 mr-1" />}
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="yes">
+                                  <span className="flex items-center gap-1">
+                                    <Check className="h-3 w-3 text-success" />
+                                    Yes
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="no">
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3 text-muted-foreground" />
+                                    No
+                                  </span>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
                           </span>
-                        </SelectItem>
-                        <SelectItem value="no">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-muted-foreground" />
-                            No
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                        </TooltipTrigger>
+                        {isMonthLocked && (
+                          <TooltipContent>
+                            Booking month is locked for payouts
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setEditingCollection(collection)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => setEditingCollection(collection)}
+                              disabled={isMonthLocked}
+                            >
+                              {isMonthLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Edit className="h-4 w-4" />}
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        {isMonthLocked && (
+                          <TooltipContent>
+                            Booking month is locked for payouts
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                 </TableRow>
               );

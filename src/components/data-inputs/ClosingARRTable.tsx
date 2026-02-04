@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle, Download, X } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle, Download, X, Lock } from "lucide-react";
 import { ClosingARRActual, useDeleteClosingARR } from "@/hooks/useClosingARR";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvExport";
@@ -44,6 +44,7 @@ interface ClosingARRTableProps {
   onEdit: (record: ClosingARRActual) => void;
   isLoading?: boolean;
   fiscalYear: number;
+  isLocked?: boolean;
 }
 
 export function ClosingARRTable({
@@ -51,6 +52,7 @@ export function ClosingARRTable({
   onEdit,
   isLoading,
   fiscalYear,
+  isLocked = false,
 }: ClosingARRTableProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<ClosingARRActual | null>(null);
@@ -370,12 +372,12 @@ export function ClosingARRTable({
                   <TableCell className="sticky right-0 bg-background z-10">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isLocked}>
+                          {isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <MoreHorizontal className="h-4 w-4" />}
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onEdit(record)}>
+                        <DropdownMenuItem onClick={() => onEdit(record)} disabled={isLocked}>
                           <Pencil className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
@@ -385,6 +387,7 @@ export function ClosingARRTable({
                             setRecordToDelete(record);
                             setDeleteDialogOpen(true);
                           }}
+                          disabled={isLocked}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete

@@ -4,8 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { Plus, Calendar, FileSpreadsheet, CheckCircle, Clock, Upload, BarChart3, Wallet } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Plus, Calendar, FileSpreadsheet, CheckCircle, Clock, Upload, BarChart3, Wallet, Lock } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,6 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DealsTable } from "@/components/data-inputs/DealsTable";
 import { DealFormDialog } from "@/components/data-inputs/DealFormDialog";
 import { DealsBulkUpload } from "@/components/data-inputs/DealsBulkUpload";
@@ -25,6 +31,7 @@ import { CollectedDealsTable } from "@/components/data-inputs/CollectedDealsTabl
 import { useDeals, DealWithParticipants, PROPOSAL_TYPES } from "@/hooks/useDeals";
 import { useClosingARRData, ClosingARRActual } from "@/hooks/useClosingARR";
 import { usePendingCollections, useCollectedDeals } from "@/hooks/useCollections";
+import { useMonthLockStatus } from "@/hooks/useMonthLockStatus";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { format } from "date-fns";
 
@@ -63,6 +70,9 @@ export default function DataInputs() {
   // Fetch Collections data
   const { data: pendingCollections = [], isLoading: isLoadingPending } = usePendingCollections();
   const { data: collectedDeals = [], isLoading: isLoadingCollected } = useCollectedDeals();
+
+  // Check if selected month is locked
+  const { isLocked: isMonthLocked, payoutRun } = useMonthLockStatus(selectedMonth);
 
   const handleAddDeal = () => {
     setEditingDeal(null);
@@ -122,9 +132,10 @@ export default function DataInputs() {
           </div>
           <div className="flex items-center gap-2">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-48">
                 <Calendar className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Select month" />
+                {isMonthLocked && <Lock className="h-4 w-4 ml-2 text-warning" />}
               </SelectTrigger>
               <SelectContent>
                 {monthOptions.map((option) => (
@@ -136,6 +147,18 @@ export default function DataInputs() {
             </Select>
           </div>
         </div>
+
+        {/* Month Locked Alert */}
+        {isMonthLocked && (
+          <Alert variant="default" className="border-warning bg-warning/10">
+            <Lock className="h-4 w-4 text-warning" />
+            <AlertTitle className="text-warning">Month Locked</AlertTitle>
+            <AlertDescription>
+              {format(new Date(selectedMonth), "MMMM yyyy")} payouts have been finalized. 
+              Direct edits are disabled. To make corrections, use the Payout Adjustments workflow in Admin.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Section Tabs */}
         <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as "deals" | "closing-arr" | "collections")}>
@@ -162,16 +185,42 @@ export default function DataInputs() {
           {/* Deals Section */}
           <TabsContent value="deals" className="space-y-6 mt-6">
             {/* Deals Actions */}
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
-                <Upload className="h-4 w-4 mr-1.5" />
-                Bulk Upload
-              </Button>
-              <Button onClick={handleAddDeal}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                Add Deal
-              </Button>
-            </div>
+            <TooltipProvider>
+              <div className="flex items-center justify-end gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setBulkUploadOpen(true)}
+                        disabled={isMonthLocked}
+                      >
+                        {isMonthLocked && <Lock className="h-4 w-4 mr-1.5" />}
+                        <Upload className="h-4 w-4 mr-1.5" />
+                        Bulk Upload
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {isMonthLocked && (
+                    <TooltipContent>Month is locked for payouts</TooltipContent>
+                  )}
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button onClick={handleAddDeal} disabled={isMonthLocked}>
+                        {isMonthLocked && <Lock className="h-4 w-4 mr-1.5" />}
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Add Deal
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {isMonthLocked && (
+                    <TooltipContent>Month is locked for payouts</TooltipContent>
+                  )}
+                </Tooltip>
+              </div>
+            </TooltipProvider>
 
             {/* Quick Stats */}
             <div className="grid gap-4 sm:grid-cols-4">
@@ -270,6 +319,7 @@ export default function DataInputs() {
                       deals={deals}
                       onEdit={handleEditDeal}
                       isLoading={isLoadingDeals}
+                      isLocked={isMonthLocked}
                     />
                   </TabsContent>
 
@@ -279,6 +329,7 @@ export default function DataInputs() {
                         deals={getDealsForType(type.value)}
                         onEdit={handleEditDeal}
                         isLoading={isLoadingDeals}
+                        isLocked={isMonthLocked}
                       />
                     </TabsContent>
                   ))}
@@ -290,16 +341,42 @@ export default function DataInputs() {
           {/* Closing ARR Section */}
           <TabsContent value="closing-arr" className="space-y-6 mt-6">
             {/* Closing ARR Actions */}
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setArrBulkUploadOpen(true)}>
-                <Upload className="h-4 w-4 mr-1.5" />
-                Bulk Upload
-              </Button>
-              <Button onClick={handleAddARR}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                Add Record
-              </Button>
-            </div>
+            <TooltipProvider>
+              <div className="flex items-center justify-end gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setArrBulkUploadOpen(true)}
+                        disabled={isMonthLocked}
+                      >
+                        {isMonthLocked && <Lock className="h-4 w-4 mr-1.5" />}
+                        <Upload className="h-4 w-4 mr-1.5" />
+                        Bulk Upload
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {isMonthLocked && (
+                    <TooltipContent>Month is locked for payouts</TooltipContent>
+                  )}
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button onClick={handleAddARR} disabled={isMonthLocked}>
+                        {isMonthLocked && <Lock className="h-4 w-4 mr-1.5" />}
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Add Record
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {isMonthLocked && (
+                    <TooltipContent>Month is locked for payouts</TooltipContent>
+                  )}
+                </Tooltip>
+              </div>
+            </TooltipProvider>
 
             {/* Closing ARR Summary */}
             <ClosingARRSummary records={closingARRRecords} fiscalYear={selectedYear} />
@@ -318,6 +395,7 @@ export default function DataInputs() {
                   onEdit={handleEditARR}
                   isLoading={isLoadingARR}
                   fiscalYear={selectedYear}
+                  isLocked={isMonthLocked}
                 />
               </CardContent>
             </Card>

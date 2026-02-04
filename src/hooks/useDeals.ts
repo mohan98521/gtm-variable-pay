@@ -229,7 +229,11 @@ export function useCreateDeal() {
       toast.success("Deal created successfully");
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create deal: ${error.message}`);
+      if (error.message.includes("locked payout month")) {
+        toast.error("Cannot create deal: The month is locked for payouts. Use payout adjustments for corrections.");
+      } else {
+        toast.error(`Failed to create deal: ${error.message}`);
+      }
     },
   });
 }
@@ -281,7 +285,11 @@ export function useUpdateDeal() {
       toast.success("Deal updated successfully");
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update deal: ${error.message}`);
+      if (error.message.includes("locked payout month")) {
+        toast.error("Cannot update deal: The month is locked for payouts. Use payout adjustments for corrections.");
+      } else {
+        toast.error(`Failed to update deal: ${error.message}`);
+      }
     },
   });
 }
@@ -301,7 +309,11 @@ export function useDeleteDeal() {
       toast.success("Deal deleted successfully");
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete deal: ${error.message}`);
+      if (error.message.includes("locked payout month")) {
+        toast.error("Cannot delete deal: The month is locked for payouts. Use payout adjustments for corrections.");
+      } else {
+        toast.error(`Failed to delete deal: ${error.message}`);
+      }
     },
   });
 }

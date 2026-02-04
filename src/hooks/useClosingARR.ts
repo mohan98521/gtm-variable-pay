@@ -105,7 +105,9 @@ export function useCreateClosingARR() {
       toast.success("Closing ARR record created successfully");
     },
     onError: (error: Error) => {
-      if (error.message.includes("closing_arr_actuals_month_pid_unique")) {
+      if (error.message.includes("locked payout month")) {
+        toast.error("Cannot create record: The month is locked for payouts. Use payout adjustments for corrections.");
+      } else if (error.message.includes("closing_arr_actuals_month_pid_unique")) {
         toast.error("A record with this PID already exists for the selected month");
       } else {
         toast.error(`Failed to create record: ${error.message}`);
@@ -139,7 +141,11 @@ export function useUpdateClosingARR() {
       toast.success("Closing ARR record updated successfully");
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update record: ${error.message}`);
+      if (error.message.includes("locked payout month")) {
+        toast.error("Cannot update record: The month is locked for payouts. Use payout adjustments for corrections.");
+      } else {
+        toast.error(`Failed to update record: ${error.message}`);
+      }
     },
   });
 }
@@ -165,7 +171,11 @@ export function useDeleteClosingARR() {
       toast.success("Closing ARR record deleted successfully");
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete record: ${error.message}`);
+      if (error.message.includes("locked payout month")) {
+        toast.error("Cannot delete record: The month is locked for payouts. Use payout adjustments for corrections.");
+      } else {
+        toast.error(`Failed to delete record: ${error.message}`);
+      }
     },
   });
 }
@@ -197,7 +207,11 @@ export function useBulkUpsertClosingARR() {
       toast.success(`Successfully uploaded ${data?.length || 0} records`);
     },
     onError: (error: Error) => {
-      toast.error(`Bulk upload failed: ${error.message}`);
+      if (error.message.includes("locked payout month")) {
+        toast.error("Cannot upload: One or more months are locked for payouts. Use payout adjustments for corrections.");
+      } else {
+        toast.error(`Bulk upload failed: ${error.message}`);
+      }
     },
   });
 }
