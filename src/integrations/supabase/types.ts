@@ -1135,19 +1135,26 @@ export type Database = {
           action_type: string | null
           amount_local: number | null
           amount_usd: number | null
+          audit_category: string | null
           changed_at: string
           changed_by: string | null
+          compensation_rate: number | null
           deal_collection_id: string | null
           employee_id: string | null
           entity_type: string
           exchange_rate_used: number | null
           id: string
+          is_rate_mismatch: boolean | null
           local_currency: string | null
+          market_rate: number | null
+          metadata: Json | null
           month_year: string | null
           new_values: Json | null
           old_values: Json | null
           payout_id: string | null
           payout_run_id: string | null
+          rate_type: string | null
+          rate_variance_pct: number | null
           reason: string | null
         }
         Insert: {
@@ -1155,19 +1162,26 @@ export type Database = {
           action_type?: string | null
           amount_local?: number | null
           amount_usd?: number | null
+          audit_category?: string | null
           changed_at?: string
           changed_by?: string | null
+          compensation_rate?: number | null
           deal_collection_id?: string | null
           employee_id?: string | null
           entity_type?: string
           exchange_rate_used?: number | null
           id?: string
+          is_rate_mismatch?: boolean | null
           local_currency?: string | null
+          market_rate?: number | null
+          metadata?: Json | null
           month_year?: string | null
           new_values?: Json | null
           old_values?: Json | null
           payout_id?: string | null
           payout_run_id?: string | null
+          rate_type?: string | null
+          rate_variance_pct?: number | null
           reason?: string | null
         }
         Update: {
@@ -1175,19 +1189,26 @@ export type Database = {
           action_type?: string | null
           amount_local?: number | null
           amount_usd?: number | null
+          audit_category?: string | null
           changed_at?: string
           changed_by?: string | null
+          compensation_rate?: number | null
           deal_collection_id?: string | null
           employee_id?: string | null
           entity_type?: string
           exchange_rate_used?: number | null
           id?: string
+          is_rate_mismatch?: boolean | null
           local_currency?: string | null
+          market_rate?: number | null
+          metadata?: Json | null
           month_year?: string | null
           new_values?: Json | null
           old_values?: Json | null
           payout_id?: string | null
           payout_run_id?: string | null
+          rate_type?: string | null
+          rate_variance_pct?: number | null
           reason?: string | null
         }
         Relationships: [

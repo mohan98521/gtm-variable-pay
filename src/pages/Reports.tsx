@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database, Receipt } from "lucide-react";
+import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database, Receipt, BarChart3, Globe, Wallet, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -18,6 +18,10 @@ import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { MyDealsReport } from "@/components/reports/MyDealsReport";
 import { MyClosingARRReport } from "@/components/reports/MyClosingARRReport";
 import { PayoutStatement } from "@/components/reports/PayoutStatement";
+import { ManagementSummary } from "@/components/reports/ManagementSummary";
+import { CurrencyBreakdown } from "@/components/reports/CurrencyBreakdown";
+import { YearEndHoldbackTracker } from "@/components/reports/YearEndHoldbackTracker";
+import { AuditTrailExport } from "@/components/reports/AuditTrailExport";
 import { useUserRole } from "@/hooks/useUserRole";
 const SALES_FUNCTIONS = [
   "All",
@@ -486,6 +490,26 @@ export default function Reports() {
               <Receipt className="mr-2 h-4 w-4" />
               Payout Statement
             </TabsTrigger>
+            {canViewAllData() && (
+              <>
+                <TabsTrigger value="mgmt-summary" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Mgmt Summary
+                </TabsTrigger>
+                <TabsTrigger value="currency" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                  <Globe className="mr-2 h-4 w-4" />
+                  Currency
+                </TabsTrigger>
+                <TabsTrigger value="holdbacks" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Holdbacks
+                </TabsTrigger>
+                <TabsTrigger value="audit-trail" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Audit Trail
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           {/* Filters - Only show for Employee Master and Incentive Audit tabs */}
@@ -864,6 +888,26 @@ export default function Reports() {
           {/* Tab 6: Payout Statement */}
           <TabsContent value="payout-statement">
             <PayoutStatement />
+          </TabsContent>
+
+          {/* Tab 7: Management Summary (Admin only) */}
+          <TabsContent value="mgmt-summary">
+            <ManagementSummary />
+          </TabsContent>
+
+          {/* Tab 8: Currency Breakdown (Admin only) */}
+          <TabsContent value="currency">
+            <CurrencyBreakdown />
+          </TabsContent>
+
+          {/* Tab 9: Year-End Holdback Tracker (Admin only) */}
+          <TabsContent value="holdbacks">
+            <YearEndHoldbackTracker />
+          </TabsContent>
+
+          {/* Tab 10: Audit Trail Export (Admin only) */}
+          <TabsContent value="audit-trail">
+            <AuditTrailExport />
           </TabsContent>
         </Tabs>
       </div>

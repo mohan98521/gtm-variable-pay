@@ -99,3 +99,23 @@ export function downloadXLSX(blob: Blob, filename: string): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Simple export to XLSX from array of objects
+ */
+export function exportToXLSX<T extends Record<string, unknown>>(
+  data: T[],
+  filename: string
+): void {
+  if (data.length === 0) return;
+  
+  // Auto-generate columns from first row keys
+  const keys = Object.keys(data[0]);
+  const columns: ColumnDef<T>[] = keys.map(key => ({
+    key,
+    header: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+  }));
+  
+  const blob = generateXLSX(data, columns, "Data");
+  downloadXLSX(blob, `${filename}.xlsx`);
+}
