@@ -217,9 +217,9 @@ export function AssignedEmployeesCard({ planId, planName }: AssignedEmployeesCar
         </CardContent>
       </Card>
 
-      {/* Assign/Edit Dialog */}
+      {/* Assign/Edit Dialog - Only open after employee is selected or editing */}
       <PlanAssignmentDialog
-        open={showAssignDialog}
+        open={showAssignDialog && (selectedEmployee !== null || editingAssignment !== null)}
         onOpenChange={(open) => {
           setShowAssignDialog(open);
           if (!open) {
