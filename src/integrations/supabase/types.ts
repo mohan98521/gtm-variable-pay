@@ -390,6 +390,7 @@ export type Database = {
           clawback_amount_usd: number | null
           clawback_date: string | null
           clawback_eligible_usd: number
+          compensation_exchange_rate: number | null
           created_at: string | null
           deal_id: string
           deal_value_usd: number
@@ -397,17 +398,23 @@ export type Database = {
           fiscal_year: number
           id: string
           is_clawback_triggered: boolean | null
+          local_currency: string | null
           metric_name: string
           multiplier: number
+          payout_on_booking_local: number | null
           payout_on_booking_usd: number
+          payout_on_collection_local: number | null
           payout_on_collection_usd: number
+          payout_on_year_end_local: number | null
           payout_on_year_end_usd: number
+          payout_run_id: string | null
           plan_id: string | null
           proportion_pct: number
           target_usd: number
           total_actual_usd: number
           total_variable_pay_usd: number
           updated_at: string | null
+          variable_pay_split_local: number | null
           variable_pay_split_usd: number
         }
         Insert: {
@@ -416,6 +423,7 @@ export type Database = {
           clawback_amount_usd?: number | null
           clawback_date?: string | null
           clawback_eligible_usd: number
+          compensation_exchange_rate?: number | null
           created_at?: string | null
           deal_id: string
           deal_value_usd: number
@@ -423,17 +431,23 @@ export type Database = {
           fiscal_year: number
           id?: string
           is_clawback_triggered?: boolean | null
+          local_currency?: string | null
           metric_name: string
           multiplier: number
+          payout_on_booking_local?: number | null
           payout_on_booking_usd: number
+          payout_on_collection_local?: number | null
           payout_on_collection_usd: number
+          payout_on_year_end_local?: number | null
           payout_on_year_end_usd: number
+          payout_run_id?: string | null
           plan_id?: string | null
           proportion_pct: number
           target_usd: number
           total_actual_usd: number
           total_variable_pay_usd: number
           updated_at?: string | null
+          variable_pay_split_local?: number | null
           variable_pay_split_usd: number
         }
         Update: {
@@ -442,6 +456,7 @@ export type Database = {
           clawback_amount_usd?: number | null
           clawback_date?: string | null
           clawback_eligible_usd?: number
+          compensation_exchange_rate?: number | null
           created_at?: string | null
           deal_id?: string
           deal_value_usd?: number
@@ -449,17 +464,23 @@ export type Database = {
           fiscal_year?: number
           id?: string
           is_clawback_triggered?: boolean | null
+          local_currency?: string | null
           metric_name?: string
           multiplier?: number
+          payout_on_booking_local?: number | null
           payout_on_booking_usd?: number
+          payout_on_collection_local?: number | null
           payout_on_collection_usd?: number
+          payout_on_year_end_local?: number | null
           payout_on_year_end_usd?: number
+          payout_run_id?: string | null
           plan_id?: string | null
           proportion_pct?: number
           target_usd?: number
           total_actual_usd?: number
           total_variable_pay_usd?: number
           updated_at?: string | null
+          variable_pay_split_local?: number | null
           variable_pay_split_usd?: number
         }
         Relationships: [
@@ -468,6 +489,13 @@ export type Database = {
             columns: ["deal_id"]
             isOneToOne: false
             referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_variable_pay_attribution_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "payout_runs"
             referencedColumns: ["id"]
           },
           {
@@ -625,6 +653,7 @@ export type Database = {
           auth_user_id: string | null
           business_unit: string | null
           city: string | null
+          compensation_exchange_rate: number | null
           country: string | null
           created_at: string
           date_of_hire: string | null
@@ -657,6 +686,7 @@ export type Database = {
           auth_user_id?: string | null
           business_unit?: string | null
           city?: string | null
+          compensation_exchange_rate?: number | null
           country?: string | null
           created_at?: string
           date_of_hire?: string | null
@@ -689,6 +719,7 @@ export type Database = {
           auth_user_id?: string | null
           business_unit?: string | null
           city?: string | null
+          compensation_exchange_rate?: number | null
           country?: string | null
           created_at?: string
           date_of_hire?: string | null
@@ -850,73 +881,109 @@ export type Database = {
           approval_status: string | null
           approved_at: string | null
           approved_by: string | null
+          booking_amount_local: number | null
           booking_amount_usd: number | null
+          calculated_amount_local: number | null
           calculated_amount_usd: number
+          clawback_amount_local: number | null
           clawback_amount_usd: number | null
+          collection_amount_local: number | null
           collection_amount_usd: number | null
           commission_id: string | null
           created_at: string
           deal_id: string | null
           employee_id: string
+          exchange_rate_type: string | null
+          exchange_rate_used: number | null
+          holdback_amount_local: number | null
           holdback_amount_usd: number | null
           id: string
+          local_currency: string | null
           metric_id: string | null
           month_year: string
           notes: string | null
+          paid_amount_local: number | null
           paid_amount_usd: number | null
           paid_date: string | null
+          payout_run_id: string | null
           payout_type: string
           plan_id: string | null
           status: string
           updated_at: string
+          year_end_amount_local: number | null
+          year_end_amount_usd: number | null
         }
         Insert: {
           approval_status?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          booking_amount_local?: number | null
           booking_amount_usd?: number | null
+          calculated_amount_local?: number | null
           calculated_amount_usd?: number
+          clawback_amount_local?: number | null
           clawback_amount_usd?: number | null
+          collection_amount_local?: number | null
           collection_amount_usd?: number | null
           commission_id?: string | null
           created_at?: string
           deal_id?: string | null
           employee_id: string
+          exchange_rate_type?: string | null
+          exchange_rate_used?: number | null
+          holdback_amount_local?: number | null
           holdback_amount_usd?: number | null
           id?: string
+          local_currency?: string | null
           metric_id?: string | null
           month_year: string
           notes?: string | null
+          paid_amount_local?: number | null
           paid_amount_usd?: number | null
           paid_date?: string | null
+          payout_run_id?: string | null
           payout_type: string
           plan_id?: string | null
           status?: string
           updated_at?: string
+          year_end_amount_local?: number | null
+          year_end_amount_usd?: number | null
         }
         Update: {
           approval_status?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          booking_amount_local?: number | null
           booking_amount_usd?: number | null
+          calculated_amount_local?: number | null
           calculated_amount_usd?: number
+          clawback_amount_local?: number | null
           clawback_amount_usd?: number | null
+          collection_amount_local?: number | null
           collection_amount_usd?: number | null
           commission_id?: string | null
           created_at?: string
           deal_id?: string | null
           employee_id?: string
+          exchange_rate_type?: string | null
+          exchange_rate_used?: number | null
+          holdback_amount_local?: number | null
           holdback_amount_usd?: number | null
           id?: string
+          local_currency?: string | null
           metric_id?: string | null
           month_year?: string
           notes?: string | null
+          paid_amount_local?: number | null
           paid_amount_usd?: number | null
           paid_date?: string | null
+          payout_run_id?: string | null
           payout_type?: string
           plan_id?: string | null
           status?: string
           updated_at?: string
+          year_end_amount_local?: number | null
+          year_end_amount_usd?: number | null
         }
         Relationships: [
           {
@@ -938,6 +1005,13 @@ export type Database = {
             columns: ["metric_id"]
             isOneToOne: false
             referencedRelation: "plan_metrics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_payouts_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "payout_runs"
             referencedColumns: ["id"]
           },
           {
@@ -984,41 +1058,136 @@ export type Database = {
           },
         ]
       }
+      payout_adjustments: {
+        Row: {
+          adjustment_amount_local: number
+          adjustment_amount_usd: number
+          adjustment_type: string
+          applied_to_month: string | null
+          approved_by: string | null
+          created_at: string
+          employee_id: string
+          exchange_rate_used: number
+          id: string
+          local_currency: string
+          original_amount_local: number
+          original_amount_usd: number
+          payout_run_id: string
+          reason: string
+          requested_by: string | null
+          status: string
+          supporting_documents: Json | null
+          updated_at: string
+        }
+        Insert: {
+          adjustment_amount_local?: number
+          adjustment_amount_usd?: number
+          adjustment_type: string
+          applied_to_month?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_id: string
+          exchange_rate_used?: number
+          id?: string
+          local_currency?: string
+          original_amount_local?: number
+          original_amount_usd?: number
+          payout_run_id: string
+          reason: string
+          requested_by?: string | null
+          status?: string
+          supporting_documents?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          adjustment_amount_local?: number
+          adjustment_amount_usd?: number
+          adjustment_type?: string
+          applied_to_month?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_id?: string
+          exchange_rate_used?: number
+          id?: string
+          local_currency?: string
+          original_amount_local?: number
+          original_amount_usd?: number
+          payout_run_id?: string
+          reason?: string
+          requested_by?: string | null
+          status?: string
+          supporting_documents?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_adjustments_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "payout_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payout_audit_log: {
         Row: {
           action: string
+          action_type: string | null
+          amount_local: number | null
+          amount_usd: number | null
           changed_at: string
           changed_by: string | null
           deal_collection_id: string | null
+          employee_id: string | null
           entity_type: string
+          exchange_rate_used: number | null
           id: string
+          local_currency: string | null
+          month_year: string | null
           new_values: Json | null
           old_values: Json | null
           payout_id: string | null
+          payout_run_id: string | null
           reason: string | null
         }
         Insert: {
           action: string
+          action_type?: string | null
+          amount_local?: number | null
+          amount_usd?: number | null
           changed_at?: string
           changed_by?: string | null
           deal_collection_id?: string | null
+          employee_id?: string | null
           entity_type?: string
+          exchange_rate_used?: number | null
           id?: string
+          local_currency?: string | null
+          month_year?: string | null
           new_values?: Json | null
           old_values?: Json | null
           payout_id?: string | null
+          payout_run_id?: string | null
           reason?: string | null
         }
         Update: {
           action?: string
+          action_type?: string | null
+          amount_local?: number | null
+          amount_usd?: number | null
           changed_at?: string
           changed_by?: string | null
           deal_collection_id?: string | null
+          employee_id?: string | null
           entity_type?: string
+          exchange_rate_used?: number | null
           id?: string
+          local_currency?: string | null
+          month_year?: string | null
           new_values?: Json | null
           old_values?: Json | null
           payout_id?: string | null
+          payout_run_id?: string | null
           reason?: string | null
         }
         Relationships: [
@@ -1036,7 +1205,77 @@ export type Database = {
             referencedRelation: "monthly_payouts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "payout_audit_log_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "payout_runs"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      payout_runs: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          calculated_at: string | null
+          calculated_by: string | null
+          created_at: string
+          finalized_at: string | null
+          finalized_by: string | null
+          id: string
+          is_locked: boolean
+          month_year: string
+          notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          run_status: string
+          total_commissions_usd: number | null
+          total_payout_usd: number | null
+          total_variable_pay_usd: number | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          calculated_at?: string | null
+          calculated_by?: string | null
+          created_at?: string
+          finalized_at?: string | null
+          finalized_by?: string | null
+          id?: string
+          is_locked?: boolean
+          month_year: string
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_status?: string
+          total_commissions_usd?: number | null
+          total_payout_usd?: number | null
+          total_variable_pay_usd?: number | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          calculated_at?: string | null
+          calculated_by?: string | null
+          created_at?: string
+          finalized_at?: string | null
+          finalized_by?: string | null
+          id?: string
+          is_locked?: boolean
+          month_year?: string
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_status?: string
+          total_commissions_usd?: number | null
+          total_payout_usd?: number | null
+          total_variable_pay_usd?: number | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       performance_targets: {
         Row: {
