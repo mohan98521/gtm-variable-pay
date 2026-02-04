@@ -598,6 +598,105 @@ export async function calculateMonthlyPayout(
   };
 }
 
+// ============= CLAWBACK DETECTION =============
+
+interface ClawbackResult {
+  totalClawbacksUsd: number;
+  clawbackCount: number;
+}
+
+/**
+ * Check and apply clawbacks for overdue deal collections (180-day rule)
+ */
+export async function checkAndApplyClawbacks(
+  payoutRunId: string,
+  monthYear: string
+): Promise<ClawbackResult> {
+  // Find overdue collections that haven't been triggered yet
+  const { data: overdueCollections } = await supabase
+    .from('deal_collections')
+    .select(`
+      id,
+      deal_id,
+      booking_month,
+      deal_value_usd,
+      first_milestone_due_date,
+      project_id,
+      customer_name
+    `)
+    .eq('is_collected', false)
+    .lt('first_milestone_due_date', new Date().toISOString().split('T')[0])
+    .or('is_clawback_triggered.is.null,is_clawback_triggered.eq.false');
+  
+  if (!overdueCollections || overdueCollections.length === 0) {
+    return { totalClawbacksUsd: 0, clawbackCount: 0 };
+  }
+  
+  let totalClawbacksUsd = 0;
+  
+  for (const collection of overdueCollections) {
+    // Find the VP attributions for this deal to calculate clawback amount
+    const { data: attributions } = await supabase
+      .from('deal_variable_pay_attribution')
+      .select('employee_id, payout_on_booking_usd, local_currency, compensation_exchange_rate')
+      .eq('deal_id', collection.deal_id);
+    
+    if (!attributions || attributions.length === 0) continue;
+    
+    // Sum up the booking payouts that need to be clawed back
+    const clawbackAmount = attributions.reduce((sum, attr) => sum + attr.payout_on_booking_usd, 0);
+    totalClawbacksUsd += clawbackAmount;
+    
+    // Create clawback payout records (negative amounts)
+    for (const attr of attributions) {
+      const localAmount = attr.payout_on_booking_usd * (attr.compensation_exchange_rate || 1);
+      
+      await supabase.from('monthly_payouts').insert({
+        payout_run_id: payoutRunId,
+        employee_id: attr.employee_id,
+        month_year: monthYear,
+        payout_type: 'Clawback',
+        calculated_amount_usd: -attr.payout_on_booking_usd,
+        calculated_amount_local: -localAmount,
+        local_currency: attr.local_currency || 'USD',
+        exchange_rate_used: attr.compensation_exchange_rate || 1,
+        exchange_rate_type: 'compensation',
+        clawback_amount_usd: attr.payout_on_booking_usd,
+        clawback_amount_local: localAmount,
+        status: 'calculated',
+        notes: `Clawback for deal ${collection.project_id} - ${collection.customer_name || 'Unknown'}`,
+      });
+    }
+    
+    // Update deal_variable_pay_attribution records
+    await supabase
+      .from('deal_variable_pay_attribution')
+      .update({
+        is_clawback_triggered: true,
+        clawback_date: new Date().toISOString().split('T')[0],
+        clawback_amount_usd: clawbackAmount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('deal_id', collection.deal_id);
+    
+    // Update the collection record
+    await supabase
+      .from('deal_collections')
+      .update({
+        is_clawback_triggered: true,
+        clawback_triggered_at: new Date().toISOString(),
+        clawback_amount_usd: clawbackAmount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', collection.id);
+  }
+  
+  return {
+    totalClawbacksUsd,
+    clawbackCount: overdueCollections.length,
+  };
+}
+
 // ============= BATCH CALCULATION =============
 
 /**
@@ -609,6 +708,9 @@ export async function runPayoutCalculation(
 ): Promise<PayoutRunResult> {
   const calculatedAt = new Date().toISOString();
   const fiscalYear = parseInt(monthYear.substring(0, 4));
+  
+  // First, check and apply any clawbacks
+  const clawbackResult = await checkAndApplyClawbacks(payoutRunId, monthYear);
   
   // Fetch all active employees
   const { data: employees } = await supabase
@@ -647,6 +749,7 @@ export async function runPayoutCalculation(
       total_payout_usd: Math.round(totalPayoutUsd * 100) / 100,
       total_variable_pay_usd: Math.round(totalVariablePayUsd * 100) / 100,
       total_commissions_usd: Math.round(totalCommissionsUsd * 100) / 100,
+      total_clawbacks_usd: Math.round(clawbackResult.totalClawbacksUsd * 100) / 100,
       updated_at: new Date().toISOString(),
     })
     .eq('id', payoutRunId);
