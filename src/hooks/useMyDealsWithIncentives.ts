@@ -651,8 +651,9 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
         // Calculate actual paid based on collection status and exemption
         let actualPaid = 0;
         if (isClawbackExempt) {
-          // Clawback exempt: Full payout immediately regardless of collection status
-          actualPaid = incentiveCalc.totalEligible;
+          // Clawback exempt: Booking + Collection portions paid immediately
+          // Year-End portion is still held until December for reconciliation
+          actualPaid = incentiveCalc.totalBooking + incentiveCalc.totalCollection;
         } else if (linkedToImpl) {
           // Linked to implementation: 100% on collection only
           actualPaid = isCollected ? incentiveCalc.totalEligible : 0;

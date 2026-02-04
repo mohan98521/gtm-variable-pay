@@ -194,10 +194,10 @@ export function PayoutSettingsCard({
                 ✓ Clawback Exempt Plan
               </p>
               <p className="text-xs text-muted-foreground">
-                Employees receive their full payout regardless of collection status. 
-                The payout split percentages defined in each metric and commission 
-                still apply for tracking and reporting purposes, but all portions 
-                are payable immediately with no clawback risk.
+                Employees receive the Booking and Collection portions of their payout 
+                immediately upon deal booking, with no dependency on actual collection. 
+                The Year-End portion is still held until December for reconciliation 
+                and adjustments. There is no clawback risk on any portion.
               </p>
               {clawbackDays > 0 && (
                 <p className="text-xs text-amber-600 flex items-center gap-1">
