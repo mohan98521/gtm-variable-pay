@@ -245,49 +245,64 @@ export function PlanAssignmentDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Plan Selection */}
-            <FormField
-              control={form.control}
-              name="plan_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Compensation Plan</FormLabel>
-                  <Select 
-                    onValueChange={field.onChange} 
-                    value={field.value}
-                    disabled={isEditing}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a plan" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {plansLoading ? (
-                        <SelectItem value="loading" disabled>Loading plans...</SelectItem>
-                      ) : plans.length === 0 ? (
-                        <SelectItem value="none" disabled>No plans for {selectedYear}</SelectItem>
-                      ) : (
-                        plans.map((plan) => (
-                          <SelectItem key={plan.id} value={plan.id}>
-                            <div className="flex items-center gap-2">
-                              {plan.name}
-                              {plan.is_active && (
-                                <Badge variant="outline" className="text-xs">Active</Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    Showing plans for fiscal year {selectedYear}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Plan Selection - Show as static when preselected from plan page */}
+            {preselectedPlanId && !isEditing ? (
+              <div className="space-y-2">
+                <FormLabel>Compensation Plan</FormLabel>
+                <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/50">
+                  <span className="font-medium">
+                    {plans.find(p => p.id === preselectedPlanId)?.name || "Loading..."}
+                  </span>
+                  <Badge variant="outline" className="text-xs">Pre-selected</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Showing plans for fiscal year {selectedYear}
+                </p>
+              </div>
+            ) : (
+              <FormField
+                control={form.control}
+                name="plan_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Compensation Plan</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      value={field.value}
+                      disabled={isEditing}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a plan" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {plansLoading ? (
+                          <SelectItem value="loading" disabled>Loading plans...</SelectItem>
+                        ) : plans.length === 0 ? (
+                          <SelectItem value="none" disabled>No plans for {selectedYear}</SelectItem>
+                        ) : (
+                          plans.map((plan) => (
+                            <SelectItem key={plan.id} value={plan.id}>
+                              <div className="flex items-center gap-2">
+                                {plan.name}
+                                {plan.is_active && (
+                                  <Badge variant="outline" className="text-xs">Active</Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Showing plans for fiscal year {selectedYear}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Effective Dates */}
             <div className="grid grid-cols-2 gap-4">
