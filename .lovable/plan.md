@@ -1,465 +1,252 @@
 
-# Plan: Incentive Payout Statement
+# Plan: Phase 5 - Month-Lock Mechanism Enhancement
 
-## Overview
+## Executive Summary
 
-Build an employee-facing **Incentive Payout Statement** component that displays a detailed monthly payout breakdown with:
-- Dual-currency display (USD and Local Currency)
-- Dual-rate conversion visibility (Compensation Rate for VP, Market Rate for Commissions)
-- Three-way payout split breakdown (Paid on Booking, Held for Collection, Held for Year-End)
-- Clawbacks section
-- Summary totals
+The database triggers for month locking are already in place for `deals` and `deal_collections` tables. This plan addresses the remaining gaps to complete the month-lock mechanism:
 
-This will be available to employees in the Reports section and accessible from the Dashboard.
+| Gap | Status | Required Work |
+|-----|--------|---------------|
+| Lock trigger on `deals` | Implemented | None |
+| Lock trigger on `deal_collections` | Implemented | None |
+| Lock trigger on `closing_arr_actuals` | Missing | Add trigger |
+| UI feedback for locked months | Missing | Add visual indicators |
+| Hook to check lock status | Missing | Create `useMonthLockStatus` hook |
+| Error handling in mutations | Partial | Improve user-facing messages |
 
 ---
 
-## Architecture
+## Gap 1: Add Lock Trigger for Closing ARR
+
+### Current State
+- `closing_arr_actuals` table has no trigger to prevent modifications for locked months
+- The existing `check_month_lock` function can be reused
+
+### Database Migration
+
+```sql
+-- Add month lock check trigger to closing_arr_actuals
+CREATE TRIGGER check_closing_arr_month_lock
+  BEFORE INSERT OR UPDATE OR DELETE ON public.closing_arr_actuals
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_month_lock();
+```
+
+This reuses the existing `check_month_lock()` function which:
+- Gets `month_year` from the record
+- Checks `payout_runs.is_locked` for that month
+- Raises exception if locked
+
+---
+
+## Gap 2: Create useMonthLockStatus Hook
+
+### New File: `src/hooks/useMonthLockStatus.ts`
 
 ```text
-INCENTIVE PAYOUT STATEMENT DATA FLOW
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         DATA SOURCES                                    │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  Employee Data (employees table)                                        │
-│  ├── employee_id, full_name                                             │
-│  ├── local_currency (e.g., "INR")                                       │
-│  └── compensation_exchange_rate (fixed rate for VP)                     │
-│                                                                         │
-│  Market Exchange Rate (exchange_rates table)                            │
-│  └── rate_to_usd for specific month_year                                │
-│                                                                         │
-│  Payout Data (monthly_payouts table)                                    │
-│  ├── payout_type: "Variable Pay", "Perpetual License", etc.             │
-│  ├── calculated_amount_usd / calculated_amount_local                    │
-│  ├── booking_amount_usd / booking_amount_local                          │
-│  ├── collection_amount_usd / collection_amount_local                    │
-│  ├── year_end_amount_usd / year_end_amount_local                        │
-│  ├── exchange_rate_used (stored rate)                                   │
-│  └── exchange_rate_type ("compensation" or "market")                    │
-│                                                                         │
-│  Performance Data (deals, closing_arr_actuals)                          │
-│  └── For achievement calculation details                                │
-│                                                                         │
-│  Clawback Data (deal_collections + monthly_payouts)                     │
-│  └── Clawback entries (negative amounts in monthly_payouts)             │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-                                    │
-                                    ▼
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     HOOK: usePayoutStatement                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  Fetches and aggregates:                                                │
-│  - Current user's employee profile + rates                              │
-│  - Monthly payouts for selected month                                   │
-│  - Achievement details per metric                                       │
-│  - Commission breakdowns                                                │
-│  - Clawback entries                                                     │
-│                                                                         │
-│  Returns: PayoutStatementData                                           │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-                                    │
-                                    ▼
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                   UI: PayoutStatement Component                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ HEADER: Employee Info + Month                                   │    │
-│  │ ├── Employee: Sales Engineering Rep (IN0001)                    │    │
-│  │ ├── Currency: INR                                               │    │
-│  │ └── Period: January 2026                                        │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ VARIABLE PAY SECTION                                            │    │
-│  │ ├── Rate Label: "using Compensation Rate: 90.00 INR/USD"        │    │
-│  │ │                                                               │    │
-│  │ │ For each metric:                                              │    │
-│  │ │ ├── Metric Name (e.g., New Software Booking ARR)              │    │
-│  │ │ ├── Target | Actual | Achievement %                          │    │
-│  │ │ ├── Multiplier applied                                        │    │
-│  │ │ ├── Gross VP: USD + Local Currency                            │    │
-│  │ │ └── Breakdown:                                                │    │
-│  │ │     ├── Paid on Booking                                       │    │
-│  │ │     ├── Held for Collection                                   │    │
-│  │ │     └── Held for Year-End                                     │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ COMMISSIONS SECTION                                             │    │
-│  │ ├── Rate Label: "using Market Rate: 85.50 INR/USD for Jan 2026" │    │
-│  │ │                                                               │    │
-│  │ │ For each commission type:                                     │    │
-│  │ │ ├── Commission Type (e.g., Perpetual License)                 │    │
-│  │ │ ├── Deal Value | Rate %                                       │    │
-│  │ │ ├── Gross Commission: USD + Local Currency                    │    │
-│  │ │ └── Special handling (e.g., "linked to impl" = 100% held)     │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ CLAWBACKS SECTION                                               │    │
-│  │ ├── "None this month" OR                                        │    │
-│  │ └── List of clawback entries with amounts                       │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ SUMMARY SECTION                                                 │    │
-│  │ ├── PAID THIS MONTH                                             │    │
-│  │ │   ├── Variable Pay: Local (USD) @ Rate                        │    │
-│  │ │   └── Commissions: Local (USD) @ Rate                         │    │
-│  │ │   ────────────────────────                                    │    │
-│  │ │   Total Paid: Local (USD)                                     │    │
-│  │ │                                                               │    │
-│  │ └── HELD FOR LATER                                              │    │
-│  │     ├── For Collection: Local (USD) @ Rate                      │    │
-│  │     └── For Year-End: Local (USD) @ Rate                        │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+Hook Interface:
+├── useMonthLockStatus(monthYear: string)
+│   └── Returns: { isLocked: boolean, isLoading: boolean, payoutRun: PayoutRun | null }
+│
+└── useMonthLockStatuses(months: string[])
+    └── Returns: Map<string, boolean> for batch checking
 ```
 
----
-
-## Files to Create
-
-### 1. Hook: usePayoutStatement
-**File: `src/hooks/usePayoutStatement.ts`**
-
-A new hook to fetch payout statement data for a specific employee and month:
-
-```text
-Interfaces:
-├── PayoutStatementData
-│   ├── employeeId: string
-│   ├── employeeName: string
-│   ├── employeeCode: string
-│   ├── monthYear: string (e.g., "2026-01")
-│   ├── monthLabel: string (e.g., "January 2026")
-│   ├── localCurrency: string
-│   ├── compensationRate: number
-│   ├── marketRate: number
-│   ├── variablePayItems: VariablePayItem[]
-│   ├── commissionItems: CommissionItem[]
-│   ├── clawbackItems: ClawbackItem[]
-│   ├── summary: PayoutSummary
-│   └── runStatus: string | null
-
-VariablePayItem:
-├── metricName: string
-├── target: number
-├── actual: number
-├── achievementPct: number
-├── multiplier: number
-├── grossUsd: number
-├── grossLocal: number
-├── paidOnBookingUsd: number
-├── paidOnBookingLocal: number
-├── heldForCollectionUsd: number
-├── heldForCollectionLocal: number
-└── heldForYearEndUsd: number
-└── heldForYearEndLocal: number
-
-CommissionItem:
-├── commissionType: string
-├── dealValue: number
-├── rate: number
-├── grossUsd: number
-├── grossLocal: number
-├── isLinkedToImpl: boolean (0% booking / 100% collection)
-├── paidOnBookingUsd: number
-├── paidOnBookingLocal: number
-├── heldForCollectionUsd: number
-└── heldForCollectionLocal: number
-└── heldForYearEndUsd: number
-└── heldForYearEndLocal: number
-
-ClawbackItem:
-├── dealId: string | null
-├── description: string
-├── amountUsd: number
-└── amountLocal: number
-
-PayoutSummary:
-├── totalPaidUsd: number
-├── totalPaidLocal: number
-├── vpPaidUsd: number
-├── vpPaidLocal: number
-├── commPaidUsd: number
-├── commPaidLocal: number
-├── heldCollectionUsd: number
-├── heldCollectionLocal: number
-├── heldYearEndUsd: number
-└── heldYearEndLocal: number
-```
-
-Hook functions:
-- `usePayoutStatement(monthYear: string)` - For current user
-- `usePayoutStatementForEmployee(employeeId: string, monthYear: string)` - For admin view
+Features:
+- Queries `payout_runs` for the specific month
+- Returns `true` if `is_locked = true`
+- Returns `false` if no run exists or run is not locked
+- Caches results with React Query
 
 ---
 
-### 2. Component: PayoutStatement
-**File: `src/components/reports/PayoutStatement.tsx`**
+## Gap 3: Add Visual Lock Indicators in UI
 
-Main component that renders the full payout statement using the mockup design:
+### 3.1 DataInputs.tsx - Month Selector Lock Badge
 
-**Sections:**
-1. **Header Card** - Employee info, month, currency
-2. **Variable Pay Section** - Collapsible cards per metric with full breakdown
-3. **Commissions Section** - Collapsible cards per commission type
-4. **Clawbacks Section** - List or "None this month"
-5. **Summary Section** - Paid this month + Held for later breakdown
+When a month is selected and it's locked, show:
+- Lock icon next to month in selector
+- Alert banner below header: "This month is locked. Changes must go through payout adjustments."
+- Disable "Add Deal", "Add Record", "Bulk Upload" buttons
 
-**Features:**
-- Month selector dropdown
-- Currency display toggles (show/hide USD, show/hide local)
-- Print/Export to PDF button
-- Responsive design for mobile
+### 3.2 DealsTable.tsx - Disable Edit/Delete for Locked Months
 
----
+- Hide/disable Edit and Delete actions for deals in locked months
+- Show tooltip: "Month is locked - use payout adjustments for corrections"
 
-### 3. Component: PayoutStatementPrintable
-**File: `src/components/reports/PayoutStatementPrintable.tsx`**
+### 3.3 ClosingARRTable.tsx - Same Treatment
 
-A print-optimized version of the statement for PDF export/printing:
-- Clean layout without interactive elements
-- Proper page breaks
-- Company header/footer
-- Signature/date section
+- Disable Edit and Delete for locked month records
+
+### 3.4 PendingCollectionsTable.tsx - Conditional Lock
+
+- Check if the deal's `booking_month` is locked
+- If locked, disable the "Mark as Collected" action
+- Show tooltip explaining the lock
 
 ---
 
-### 4. Reports Page Tab Integration
-**File: `src/pages/Reports.tsx` (modify)**
+## Gap 4: Improve Error Handling in Mutations
 
-Add a new "Payout Statement" tab for employees to view their monthly statements:
-- Month selector
-- Statement display
-- Export options
+### Updates to Hooks
 
----
-
-### 5. Dashboard Quick Link (Optional Enhancement)
-**File: `src/pages/Dashboard.tsx` (modify)**
-
-Add a card or link to view the current month's payout statement from the dashboard.
-
----
-
-## Technical Implementation Details
-
-### Data Fetching Strategy
-
-The hook will query data differently based on payout run status:
-
-**If payout run exists for month (finalized/approved):**
-- Pull data directly from `monthly_payouts` table
-- Use stored `exchange_rate_used` and `exchange_rate_type` values
-- Include clawback entries (negative amounts)
-
-**If no payout run exists (preview/estimate):**
-- Calculate on-the-fly using existing `useCurrentUserCompensation` logic
-- Use current exchange rates
-- Show as "Estimated" with appropriate badge
-
-### Dual Currency Formatting
-
+**useDeals.ts** - Update error handlers:
 ```typescript
-// Helper function for dual-currency display
-function formatDualCurrency(
-  usd: number, 
-  local: number, 
-  currency: string
-): string {
-  const usdFormatted = formatCurrency(usd); // $5,250
-  const localFormatted = formatLocalCurrency(local, currency); // ₹4,72,500
-  return `${localFormatted} (${usdFormatted})`;
-}
-
-// Currency symbols map
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  INR: '₹',
-  AED: 'د.إ',
-  NGN: '₦',
-  KES: 'KSh',
-  SAR: '﷼',
-  SGD: 'S$',
-  // ... etc
-};
-```
-
-### Month Selection
-
-```typescript
-// Generate available months based on payout runs or current year
-function getAvailableMonths(year: number): string[] {
-  const months = [];
-  const now = new Date();
-  
-  for (let m = 1; m <= 12; m++) {
-    const monthYear = `${year}-${String(m).padStart(2, '0')}`;
-    // Only show months up to current month
-    if (new Date(`${monthYear}-01`) <= now) {
-      months.push(monthYear);
-    }
+onError: (error: Error) => {
+  if (error.message.includes('locked payout month')) {
+    toast.error('Cannot modify deal: The month is locked for payouts. Use payout adjustments for corrections.');
+  } else {
+    toast.error(`Failed to create deal: ${error.message}`);
   }
-  return months;
 }
 ```
 
+**useClosingARR.ts** - Same pattern
+
+**useCollections.ts** - Same pattern
+
 ---
 
-## UI Component Breakdown
+## Implementation Details
 
-### PayoutStatement.tsx Structure
+### Database Trigger Flow
 
 ```text
-<PayoutStatementContainer>
-  │
-  ├── <StatementHeader>
-  │   ├── Employee name + code
-  │   ├── Month/Year display
-  │   ├── Currency badge
-  │   └── Status badge (if from payout run)
-  │
-  ├── <MonthSelector>
-  │   └── Dropdown with available months
-  │
-  ├── <VariablePaySection>
-  │   ├── Section title with compensation rate callout
-  │   │
-  │   └── For each metric:
-  │       └── <MetricPayoutCard>
-  │           ├── Metric name
-  │           ├── Achievement row (Target | Actual | %)
-  │           ├── Multiplier badge
-  │           ├── Gross amounts (USD + Local)
-  │           └── Three-way breakdown list
-  │
-  ├── <CommissionsSection>
-  │   ├── Section title with market rate callout
-  │   │
-  │   └── For each commission:
-  │       └── <CommissionPayoutCard>
-  │           ├── Commission type
-  │           ├── Deal value + Rate
-  │           ├── Gross amounts (USD + Local)
-  │           ├── Special handling badge (linked to impl)
-  │           └── Three-way breakdown list
-  │
-  ├── <ClawbacksSection>
-  │   └── List or "None this month" message
-  │
-  └── <SummarySection>
-      ├── "PAID THIS MONTH" box
-      │   ├── VP line with rate
-      │   ├── Commission line with rate
-      │   └── Total line
-      │
-      └── "HELD FOR LATER" box
-          ├── For Collection line
-          └── For Year-End line
-</PayoutStatementContainer>
+USER ACTION                    DATABASE TRIGGER                      RESULT
+─────────────────────────────────────────────────────────────────────────────
+
+Create/Edit Deal      ─────►   check_deals_month_lock     ─────►   ALLOWED or
+  in locked month                                                   EXCEPTION
+
+Update Collection     ─────►   check_collections_month_lock ────►  ALLOWED or
+  in locked month                                                   EXCEPTION
+
+Create/Edit           ─────►   check_closing_arr_month_lock ────►  ALLOWED or
+  Closing ARR                   (NEW - to be added)                 EXCEPTION
+  in locked month
+```
+
+### Lock Check Query
+
+```sql
+SELECT is_locked 
+FROM payout_runs 
+WHERE month_year = $1
+ORDER BY created_at DESC
+LIMIT 1;
+```
+
+### UI Component Integration
+
+```text
+DataInputs.tsx
+│
+├── useMonthLockStatus(selectedMonth)
+│   └── isLocked = true when month is finalized
+│
+├── If isLocked:
+│   ├── Show Alert: "Month locked - use adjustments"
+│   ├── Disable: "Add Deal" button
+│   ├── Disable: "Add Record" button  
+│   └── Disable: "Bulk Upload" button
+│
+└── Pass isLocked to child tables:
+    ├── DealsTable (disable row actions)
+    ├── ClosingARRTable (disable row actions)
+    └── PendingCollectionsTable (disable mark as collected)
 ```
 
 ---
 
-## Permissions
+## Files to Create/Modify
 
-| Access Level | Capability |
-|--------------|------------|
-| Sales Rep | View own payout statements only |
-| Sales Head | View own + direct reports' statements |
-| Admin/GTM Ops/Finance | View all employee statements |
+| File | Action | Purpose |
+|------|--------|---------|
+| `supabase/migrations/xxx.sql` | Create | Add trigger to closing_arr_actuals |
+| `src/hooks/useMonthLockStatus.ts` | Create | Hook to check if month is locked |
+| `src/pages/DataInputs.tsx` | Modify | Add lock status check and UI feedback |
+| `src/components/data-inputs/DealsTable.tsx` | Modify | Pass isLocked prop, disable actions |
+| `src/components/data-inputs/ClosingARRTable.tsx` | Modify | Pass isLocked prop, disable actions |
+| `src/components/data-inputs/PendingCollectionsTable.tsx` | Modify | Check lock status per deal |
+| `src/hooks/useDeals.ts` | Modify | Improve error handling |
+| `src/hooks/useClosingARR.ts` | Modify | Improve error handling |
+| `src/hooks/useCollections.ts` | Modify | Improve error handling |
 
 ---
 
-## Integration Points
+## Visual Design
 
-### Existing Hooks to Leverage
+### Lock Alert Banner (DataInputs.tsx)
 
-1. **`useCurrentUserCompensation`** - For fallback calculation when no payout run exists
-2. **`useEmployeePayouts`** - From `useMonthlyPayouts.ts` for fetching stored payouts
-3. **`useExchangeRateByMonth`** - For market rate display
-4. **Employee compensation_exchange_rate** - From employees table
-
-### New Queries Required
-
-1. Get employee with compensation details:
-```sql
-SELECT id, employee_id, full_name, local_currency, compensation_exchange_rate
-FROM employees 
-WHERE employee_id = $1
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🔒 Month Locked                                                         │
+│                                                                         │
+│ December 2025 payouts have been finalized. Direct edits are disabled.  │
+│ To make corrections, use the Payout Adjustments workflow in Admin.     │
+│                                                                         │
+│                                              [View Payout Run →]        │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-2. Get monthly payouts for employee and month:
-```sql
-SELECT * FROM monthly_payouts 
-WHERE employee_id = $1 AND month_year = $2
-ORDER BY payout_type
+### Disabled Button State
+
+```text
+Normal:              [+ Add Deal]
+
+Locked (disabled):   [🔒 Add Deal] ← grayed out with lock icon
+                      ↓ Tooltip
+                     "Month is locked for payouts"
 ```
 
-3. Get market rate for month:
-```sql
-SELECT rate_to_usd FROM exchange_rates
-WHERE currency_code = $1 AND month_year = $2
+### Table Row Actions
+
+```text
+Normal:               [...] → Edit | Delete
+
+Locked (disabled):    [...] → (actions grayed out)
+                       ↓ Tooltip
+                      "Cannot modify - month is locked"
 ```
+
+---
+
+## Testing Scenarios
+
+1. **Trigger Validation**
+   - Create payout run → Finalize → Attempt to add deal → Verify rejection
+   - Same for Closing ARR and Collections
+
+2. **UI Lock Display**
+   - Select locked month → Verify alert appears
+   - Verify Add/Bulk Upload buttons are disabled
+   - Verify Edit/Delete actions are disabled in tables
+
+3. **Error Messages**
+   - Attempt modification via API → Verify user-friendly error message
+
+4. **Adjustments Path**
+   - Confirm that payout adjustments can still be created for locked months
+   - Verify adjustment workflow is accessible
 
 ---
 
 ## Implementation Sequence
 
-### Phase 1: Core Hook
-1. Create `usePayoutStatement.ts` with interfaces
-2. Implement data fetching from `monthly_payouts`
-3. Add fallback to live calculation when no payout run exists
-4. Add clawback detection
+### Step 1: Database Migration
+- Add `check_closing_arr_month_lock` trigger
 
-### Phase 2: Main Component
-1. Create `PayoutStatement.tsx` with full layout
-2. Implement Variable Pay section with metric cards
-3. Implement Commissions section
-4. Implement Clawbacks section
-5. Implement Summary section
+### Step 2: Create Lock Status Hook
+- Build `useMonthLockStatus.ts`
 
-### Phase 3: Month Selection & Navigation
-1. Add month selector dropdown
-2. Handle month changes
-3. Show loading states
+### Step 3: Update DataInputs Page
+- Add lock status check
+- Add alert banner
+- Disable action buttons
 
-### Phase 4: Print/Export
-1. Create `PayoutStatementPrintable.tsx`
-2. Add print CSS
-3. Add PDF export option
+### Step 4: Update Table Components
+- Pass `isLocked` prop to tables
+- Disable row-level actions
 
-### Phase 5: Reports Integration
-1. Add "Payout Statement" tab to Reports.tsx
-2. Add employee selector for admin view
-3. Wire up permissions
-
----
-
-## Styling Approach
-
-The component will follow existing design patterns:
-- Use existing Card, Badge, Table components from shadcn/ui
-- Follow the Azentio dark theme color scheme
-- Use the existing `formatCurrency` patterns
-- Responsive breakpoints for mobile viewing
-
-The statement layout uses a clean, structured format:
-- Clear section headers with rate callouts
-- Indented sub-items for hierarchy
-- Color coding: green for paid, muted for held, red for clawbacks
-- Separator lines between major sections
+### Step 5: Improve Error Handling
+- Update mutation error handlers in hooks
