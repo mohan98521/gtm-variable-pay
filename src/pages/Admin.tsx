@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Copy, Target, DollarSign } from "lucide-react";
+import { Plus, Settings, Users, Layers, ArrowRight, Edit, Trash2, Loader2, UserCog, Shield, Upload, Lock, Copy, Target, DollarSign, Calculator } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -34,6 +34,7 @@ import { BulkUpload } from "@/components/admin/BulkUpload";
 import { PermissionsManagement } from "@/components/admin/PermissionsManagement";
 import { PerformanceTargetsManagement } from "@/components/admin/PerformanceTargetsManagement";
 import { ExchangeRateManagement } from "@/components/admin/ExchangeRateManagement";
+import { PayoutRunManagement } from "@/components/admin/PayoutRunManagement";
 import { CompPlanFormDialog } from "@/components/admin/CompPlanFormDialog";
 import { CompPlanDetailsDialog } from "@/components/admin/CompPlanDetailsDialog";
 import { CopyPlansDialog } from "@/components/admin/CopyPlansDialog";
@@ -228,6 +229,12 @@ export default function Admin() {
               <TabsTrigger value="exchange-rates" className="gap-2">
                 <DollarSign className="h-4 w-4" />
                 Exchange Rates
+              </TabsTrigger>
+            )}
+            {(isAdmin() || canAccessTab("tab:bulk_upload")) && (
+              <TabsTrigger value="payout-runs" className="gap-2">
+                <Calculator className="h-4 w-4" />
+                Payout Runs
               </TabsTrigger>
             )}
             {isAdmin() && (
@@ -454,6 +461,13 @@ export default function Admin() {
           {(isAdmin() || canAccessTab("tab:bulk_upload")) && (
             <TabsContent value="exchange-rates">
               <ExchangeRateManagement />
+            </TabsContent>
+          )}
+
+          {/* Payout Runs Tab */}
+          {(isAdmin() || canAccessTab("tab:bulk_upload")) && (
+            <TabsContent value="payout-runs">
+              <PayoutRunManagement />
             </TabsContent>
           )}
 
