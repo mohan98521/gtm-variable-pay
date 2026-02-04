@@ -27,7 +27,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Users, MoreHorizontal, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Users, MoreHorizontal, Pencil, Trash2, Loader2, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { usePlanAssignedEmployees, useDeletePlanAssignment } from "@/hooks/usePlanAssignments";
 import { PlanAssignmentDialog } from "./PlanAssignmentDialog";
 import { useQuery } from "@tanstack/react-query";
@@ -291,12 +292,28 @@ function SelectEmployeeForAssignment({
   assignedEmployeeIds: string[];
   onSelect: (employee: Employee) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  
   const availableEmployees = employees.filter(
     (e) => !assignedEmployeeIds.includes(e.id)
   );
 
+  // Filter by search query
+  const filteredEmployees = availableEmployees.filter((employee) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      employee.full_name.toLowerCase().includes(query) ||
+      employee.employee_id.toLowerCase().includes(query) ||
+      employee.email.toLowerCase().includes(query)
+    );
+  });
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={(newOpen) => {
+      onOpenChange(newOpen);
+      if (!newOpen) setSearchQuery("");
+    }}>
       <AlertDialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
         <AlertDialogHeader>
           <AlertDialogTitle>Select Employee</AlertDialogTitle>
@@ -304,14 +321,46 @@ function SelectEmployeeForAssignment({
             Choose an employee to assign to this plan
           </AlertDialogDescription>
         </AlertDialogHeader>
+        
+        {/* Search Input */}
+        {availableEmployees.length > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, ID, or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-9"
+              autoFocus
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+        
+        {/* Employee List */}
         <div className="flex-1 overflow-y-auto py-4">
           {availableEmployees.length === 0 ? (
             <p className="text-center text-muted-foreground py-4">
               All active employees are already assigned to this plan.
             </p>
+          ) : filteredEmployees.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-muted-foreground">
+                No employees found matching "{searchQuery}"
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
-              {availableEmployees.map((employee) => (
+              {filteredEmployees.map((employee) => (
                 <button
                   key={employee.id}
                   className="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors"
