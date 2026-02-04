@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database } from "lucide-react";
+import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database, Receipt } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -17,8 +17,8 @@ import { useIncentiveAuditData } from "@/hooks/useIncentiveAuditData";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { MyDealsReport } from "@/components/reports/MyDealsReport";
 import { MyClosingARRReport } from "@/components/reports/MyClosingARRReport";
+import { PayoutStatement } from "@/components/reports/PayoutStatement";
 import { useUserRole } from "@/hooks/useUserRole";
-
 const SALES_FUNCTIONS = [
   "All",
   "Farmer",
@@ -482,6 +482,10 @@ export default function Reports() {
               <Database className="mr-2 h-4 w-4" />
               My Closing ARR
             </TabsTrigger>
+            <TabsTrigger value="payout-statement" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <Receipt className="mr-2 h-4 w-4" />
+              Payout Statement
+            </TabsTrigger>
           </TabsList>
 
           {/* Filters - Only show for Employee Master and Incentive Audit tabs */}
@@ -855,6 +859,11 @@ export default function Reports() {
           {/* Tab 5: My Closing ARR */}
           <TabsContent value="my-closing-arr">
             <MyClosingARRReport />
+          </TabsContent>
+
+          {/* Tab 6: Payout Statement */}
+          <TabsContent value="payout-statement">
+            <PayoutStatement />
           </TabsContent>
         </Tabs>
       </div>
