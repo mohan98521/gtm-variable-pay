@@ -170,9 +170,12 @@ export function useUpdateCollectionStatus() {
       });
     },
     onError: (error: Error) => {
+      const message = error.message.includes("locked payout month")
+        ? "Cannot update collection: The booking month is locked for payouts. Use payout adjustments for corrections."
+        : error.message;
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -213,9 +216,12 @@ export function useTriggerClawback() {
       });
     },
     onError: (error: Error) => {
+      const message = error.message.includes("locked payout month")
+        ? "Cannot trigger clawback: The booking month is locked for payouts. Use payout adjustments for corrections."
+        : error.message;
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -266,9 +272,12 @@ export function useBulkUpdateCollections() {
       });
     },
     onError: (error: Error) => {
+      const message = error.message.includes("locked payout month")
+        ? "Cannot update collections: One or more booking months are locked for payouts. Use payout adjustments for corrections."
+        : error.message;
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -328,9 +337,12 @@ export function useBulkImportCollections() {
       });
     },
     onError: (error: Error) => {
+      const message = error.message.includes("locked payout month")
+        ? "Cannot import: One or more booking months are locked for payouts. Use payout adjustments for corrections."
+        : error.message;
       toast({
         title: "Import failed",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },

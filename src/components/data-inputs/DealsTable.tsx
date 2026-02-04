@@ -31,7 +31,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MoreHorizontal, Pencil, Trash2, Users, Download } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Users, Download, Lock } from "lucide-react";
 import { DealWithParticipants, PROPOSAL_TYPES, useDeleteDeal } from "@/hooks/useDeals";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvExport";
@@ -40,6 +40,7 @@ interface DealsTableProps {
   deals: DealWithParticipants[];
   onEdit: (deal: DealWithParticipants) => void;
   isLoading?: boolean;
+  isLocked?: boolean;
 }
 
 const statusColors: Record<string, string> = {
@@ -59,7 +60,7 @@ const proposalTypeColors: Record<string, string> = {
   implementation: "bg-green-500/10 text-green-700",
 };
 
-export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
+export function DealsTable({ deals, onEdit, isLoading, isLocked = false }: DealsTableProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const deleteDeal = useDeleteDeal();
 
@@ -200,18 +201,19 @@ export function DealsTable({ deals, onEdit, isLoading }: DealsTableProps) {
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isLocked}>
+                        {isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <MoreHorizontal className="h-4 w-4" />}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onEdit(deal)}>
+                      <DropdownMenuItem onClick={() => onEdit(deal)} disabled={isLocked}>
                         <Pencil className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => setDeleteId(deal.id)}
                         className="text-destructive focus:text-destructive"
+                        disabled={isLocked}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
