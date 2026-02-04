@@ -77,6 +77,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   review: { label: "Review", variant: "outline", icon: Eye },
   approved: { label: "Approved", variant: "default", icon: CheckCircle2 },
   finalized: { label: "Finalized", variant: "default", icon: Lock },
+  paid: { label: "Paid", variant: "default", icon: CheckCircle2 },
 };
 
 export function PayoutRunManagement() {
@@ -139,7 +140,7 @@ export function PayoutRunManagement() {
     }
   };
   
-  const handleStatusChange = async (run: PayoutRun, newStatus: 'review' | 'approved' | 'finalized') => {
+  const handleStatusChange = async (run: PayoutRun, newStatus: 'review' | 'approved' | 'finalized' | 'paid') => {
     await updateStatusMutation.mutateAsync({ runId: run.id, status: newStatus });
   };
   
@@ -191,7 +192,7 @@ export function PayoutRunManagement() {
         <CardHeader>
           <CardTitle className="text-base">FY {selectedYear} Payout Runs</CardTitle>
           <CardDescription>
-            Status flow: Draft → Review → Approved → Finalized
+            Status flow: Draft → Review → Approved → Finalized → Paid
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -296,6 +297,16 @@ export function PayoutRunManagement() {
                             >
                               <Lock className="h-4 w-4 mr-1" />
                               Finalize
+                            </Button>
+                          )}
+                          {run.run_status === 'finalized' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleStatusChange(run, 'paid')}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              Mark as Paid
                             </Button>
                           )}
                           <Button

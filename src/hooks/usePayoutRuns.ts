@@ -20,11 +20,12 @@ import {
 export interface PayoutRun {
   id: string;
   month_year: string;
-  run_status: 'draft' | 'review' | 'approved' | 'finalized';
+  run_status: 'draft' | 'review' | 'approved' | 'finalized' | 'paid';
   is_locked: boolean;
   total_payout_usd: number | null;
   total_variable_pay_usd: number | null;
   total_commissions_usd: number | null;
+  total_clawbacks_usd: number | null;
   calculated_at: string | null;
   calculated_by: string | null;
   reviewed_at: string | null;
@@ -33,6 +34,8 @@ export interface PayoutRun {
   approved_by: string | null;
   finalized_at: string | null;
   finalized_by: string | null;
+  paid_at: string | null;
+  paid_by: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -196,7 +199,7 @@ export function useUpdatePayoutRunStatus() {
       userId 
     }: { 
       runId: string; 
-      status: 'draft' | 'review' | 'approved' | 'finalized';
+      status: 'draft' | 'review' | 'approved' | 'finalized' | 'paid';
       userId?: string;
     }) => {
       const now = new Date().toISOString();
@@ -216,6 +219,9 @@ export function useUpdatePayoutRunStatus() {
         updates.finalized_at = now;
         updates.finalized_by = userId;
         updates.is_locked = true;
+      } else if (status === 'paid') {
+        updates.paid_at = now;
+        updates.paid_by = userId;
       }
       
       const { data, error } = await supabase

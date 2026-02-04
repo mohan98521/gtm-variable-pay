@@ -1227,9 +1227,12 @@ export type Database = {
           is_locked: boolean
           month_year: string
           notes: string | null
+          paid_at: string | null
+          paid_by: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           run_status: string
+          total_clawbacks_usd: number | null
           total_commissions_usd: number | null
           total_payout_usd: number | null
           total_variable_pay_usd: number | null
@@ -1247,9 +1250,12 @@ export type Database = {
           is_locked?: boolean
           month_year: string
           notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           run_status?: string
+          total_clawbacks_usd?: number | null
           total_commissions_usd?: number | null
           total_payout_usd?: number | null
           total_variable_pay_usd?: number | null
@@ -1267,9 +1273,12 @@ export type Database = {
           is_locked?: boolean
           month_year?: string
           notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           run_status?: string
+          total_clawbacks_usd?: number | null
           total_commissions_usd?: number | null
           total_payout_usd?: number | null
           total_variable_pay_usd?: number | null

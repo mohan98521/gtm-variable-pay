@@ -5,7 +5,9 @@
  * - Run summary
  * - Employee breakdown with dual-currency display
  * - Filter by currency
- * - Export functionality
+ * - Export functionality (CSV + XLSX)
+ * - Clawbacks display
+ * - Adjustments management
  */
 
 import { useState } from "react";
@@ -30,6 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   ArrowLeft, 
   Download, 
@@ -37,8 +45,14 @@ import {
   DollarSign,
   Users,
   TrendingUp,
-  Percent
+  Percent,
+  FileSpreadsheet,
+  FileText,
+  ChevronDown,
+  Banknote
 } from "lucide-react";
+import { generateMultiSheetXLSX, downloadXLSX, SheetData } from "@/lib/xlsxExport";
+import { PayoutAdjustments } from "./PayoutAdjustments";
 
 interface PayoutRunDetailProps {
   run: PayoutRun;
@@ -47,9 +61,10 @@ interface PayoutRunDetailProps {
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
-  review: "bg-warning/10 text-warning-foreground",
+  review: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
   approved: "bg-primary/10 text-primary",
-  finalized: "bg-success/10 text-success",
+  finalized: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+  paid: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
 };
 
 export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
@@ -142,6 +157,83 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
     URL.revokeObjectURL(url);
   };
   
+  const handleExportXLSX = () => {
+    if (!employeeBreakdown) return;
+    
+    const sheets: SheetData[] = [];
+    
+    // Sheet 1: Summary
+    sheets.push({
+      sheetName: 'Summary',
+      data: [{
+        month: formatMonthYear(run.month_year),
+        status: run.run_status,
+        totalPayoutUsd: run.total_payout_usd || 0,
+        variablePayUsd: run.total_variable_pay_usd || 0,
+        commissionsUsd: run.total_commissions_usd || 0,
+        clawbacksUsd: run.total_clawbacks_usd || 0,
+        employeeCount: employeeBreakdown.length,
+        calculatedAt: run.calculated_at ? format(new Date(run.calculated_at), 'yyyy-MM-dd HH:mm') : '',
+      }],
+      columns: [
+        { key: 'month', header: 'Month' },
+        { key: 'status', header: 'Status' },
+        { key: 'totalPayoutUsd', header: 'Total Payout (USD)' },
+        { key: 'variablePayUsd', header: 'Variable Pay (USD)' },
+        { key: 'commissionsUsd', header: 'Commissions (USD)' },
+        { key: 'clawbacksUsd', header: 'Clawbacks (USD)' },
+        { key: 'employeeCount', header: 'Employee Count' },
+        { key: 'calculatedAt', header: 'Calculated At' },
+      ],
+    });
+    
+    // Sheet 2: All Employees
+    const allEmployeesColumns = [
+      { key: 'employeeCode', header: 'Employee Code' },
+      { key: 'employeeName', header: 'Employee Name' },
+      { key: 'localCurrency', header: 'Currency' },
+      { key: 'variablePayUsd', header: 'VP (USD)' },
+      { key: 'variablePayLocal', header: 'VP (Local)' },
+      { key: 'vpCompRate', header: 'Comp Rate' },
+      { key: 'commissionsUsd', header: 'Comm (USD)' },
+      { key: 'commissionsLocal', header: 'Comm (Local)' },
+      { key: 'commMarketRate', header: 'Market Rate' },
+      { key: 'totalUsd', header: 'Total (USD)' },
+      { key: 'totalLocal', header: 'Total (Local)' },
+      { key: 'bookingUsd', header: 'Booking (USD)' },
+    ];
+    
+    sheets.push({
+      sheetName: 'All Employees',
+      data: employeeBreakdown,
+      columns: allEmployeesColumns as any,
+    });
+    
+    // Sheets per currency
+    for (const currency of currencies) {
+      const currencyEmployees = employeeBreakdown.filter(e => e.localCurrency === currency);
+      if (currencyEmployees.length === 0) continue;
+      
+      sheets.push({
+        sheetName: currency,
+        data: currencyEmployees,
+        columns: [
+          { key: 'employeeCode', header: 'Employee Code' },
+          { key: 'employeeName', header: 'Employee Name' },
+          { key: 'variablePayLocal', header: `VP (${currency})` },
+          { key: 'commissionsLocal', header: `Comm (${currency})` },
+          { key: 'totalLocal', header: `Total (${currency})` },
+          { key: 'variablePayUsd', header: 'VP (USD)' },
+          { key: 'commissionsUsd', header: 'Comm (USD)' },
+          { key: 'totalUsd', header: 'Total (USD)' },
+        ] as any,
+      });
+    }
+    
+    const blob = generateMultiSheetXLSX(sheets);
+    downloadXLSX(blob, `payout-run-${run.month_year}.xlsx`);
+  };
+  
   const isLoading = loadingEmployees || loadingSummary;
   
   return (
@@ -168,10 +260,25 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
             </div>
           </div>
         </div>
-        <Button variant="outline" onClick={handleExportCSV} disabled={!filteredEmployees?.length}>
-          <Download className="h-4 w-4 mr-1.5" />
-          Export CSV
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" disabled={!employeeBreakdown?.length}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
+              <ChevronDown className="h-4 w-4 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleExportCSV}>
+              <FileText className="h-4 w-4 mr-2" />
+              Export CSV
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportXLSX}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Export XLSX (Multi-sheet)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       
       {/* Summary Cards */}
@@ -382,6 +489,13 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
         </CardContent>
       </Card>
       
+      {/* Adjustments Section */}
+      <PayoutAdjustments 
+        payoutRunId={run.id} 
+        monthYear={run.month_year} 
+        runStatus={run.run_status} 
+      />
+      
       {/* Notes */}
       {run.notes && (
         <Card>
@@ -390,6 +504,23 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">{run.notes}</p>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Paid Info */}
+      {run.run_status === 'paid' && run.paid_at && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-primary" />
+              Payment Confirmed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Marked as paid on {format(new Date(run.paid_at), 'MMMM d, yyyy h:mm a')}
+            </p>
           </CardContent>
         </Card>
       )}
