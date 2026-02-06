@@ -61,6 +61,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useCurrencies } from "@/hooks/useCurrencies";
+import { CurrencyManagement } from "./CurrencyManagement";
 
 interface ExchangeRate {
   id: string;
@@ -76,25 +78,11 @@ interface UploadResult {
   errors: string[];
 }
 
-// Common currency codes used in the system
-const CURRENCY_OPTIONS = [
-  { code: "INR", name: "Indian Rupee" },
-  { code: "AED", name: "UAE Dirham" },
-  { code: "KES", name: "Kenyan Shilling" },
-  { code: "NGN", name: "Nigerian Naira" },
-  { code: "SAR", name: "Saudi Riyal" },
-  { code: "MYR", name: "Malaysian Ringgit" },
-  { code: "SGD", name: "Singapore Dollar" },
-  { code: "IDR", name: "Indonesian Rupiah" },
-  { code: "LBP", name: "Lebanese Pound" },
-  { code: "GBP", name: "British Pound" },
-  { code: "EUR", name: "Euro" },
-  { code: "AUD", name: "Australian Dollar" },
-  { code: "CAD", name: "Canadian Dollar" },
-];
+// Currency options are now fetched dynamically via useCurrencies hook
 
 export function ExchangeRateManagement() {
   const queryClient = useQueryClient();
+  const { currencies: activeCurrencies, currencyOptions: dynamicCurrencyOptions } = useCurrencies();
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
@@ -566,7 +554,7 @@ export function ExchangeRateManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Currencies</SelectItem>
-                  {CURRENCY_OPTIONS.map(c => (
+                  {activeCurrencies.filter(c => c.code !== 'USD').map(c => (
                     <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>
                   ))}
                 </SelectContent>
@@ -670,7 +658,7 @@ export function ExchangeRateManagement() {
                   <SelectValue placeholder="Select currency" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CURRENCY_OPTIONS.map(c => (
+                  {activeCurrencies.filter(c => c.code !== 'USD').map(c => (
                     <SelectItem key={c.code} value={c.code}>
                       {c.code} - {c.name}
                     </SelectItem>
@@ -765,6 +753,8 @@ export function ExchangeRateManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Currency Management Section */}
+      <CurrencyManagement />
     </div>
   );
 }

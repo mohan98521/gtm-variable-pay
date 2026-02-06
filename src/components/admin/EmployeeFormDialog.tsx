@@ -29,6 +29,7 @@ import {
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useCurrencies } from "@/hooks/useCurrencies";
 
 const SALES_FUNCTIONS = [
   "Farmer",
@@ -46,7 +47,7 @@ const SALES_FUNCTIONS = [
   "Sales Engineering - Head",
 ] as const;
 
-const CURRENCIES = ["USD", "INR", "AED", "SGD", "EUR", "GBP"] as const;
+// Currencies are now fetched dynamically via useCurrencies hook
 
 // Full 26-field schema matching bulk upload
 const employeeFormSchema = z.object({
@@ -129,6 +130,7 @@ export function EmployeeFormDialog({
   isSubmitting,
 }: EmployeeFormDialogProps) {
   const isEditing = !!employee;
+  const { currencyCodeOptions } = useCurrencies();
 
   const form = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeFormSchema),
@@ -498,20 +500,15 @@ export function EmployeeFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Local Currency</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "USD"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select currency" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {CURRENCIES.map((curr) => (
-                            <SelectItem key={curr} value={curr}>
-                              {curr}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "USD"}
+                          onValueChange={field.onChange}
+                          options={currencyCodeOptions}
+                          placeholder="Select currency"
+                          searchPlaceholder="Search currencies..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
