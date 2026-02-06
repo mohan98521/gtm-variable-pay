@@ -42,7 +42,8 @@ export function useCurrencies() {
   });
 
   const getCurrencySymbol = (code: string): string => {
-    return symbolMap.get(code) || `${code} `;
+    const symbol = symbolMap.get(code);
+    return symbol && symbol.trim() ? symbol : `${code} `;
   };
 
   const getCurrencyName = (code: string): string => {
@@ -90,11 +91,12 @@ export function useCurrencyManagement() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (currency: { code: string; name: string; symbol: string }) => {
+    mutationFn: async (currency: { code: string; name: string; symbol?: string }) => {
+      const code = currency.code.toUpperCase().trim();
       const { error } = await supabase.from("currencies").insert({
-        code: currency.code.toUpperCase().trim(),
+        code,
         name: currency.name.trim(),
-        symbol: currency.symbol.trim(),
+        symbol: currency.symbol?.trim() || code,
       });
       if (error) throw error;
     },
