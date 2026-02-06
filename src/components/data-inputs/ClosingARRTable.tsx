@@ -25,13 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle, Download, X, Lock } from "lucide-react";
@@ -76,6 +70,37 @@ export function ClosingARRTable({
     const customers = [...new Set(records.map((r) => r.customer_name))].sort();
     return { pids, bus, products, salesReps, salesHeads, customers };
   }, [records]);
+
+  // Build options arrays for SearchableSelect
+  const pidOptions = useMemo(() => [
+    { value: "_all", label: "All PIDs" },
+    ...filterOptions.pids.map(v => ({ value: v, label: v })),
+  ], [filterOptions.pids]);
+
+  const buOptions = useMemo(() => [
+    { value: "_all", label: "All BUs" },
+    ...filterOptions.bus.map(v => ({ value: v, label: v })),
+  ], [filterOptions.bus]);
+
+  const productOptions = useMemo(() => [
+    { value: "_all", label: "All Products" },
+    ...filterOptions.products.map(v => ({ value: v, label: v })),
+  ], [filterOptions.products]);
+
+  const customerOptions = useMemo(() => [
+    { value: "_all", label: "All Customers" },
+    ...filterOptions.customers.map(v => ({ value: v, label: v })),
+  ], [filterOptions.customers]);
+
+  const salesRepOptions = useMemo(() => [
+    { value: "_all", label: "All Sales Reps" },
+    ...filterOptions.salesReps.map(v => ({ value: v, label: v })),
+  ], [filterOptions.salesReps]);
+
+  const salesHeadOptions = useMemo(() => [
+    { value: "_all", label: "All Sales Heads" },
+    ...filterOptions.salesHeads.map(v => ({ value: v, label: v })),
+  ], [filterOptions.salesHeads]);
 
   // Apply filters
   const filteredRecords = useMemo(() => {
@@ -220,77 +245,54 @@ export function ClosingARRTable({
     <>
       {/* Filters Row */}
       <div className="flex flex-wrap gap-2 mb-3">
-        <Select value={filterPID} onValueChange={setFilterPID}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Filter PID" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">All PIDs</SelectItem>
-            {filterOptions.pids.map((pid) => (
-              <SelectItem key={pid} value={pid}>{pid}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterBU} onValueChange={setFilterBU}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Filter BU" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">All BUs</SelectItem>
-            {filterOptions.bus.map((bu) => (
-              <SelectItem key={bu} value={bu}>{bu}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterProduct} onValueChange={setFilterProduct}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Filter Product" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">All Products</SelectItem>
-            {filterOptions.products.map((product) => (
-              <SelectItem key={product} value={product}>{product}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Filter Customer" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">All Customers</SelectItem>
-            {filterOptions.customers.map((customer) => (
-              <SelectItem key={customer} value={customer}>{customer}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterSalesRep} onValueChange={setFilterSalesRep}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Filter Sales Rep" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">All Sales Reps</SelectItem>
-            {filterOptions.salesReps.map((rep) => (
-              <SelectItem key={rep} value={rep}>{rep}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterSalesHead} onValueChange={setFilterSalesHead}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Filter Sales Head" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">All Sales Heads</SelectItem>
-            {filterOptions.salesHeads.map((head) => (
-              <SelectItem key={head} value={head}>{head}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={filterPID}
+          onValueChange={(v) => setFilterPID(v || "_all")}
+          options={pidOptions}
+          placeholder="Filter PID"
+          searchPlaceholder="Search PIDs..."
+          className="w-[140px]"
+        />
+        <SearchableSelect
+          value={filterBU}
+          onValueChange={(v) => setFilterBU(v || "_all")}
+          options={buOptions}
+          placeholder="Filter BU"
+          searchPlaceholder="Search BUs..."
+          className="w-[140px]"
+        />
+        <SearchableSelect
+          value={filterProduct}
+          onValueChange={(v) => setFilterProduct(v || "_all")}
+          options={productOptions}
+          placeholder="Filter Product"
+          searchPlaceholder="Search products..."
+          className="w-[140px]"
+        />
+        <SearchableSelect
+          value={filterCustomer}
+          onValueChange={(v) => setFilterCustomer(v || "_all")}
+          options={customerOptions}
+          placeholder="Filter Customer"
+          searchPlaceholder="Search customers..."
+          className="w-[160px]"
+        />
+        <SearchableSelect
+          value={filterSalesRep}
+          onValueChange={(v) => setFilterSalesRep(v || "_all")}
+          options={salesRepOptions}
+          placeholder="Filter Sales Rep"
+          searchPlaceholder="Search reps..."
+          className="w-[160px]"
+        />
+        <SearchableSelect
+          value={filterSalesHead}
+          onValueChange={(v) => setFilterSalesHead(v || "_all")}
+          options={salesHeadOptions}
+          placeholder="Filter Sales Head"
+          searchPlaceholder="Search heads..."
+          className="w-[160px]"
+        />
 
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-10">

@@ -43,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -276,21 +277,16 @@ export function PayoutAdjustments({ payoutRunId, monthYear, runStatus }: PayoutA
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Employee</Label>
-              <Select 
-                value={selectedEmployee?.employeeId || ''} 
+              <SearchableSelect
+                value={selectedEmployee?.employeeId || ''}
                 onValueChange={(val) => setSelectedEmployee(employees?.find(e => e.employeeId === val) || null)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees?.map((emp) => (
-                    <SelectItem key={emp.employeeId} value={emp.employeeId}>
-                      {emp.employeeName} ({emp.employeeCode})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={employees?.map((emp) => ({
+                  value: emp.employeeId,
+                  label: `${emp.employeeName} (${emp.employeeCode})`,
+                })) || []}
+                placeholder="Select employee"
+                searchPlaceholder="Search employees..."
+              />
             </div>
             
             {selectedEmployee && (

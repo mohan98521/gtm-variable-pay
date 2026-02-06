@@ -3,13 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
   TableBody,
@@ -247,19 +241,17 @@ export function PerformanceTargetsManagement() {
                 className="pl-9"
               />
             </div>
-            <Select value={metricFilter} onValueChange={setMetricFilter}>
-              <SelectTrigger className="w-full sm:w-[220px]">
-                <SelectValue placeholder="Filter by metric" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Metrics</SelectItem>
-                {metricTypes?.map((metric) => (
-                  <SelectItem key={metric} value={metric}>
-                    {metric}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={metricFilter}
+              onValueChange={setMetricFilter}
+              options={[
+                { value: "all", label: "All Metrics" },
+                ...(metricTypes?.map((metric) => ({ value: metric, label: metric })) || []),
+              ]}
+              placeholder="Filter by metric"
+              searchPlaceholder="Search metrics..."
+              className="w-full sm:w-[220px]"
+            />
           </div>
 
           {/* Table */}
