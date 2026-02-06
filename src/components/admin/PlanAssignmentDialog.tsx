@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
@@ -266,35 +267,25 @@ export function PlanAssignmentDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Compensation Plan</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      value={field.value}
-                      disabled={isEditing}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a plan" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {plansLoading ? (
-                          <SelectItem value="loading" disabled>Loading plans...</SelectItem>
-                        ) : plans.length === 0 ? (
-                          <SelectItem value="none" disabled>No plans for {selectedYear}</SelectItem>
-                        ) : (
-                          plans.map((plan) => (
-                            <SelectItem key={plan.id} value={plan.id}>
-                              <div className="flex items-center gap-2">
-                                {plan.name}
-                                {plan.is_active && (
-                                  <Badge variant="outline" className="text-xs">Active</Badge>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={
+                          plansLoading
+                            ? [{ value: "loading", label: "Loading plans..." }]
+                            : plans.length === 0
+                            ? [{ value: "none", label: `No plans for ${selectedYear}` }]
+                            : plans.map((plan) => ({
+                                value: plan.id,
+                                label: `${plan.name}${plan.is_active ? " (Active)" : ""}`,
+                              }))
+                        }
+                        placeholder="Select a plan"
+                        searchPlaceholder="Search plans..."
+                        disabled={isEditing}
+                      />
+                    </FormControl>
                     <FormDescription>
                       Showing plans for fiscal year {selectedYear}
                     </FormDescription>

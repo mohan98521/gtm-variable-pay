@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
   TableBody,
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { PARTICIPANT_ROLES } from "@/hooks/useDeals";
 import { Plus, Trash2 } from "lucide-react";
+import { useMemo } from "react";
 
 interface Employee {
   id: string;
@@ -61,6 +63,14 @@ export function DealParticipantsEditor({
   const removeParticipant = (index: number) => {
     onChange(participants.filter((_, i) => i !== index));
   };
+
+  const employeeOptions = useMemo(() => [
+    { value: "_none", label: "Select employee" },
+    ...employees.filter(emp => emp.employee_id).map((employee) => ({
+      value: employee.employee_id,
+      label: `${employee.full_name} (${employee.employee_id})`,
+    })),
+  ], [employees]);
 
   return (
     <div className="space-y-3">
@@ -115,27 +125,15 @@ export function DealParticipantsEditor({
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <Select
+                    <SearchableSelect
                       value={participant.employee_id || "_none"}
                       onValueChange={(value) =>
                         updateParticipant(index, "employee_id", value === "_none" ? "" : value)
                       }
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select employee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">Select employee</SelectItem>
-                        {employees.filter(emp => emp.employee_id).map((employee) => (
-                          <SelectItem
-                            key={employee.employee_id}
-                            value={employee.employee_id}
-                          >
-                            {employee.full_name} ({employee.employee_id})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={employeeOptions}
+                      placeholder="Select employee"
+                      searchPlaceholder="Search employees..."
+                    />
                   </TableCell>
                   <TableCell>
                     <Input

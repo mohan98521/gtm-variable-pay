@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
@@ -418,20 +419,18 @@ export function EmployeeFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Function</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select sales function" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {SALES_FUNCTIONS.map((func) => (
-                            <SelectItem key={func} value={func}>
-                              {func}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || ""}
+                          onValueChange={field.onChange}
+                          options={SALES_FUNCTIONS.map((func) => ({
+                            value: func,
+                            label: func,
+                          }))}
+                          placeholder="Select sales function"
+                          searchPlaceholder="Search functions..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

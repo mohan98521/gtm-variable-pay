@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -173,22 +174,17 @@ export function PerformanceTargetFormDialog({
           {/* Employee Select */}
           <div className="space-y-2">
             <Label htmlFor="employee">Employee</Label>
-            <Select
+            <SearchableSelect
               value={employeeId}
               onValueChange={setEmployeeId}
+              options={employees?.map((emp) => ({
+                value: emp.employee_id,
+                label: `${emp.full_name} (${emp.employee_id})`,
+              })) || []}
+              placeholder="Select an employee"
+              searchPlaceholder="Search employees..."
               disabled={isEditing}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select an employee" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees?.map((emp) => (
-                  <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                    {emp.full_name} ({emp.employee_id})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
 
           {/* Metric Type Select */}

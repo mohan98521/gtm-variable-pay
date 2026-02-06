@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import { DealParticipantsEditor } from "./DealParticipantsEditor";
@@ -701,21 +702,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Rep</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -726,21 +727,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Head</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -751,21 +752,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Engineering</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -776,21 +777,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Engineering Head</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -801,21 +802,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Product Specialist</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -826,21 +827,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Product Specialist Head</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -851,21 +852,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Solution Manager</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -876,21 +877,21 @@ export function DealFormDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Solution Manager Head</FormLabel>
-                      <Select onValueChange={(v) => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="_none">None</SelectItem>
-                          {employees.filter(emp => emp.employee_id).map((emp) => (
-                            <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                              {emp.full_name} ({emp.employee_id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || "_none"}
+                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                          options={[
+                            { value: "_none", label: "None" },
+                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                              value: emp.employee_id,
+                              label: `${emp.full_name} (${emp.employee_id})`,
+                            })),
+                          ]}
+                          placeholder="Select employee"
+                          searchPlaceholder="Search employees..."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

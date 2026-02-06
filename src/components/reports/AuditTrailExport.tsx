@@ -7,7 +7,7 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, Loader2, Search, FileText, AlertTriangle } from "lucide-react";
@@ -186,27 +186,25 @@ export function AuditTrailExport() {
                 />
               </div>
             </div>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select month" />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map(m => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Categories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {AUDIT_CATEGORIES.map(c => (
-                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={selectedMonth}
+              onValueChange={setSelectedMonth}
+              options={months.map(m => ({ value: m.value, label: m.label }))}
+              placeholder="Select month"
+              searchPlaceholder="Search months..."
+              className="w-[180px]"
+            />
+            <SearchableSelect
+              value={selectedCategory}
+              onValueChange={setSelectedCategory}
+              options={[
+                { value: "all", label: "All Categories" },
+                ...AUDIT_CATEGORIES.map(c => ({ value: c.value, label: c.label })),
+              ]}
+              placeholder="All Categories"
+              searchPlaceholder="Search categories..."
+              className="w-[180px]"
+            />
           </div>
         </CardContent>
       </Card>

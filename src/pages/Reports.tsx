@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -528,16 +528,14 @@ export default function Reports() {
                     />
                   </div>
                 </div>
-                <Select value={salesFunctionFilter} onValueChange={setSalesFunctionFilter}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Filter by Sales Function" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SALES_FUNCTIONS.map((sf) => (
-                      <SelectItem key={sf} value={sf}>{sf}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={salesFunctionFilter}
+                  onValueChange={setSalesFunctionFilter}
+                  options={SALES_FUNCTIONS.map((sf) => ({ value: sf, label: sf }))}
+                  placeholder="Filter by Sales Function"
+                  searchPlaceholder="Search functions..."
+                  className="w-[200px]"
+                />
               </div>
             </CardContent>
           </Card>
