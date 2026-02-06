@@ -94,8 +94,8 @@ export function CurrencyManagement() {
 
   const handleSubmitAdd = () => {
     const code = formData.code.trim().toUpperCase();
-    if (!code || !formData.name.trim() || !formData.symbol.trim()) {
-      toast.error("All fields are required");
+    if (!code || !formData.name.trim()) {
+      toast.error("Code and Name are required");
       return;
     }
     if (code.length < 2 || code.length > 5) {
@@ -103,7 +103,7 @@ export function CurrencyManagement() {
       return;
     }
     createCurrency(
-      { code, name: formData.name, symbol: formData.symbol },
+      { code, name: formData.name, symbol: formData.symbol.trim() || undefined },
       { onSuccess: () => { setShowAddDialog(false); resetForm(); } }
     );
   };
@@ -274,14 +274,14 @@ export function CurrencyManagement() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Symbol *</Label>
+              <Label>Symbol</Label>
               <Input
                 placeholder="e.g., ¥"
                 value={formData.symbol}
                 onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                Display symbol used in reports (e.g., $, ₹, €, or the code itself)
+                Optional. If left blank, the currency code will be used as the display symbol.
               </p>
             </div>
           </div>
