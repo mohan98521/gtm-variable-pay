@@ -9,20 +9,10 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parse } from "date-fns";
 
-// Currency symbols map
-export const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  INR: '₹',
-  AED: 'د.إ',
-  NGN: '₦',
-  KES: 'KSh',
-  SAR: '﷼',
-  SGD: 'S$',
-  IDR: 'Rp',
-  LBP: 'ل.ل',
-  MYR: 'RM',
-  PHP: '₱',
-};
+// Currency symbols are now fetched dynamically.
+// This map is kept as a static fallback for server-side/non-React contexts.
+// The useCurrencies hook should be preferred in components.
+export const CURRENCY_SYMBOLS: Record<string, string> = {};
 
 export interface VariablePayItem {
   metricName: string;
@@ -93,8 +83,9 @@ export interface PayoutStatementData {
 }
 
 // Helper to format currency with Indian-style grouping for INR
-export function formatLocalCurrency(amount: number, currency: string): string {
-  const symbol = CURRENCY_SYMBOLS[currency] || currency + ' ';
+// Accepts an optional symbolOverride for dynamic symbol from useCurrencies hook
+export function formatLocalCurrency(amount: number, currency: string, symbolOverride?: string): string {
+  const symbol = symbolOverride || CURRENCY_SYMBOLS[currency] || currency + ' ';
   
   if (currency === 'INR') {
     // Indian numbering: last 3 digits, then pairs of 2

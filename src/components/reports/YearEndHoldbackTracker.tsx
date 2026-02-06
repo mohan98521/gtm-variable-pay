@@ -13,6 +13,7 @@ import { useYearEndHoldbackSummary, useEmployeeHoldbacks, useMonthlyHoldbackAccr
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { exportToXLSX } from "@/lib/xlsxExport";
 import { format } from "date-fns";
+import { useCurrencies } from "@/hooks/useCurrencies";
 
 export function YearEndHoldbackTracker() {
   const { selectedYear } = useFiscalYear();
@@ -21,6 +22,7 @@ export function YearEndHoldbackTracker() {
   const { data: monthlyData, isLoading: monthlyLoading } = useMonthlyHoldbackAccrual(selectedYear);
 
   const isLoading = summaryLoading || empLoading || monthlyLoading;
+  const { getCurrencySymbol } = useCurrencies();
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -31,12 +33,7 @@ export function YearEndHoldbackTracker() {
     }).format(value);
   };
 
-  const getCurrencySymbol = (code: string) => {
-    const symbols: Record<string, string> = {
-      USD: '$', INR: '₹', AED: 'AED ', EUR: '€', GBP: '£', SGD: 'S$', MYR: 'RM ',
-    };
-    return symbols[code] || `${code} `;
-  };
+  // getCurrencySymbol is now provided by useCurrencies hook
 
   const handleExportEmployees = () => {
     if (!employeeData) return;

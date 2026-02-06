@@ -38,7 +38,6 @@ import {
   useAvailablePayoutMonths,
   formatLocalCurrency,
   formatDualCurrency,
-  CURRENCY_SYMBOLS,
   type PayoutStatementData,
   type VariablePayItem,
   type CommissionItem,

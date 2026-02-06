@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { exportToXLSX } from "@/lib/xlsxExport";
 import { format } from "date-fns";
+import { useCurrencies } from "@/hooks/useCurrencies";
 
 interface CurrencyData {
   currency: string;
@@ -31,6 +32,7 @@ interface CurrencyData {
 export function CurrencyBreakdown() {
   const { selectedYear } = useFiscalYear();
   const [selectedMonth, setSelectedMonth] = useState<string>(`${selectedYear}-01`);
+  const { getCurrencySymbol } = useCurrencies();
 
   const { data, isLoading } = useQuery({
     queryKey: ["currency_breakdown", selectedMonth],
@@ -141,12 +143,7 @@ export function CurrencyBreakdown() {
     }).format(value).replace('$', currency === 'USD' ? '$' : '');
   };
 
-  const getCurrencySymbol = (code: string) => {
-    const symbols: Record<string, string> = {
-      USD: '$', INR: '₹', AED: 'AED ', EUR: '€', GBP: '£', SGD: 'S$', MYR: 'RM ',
-    };
-    return symbols[code] || `${code} `;
-  };
+  // getCurrencySymbol is now provided by useCurrencies hook
 
   const handleExport = () => {
     if (!data) return;
