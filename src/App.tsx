@@ -29,7 +29,14 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/team" element={<TeamView />} />
+            <Route
+              path="/team"
+              element={
+                <ProtectedRoute permissionKey="page:team_view">
+                  <TeamView />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin"
               element={
