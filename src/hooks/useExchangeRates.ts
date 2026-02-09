@@ -76,7 +76,7 @@ export function useExchangeRateByMonth(currencyCode: string | undefined, monthYe
         .from("exchange_rates")
         .select("*")
         .eq("currency_code", currencyCode)
-        .eq("month_year", monthYear)
+        .eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)
         .maybeSingle();
 
       if (error) throw error;
