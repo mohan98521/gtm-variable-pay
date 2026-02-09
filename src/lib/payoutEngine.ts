@@ -165,7 +165,7 @@ export async function validatePayoutRunPrerequisites(
     const { data: rates } = await supabase
       .from('exchange_rates')
       .select('currency_code')
-    .eq('month_year', monthYear + '-01')
+      .eq('month_year', monthYear.length === 7 ? monthYear + '-01' : monthYear)
     .in('currency_code', currencies);
     
     const existingCurrencies = new Set(rates?.map(r => r.currency_code) || []);

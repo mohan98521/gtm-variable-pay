@@ -111,7 +111,7 @@ export function PayoutRunManagement() {
   });
   
   // Filter out months that already have a payout run
-  const existingMonths = new Set(payoutRuns?.map(r => r.month_year) || []);
+  const existingMonths = new Set(payoutRuns?.map(r => r.month_year?.substring(0, 7)) || []);
   const availableMonths = monthOptions.filter(m => !existingMonths.has(m.value));
   
   const handleOpenCreateDialog = () => {
