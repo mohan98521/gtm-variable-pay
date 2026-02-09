@@ -201,7 +201,7 @@ async function fetchPayoutStatementData(
       .from("exchange_rates")
       .select("rate_to_usd")
       .eq("currency_code", localCurrency)
-      .eq("month_year", monthYear)
+      .eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)
       .maybeSingle();
     
     if (rateData) {
@@ -226,7 +226,7 @@ async function fetchPayoutStatementData(
   const { data: payoutRun } = await supabase
     .from("payout_runs")
     .select("id, run_status")
-    .eq("month_year", monthYear)
+    .eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)
     .in("run_status", ["approved", "finalized", "paid"])
     .maybeSingle();
 

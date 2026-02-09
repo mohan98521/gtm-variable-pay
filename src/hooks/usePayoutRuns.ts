@@ -55,8 +55,8 @@ export function usePayoutRuns(year?: number) {
       
       if (year) {
         query = query
-          .gte("month_year", `${year}-01`)
-          .lte("month_year", `${year}-12`);
+        .gte("month_year", `${year}-01-01`)
+          .lte("month_year", `${year}-12-01`);
       }
       
       const { data, error } = await query;
@@ -117,7 +117,7 @@ export function useCreatePayoutRun() {
       const { data: existing } = await supabase
         .from("payout_runs")
         .select("id")
-        .eq("month_year", monthYear)
+        .eq("month_year", monthYear + "-01")
         .maybeSingle();
       
       if (existing) {
@@ -127,7 +127,7 @@ export function useCreatePayoutRun() {
       const { data, error } = await supabase
         .from("payout_runs")
         .insert({
-          month_year: monthYear,
+          month_year: monthYear + "-01",
           run_status: "draft",
           notes,
         })

@@ -121,7 +121,7 @@ export async function validatePayoutRunPrerequisites(
   const { data: existingRun } = await supabase
     .from('payout_runs')
     .select('id, run_status, is_locked')
-    .eq('month_year', monthYear)
+    .eq('month_year', monthYear.length === 7 ? monthYear + '-01' : monthYear)
     .maybeSingle();
   
   if (existingRun?.is_locked) {
