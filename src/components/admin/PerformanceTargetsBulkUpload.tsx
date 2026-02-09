@@ -24,7 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCreatePerformanceTargets, QuarterlyTargetInput } from "@/hooks/usePerformanceTargets";
 import { toast } from "@/hooks/use-toast";
-import { downloadCSV } from "@/lib/csvExport";
+import { generateCSV, downloadCSV } from "@/lib/csvExport";
 
 interface PerformanceTargetsBulkUploadProps {
   open: boolean;
@@ -282,10 +282,28 @@ EMP002,Closing ARR,100000,125000,125000,150000`;
                   {validCount} valid
                 </Badge>
                 {invalidCount > 0 && (
-                  <Badge variant="destructive">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    {invalidCount} invalid
-                  </Badge>
+                  <>
+                    <Badge variant="destructive">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      {invalidCount} invalid
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const invalidRows = parsedData.filter((r) => !r.isValid);
+                        const csv = generateCSV(invalidRows, [
+                          { key: "employee_id", header: "Employee ID" },
+                          { key: "metric_type", header: "Metric Type" },
+                          { key: "errors", header: "Errors", getValue: (row) => row.errors.join("; ") },
+                        ]);
+                        downloadCSV(csv, `performance_targets_upload_errors_${new Date().toISOString().split("T")[0]}.csv`);
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Errors
+                    </Button>
+                  </>
                 )}
               </div>
 

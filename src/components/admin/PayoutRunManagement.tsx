@@ -68,8 +68,10 @@ import {
   AlertCircle,
   Clock,
   Lock,
-  Play
+  Play,
+  Download
 } from "lucide-react";
+import { generateCSV, downloadCSV } from "@/lib/csvExport";
 import { PayoutRunDetail } from "./PayoutRunDetail";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; icon: any }> = {
@@ -427,6 +429,38 @@ export function PayoutRunManagement() {
                       All prerequisites validated successfully
                     </div>
                   </div>
+                )}
+                {(validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const rows = [
+                        ...validationResult.errors.map((e: any) => ({
+                          type: "Error",
+                          category: e.category || "",
+                          message: e.message,
+                          details: e.details?.join("; ") || "",
+                        })),
+                        ...validationResult.warnings.map((w: any) => ({
+                          type: "Warning",
+                          category: w.category || "",
+                          message: w.message,
+                          details: w.details?.join("; ") || "",
+                        })),
+                      ];
+                      const csv = generateCSV(rows, [
+                        { key: "type", header: "Type" },
+                        { key: "category", header: "Category" },
+                        { key: "message", header: "Message" },
+                        { key: "details", header: "Details" },
+                      ]);
+                      downloadCSV(csv, `payout_validation_${selectedMonth}.csv`);
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Errors & Warnings
+                  </Button>
                 )}
               </div>
             )}

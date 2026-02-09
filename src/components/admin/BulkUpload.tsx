@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Upload, Download, FileSpreadsheet, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { generateCSV, downloadCSV } from "@/lib/csvExport";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -416,7 +417,30 @@ export function BulkUpload() {
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-sm font-medium text-destructive mb-2">Errors ({result.errors.length}):</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-destructive">Errors ({result.errors.length}):</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const errorData = result.errors.map((err) => {
+                            const match = err.match(/^Row (\d+): (.+)$/);
+                            return {
+                              row: match ? match[1] : "",
+                              message: match ? match[2] : err,
+                            };
+                          });
+                          const csv = generateCSV(errorData, [
+                            { key: "row", header: "Row Number" },
+                            { key: "message", header: "Error Message" },
+                          ]);
+                          downloadCSV(csv, `employee_upload_errors_${new Date().toISOString().split("T")[0]}.csv`);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Errors
+                      </Button>
+                    </div>
                     <div className="max-h-32 overflow-y-auto text-xs space-y-1">
                       {result.errors.map((err, i) => (
                         <p key={i} className="text-destructive">{err}</p>
