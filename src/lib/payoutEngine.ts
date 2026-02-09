@@ -298,7 +298,7 @@ async function calculateEmployeeVariablePay(
     .from('deals')
     .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
     .eq('sales_rep_employee_id', ctx.employee.employee_id)
-    .gte('month_year', `${ctx.fiscalYear}-01`)
+    .gte('month_year', `${ctx.fiscalYear}-01-01`)
     .lte('month_year', ctx.monthYear);
   
   const validDeals: DealForAttribution[] = (deals || []).map(d => ({
