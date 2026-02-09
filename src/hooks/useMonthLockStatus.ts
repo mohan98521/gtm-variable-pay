@@ -28,7 +28,7 @@ export function useMonthLockStatus(monthYear: string | undefined): MonthLockResu
       const { data, error } = await supabase
         .from("payout_runs")
         .select("id, month_year, run_status, is_locked, finalized_at")
-        .eq("month_year", monthYear)
+        .eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
