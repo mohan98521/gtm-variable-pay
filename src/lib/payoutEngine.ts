@@ -165,8 +165,8 @@ export async function validatePayoutRunPrerequisites(
     const { data: rates } = await supabase
       .from('exchange_rates')
       .select('currency_code')
-      .eq('month_year', monthYear)
-      .in('currency_code', currencies);
+    .eq('month_year', monthYear + '-01')
+    .in('currency_code', currencies);
     
     const existingCurrencies = new Set(rates?.map(r => r.currency_code) || []);
     const missingRates = currencies.filter(c => !existingCurrencies.has(c));
@@ -220,7 +220,7 @@ async function getMarketExchangeRate(
     .from('exchange_rates')
     .select('rate_to_usd')
     .eq('currency_code', currencyCode)
-    .eq('month_year', monthYear)
+    .eq('month_year', monthYear + '-01')
     .maybeSingle();
   
   return data?.rate_to_usd ?? 1;
