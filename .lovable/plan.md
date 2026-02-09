@@ -1,47 +1,33 @@
 
 
-# Plan: Fix "invalid input syntax for type date" Error on Create Payout Run
+# Plan: Fix Remaining "invalid input syntax for type date" Issues
 
 ## Problem
 
-When clicking "Create Run", the code inserts `month_year: "2026-01"` into the `payout_runs` table, but the column is a `date` type requiring `"2026-01-01"`. This is the same date format bug we fixed earlier in the exchange rate queries, but it also exists in the payout run code.
+Two remaining queries pass incomplete date strings to `month_year` columns (which are PostgreSQL `date` type):
 
-## Fix
+1. **Payout Engine YTD deals query** -- will crash during payout calculation
+2. **Exchange rate by-month hook** -- latent bug if ever called with `YYYY-MM` format
 
-**File: `src/hooks/usePayoutRuns.ts`**
+## Fixes
 
-Two changes in the `useCreatePayoutRun` mutation:
+### File 1: `src/lib/payoutEngine.ts` (line 301)
 
-| Line | Current | Fixed |
-|------|---------|-------|
-| 120 | `.eq("month_year", monthYear)` | `.eq("month_year", monthYear + "-01")` |
-| 130 | `month_year: monthYear` | `month_year: monthYear + "-01"` |
+| Current | Fixed |
+|---------|-------|
+| `.gte('month_year', \`${ctx.fiscalYear}-01\`)` | `.gte('month_year', \`${ctx.fiscalYear}-01-01\`)` |
 
-Additionally, the year-based filter in `usePayoutRuns` (line 58-59) also uses incomplete dates:
+This is in `calculateEmployeeVariablePay` and will fail when running a payout calculation for any month.
 
-| Line | Current | Fixed |
-|------|---------|-------|
-| 58 | `.gte("month_year", \`${year}-01\`)` | `.gte("month_year", \`${year}-01-01\`)` |
-| 59 | `.lte("month_year", \`${year}-12\`)` | `.lte("month_year", \`${year}-12-01\`)` |
+### File 2: `src/hooks/useExchangeRates.ts` (line 79)
 
-**File: `src/lib/payoutEngine.ts`** (line 124)
+| Current | Fixed |
+|---------|-------|
+| `.eq("month_year", monthYear)` | `.eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)` |
 
-The validation function also queries `payout_runs` with an unformatted month:
-
-| Line | Current | Fixed |
-|------|---------|-------|
-| 124 | `.eq('month_year', monthYear)` | `.eq('month_year', monthYear + '-01')` |
-
-**File: `src/hooks/useMonthLockStatus.ts`** (line 31)
-
-| Line | Current | Fixed |
-|------|---------|-------|
-| 31 | `.eq("month_year", monthYear)` | `.eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)` |
-
-**File: `src/hooks/usePayoutStatement.ts`** (lines 204, 229)
-
-Same fix for exchange rate and payout run lookups used in the statement view.
+Defensive fix in `useExchangeRateByMonth` so it works regardless of whether callers pass `YYYY-MM` or `YYYY-MM-DD`.
 
 ## Scope
 
-5 files, ~8 line changes. No database migrations. No UI changes.
+2 files, 2 line changes. No database or UI changes.
+
