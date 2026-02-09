@@ -198,18 +198,27 @@ export function ExchangeRateManagement() {
 
   const generateTemplate = () => {
     const headers = ["currency_code", "month_year", "rate_to_usd"];
-    const sampleRows = [
-      ["INR", "2026-01", "85.50"],
-      ["AED", "2026-01", "3.67"],
-      ["KES", "2026-01", "130.00"],
-    ];
+    const templateMonth = format(new Date(), "yyyy-MM");
     
-    const csvContent = [headers.join(","), ...sampleRows.map(row => row.join(","))].join("\n");
+    // Use all non-USD employee currencies to populate template rows
+    const currenciesToInclude = employeeCurrencies?.length
+      ? employeeCurrencies.sort()
+      : activeCurrencies.filter(c => c.code !== "USD").map(c => c.code);
+    
+    const rows = currenciesToInclude.map(code => {
+      // Pre-fill with existing rate if available
+      const existing = exchangeRates?.find(
+        r => r.currency_code === code && r.month_year.startsWith(templateMonth)
+      );
+      return [code, templateMonth, existing ? existing.rate_to_usd.toString() : ""];
+    });
+    
+    const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "exchange_rates_template.csv";
+    link.download = `exchange_rates_template_${templateMonth}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     toast.success("Template downloaded");
