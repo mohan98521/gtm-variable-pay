@@ -1,33 +1,36 @@
 
 
-# Plan: Fix Remaining "invalid input syntax for type date" Issues
+# Plan: Fix Remaining Payout Run Date Format Issues
 
-## Problem
+## Root Cause
 
-Two remaining queries pass incomplete date strings to `month_year` columns (which are PostgreSQL `date` type):
+The error you saw was likely from before the latest fixes were deployed. The exchange rate data and query are now correct. However, I found two related bugs that should be fixed:
 
-1. **Payout Engine YTD deals query** -- will crash during payout calculation
-2. **Exchange rate by-month hook** -- latent bug if ever called with `YYYY-MM` format
+## Bug 1: Validation query lacks defensive date formatting (line 168)
 
-## Fixes
+Line 168 of `payoutEngine.ts` always appends `-01` without checking the input length. If `monthYear` is ever passed as `"2026-01-01"`, it would produce the invalid date `"2026-01-01-01"`.
 
-### File 1: `src/lib/payoutEngine.ts` (line 301)
+**Fix**: Use the same defensive pattern as line 124:
+```
+.eq('month_year', monthYear.length === 7 ? monthYear + '-01' : monthYear)
+```
 
-| Current | Fixed |
-|---------|-------|
-| `.gte('month_year', \`${ctx.fiscalYear}-01\`)` | `.gte('month_year', \`${ctx.fiscalYear}-01-01\`)` |
+## Bug 2: Available months not filtering correctly (line 114)
 
-This is in `calculateEmployeeVariablePay` and will fail when running a payout calculation for any month.
+In `PayoutRunManagement.tsx`, the `existingMonths` Set contains full dates from the database (e.g., `"2026-01-01"`), but `monthOptions` values are `"2026-01"`. So `existingMonths.has("2026-01")` is always `false`, meaning months with existing payout runs still show as available in the Create dialog.
 
-### File 2: `src/hooks/useExchangeRates.ts` (line 79)
+**Fix**: Normalize the database values when building the Set:
+```
+const existingMonths = new Set(
+  payoutRuns?.map(r => r.month_year?.substring(0, 7)) || []
+);
+```
 
-| Current | Fixed |
-|---------|-------|
-| `.eq("month_year", monthYear)` | `.eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)` |
+## Files Changed
 
-Defensive fix in `useExchangeRateByMonth` so it works regardless of whether callers pass `YYYY-MM` or `YYYY-MM-DD`.
-
-## Scope
+| File | Change |
+|------|--------|
+| `src/lib/payoutEngine.ts` (line 168) | Add defensive date length check |
+| `src/components/admin/PayoutRunManagement.tsx` (line 114) | Normalize `month_year` to `YYYY-MM` for comparison |
 
 2 files, 2 line changes. No database or UI changes.
-
