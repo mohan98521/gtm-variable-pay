@@ -19,6 +19,12 @@ import {
 } from "./dealVariablePayAttribution";
 import { calculateDealCommission, calculateTotalCommission, CommissionCalculation } from "./commissions";
 
+// ============= HELPERS =============
+
+function ensureFullDate(monthYear: string): string {
+  return monthYear.length === 7 ? monthYear + '-01' : monthYear;
+}
+
 // ============= TYPE DEFINITIONS =============
 
 export interface Employee {
@@ -184,8 +190,8 @@ export async function validatePayoutRunPrerequisites(
   const { data: targets } = await supabase
     .from('user_targets')
     .select('user_id')
-    .lte('effective_start_date', `${monthYear}-01`)
-    .gte('effective_end_date', `${monthYear}-01`);
+    .lte('effective_start_date', ensureFullDate(monthYear))
+    .gte('effective_end_date', ensureFullDate(monthYear));
   
   const employeeIdsWithTargets = new Set(targets?.map(t => t.user_id) || []);
   const employeesWithoutTargets = employees.filter(e => !employeeIdsWithTargets.has(e.id));
@@ -220,7 +226,7 @@ async function getMarketExchangeRate(
     .from('exchange_rates')
     .select('rate_to_usd')
     .eq('currency_code', currencyCode)
-    .eq('month_year', monthYear + '-01')
+    .eq('month_year', ensureFullDate(monthYear))
     .maybeSingle();
   
   return data?.rate_to_usd ?? 1;
@@ -320,7 +326,7 @@ async function calculateEmployeeVariablePay(
     targetUsd,
     bonusAllocationUsd,
     ctx.fiscalYear,
-    `${ctx.monthYear}-01`
+    ensureFullDate(ctx.monthYear)
   );
   
   return {
@@ -498,8 +504,8 @@ export async function calculateMonthlyPayout(
       comp_plans (id, name)
     `)
     .eq('user_id', employee.id)
-    .lte('effective_start_date', `${monthYear}-01`)
-    .gte('effective_end_date', `${monthYear}-01`)
+    .lte('effective_start_date', ensureFullDate(monthYear))
+    .gte('effective_end_date', ensureFullDate(monthYear))
     .maybeSingle();
   
   if (!target) {
@@ -862,7 +868,7 @@ async function persistPayoutResults(
       deal_id: attr.dealId,
       employee_id: emp.employeeId,
       fiscal_year: fiscalYear,
-      calculation_month: `${monthYear}-01`,
+      calculation_month: ensureFullDate(monthYear),
       metric_name: attr.metricName,
       deal_value_usd: attr.dealValueUsd,
       proportion_pct: attr.proportionPct,
