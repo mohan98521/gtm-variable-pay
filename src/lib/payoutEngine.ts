@@ -274,68 +274,129 @@ async function calculateEmployeeVariablePay(
   attributions: DealVariablePayAttribution[];
   vpContext: AggregateVariablePayContext | null;
 }> {
-  // Find the New Software ARR metric
-  const arrMetric = ctx.metrics.find(m => 
-    m.metric_name.toLowerCase().includes('new software') || 
-    m.metric_name.toLowerCase().includes('new bookings')
-  );
-  
-  if (!arrMetric) {
+  if (ctx.metrics.length === 0) {
     return { totalVpUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, attributions: [], vpContext: null };
   }
-  
-  // Get employee's target for this metric
-  const { data: perfTarget } = await supabase
-    .from('performance_targets')
-    .select('target_value_usd')
-    .eq('employee_id', ctx.employee.employee_id)
-    .eq('effective_year', ctx.fiscalYear)
-    .eq('metric_type', 'new_software_arr')
-    .maybeSingle();
-  
-  const targetUsd = perfTarget?.target_value_usd ?? 0;
-  
-  if (targetUsd === 0) {
-    return { totalVpUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, attributions: [], vpContext: null };
+
+  const empId = ctx.employee.employee_id;
+  const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`;
+
+  let totalVpUsd = 0;
+  let totalBookingUsd = 0;
+  let totalCollectionUsd = 0;
+  let totalYearEndUsd = 0;
+  let allAttributions: DealVariablePayAttribution[] = [];
+  let lastContext: AggregateVariablePayContext | null = null;
+
+  // Iterate over ALL plan metrics (e.g., "New Software Booking ARR" + "Closing ARR")
+  for (const metric of ctx.metrics) {
+    // Get employee's target for this metric
+    const { data: perfTarget } = await supabase
+      .from('performance_targets')
+      .select('target_value_usd')
+      .eq('employee_id', empId)
+      .eq('effective_year', ctx.fiscalYear)
+      .eq('metric_type', metric.metric_name)
+      .maybeSingle();
+
+    const targetUsd = perfTarget?.target_value_usd ?? 0;
+    if (targetUsd === 0) continue;
+
+    const bonusAllocationUsd = (ctx.targetBonusUsd * metric.weightage_percent) / 100;
+
+    // Determine actuals based on metric type
+    const isClosingArr = metric.metric_name.toLowerCase().includes('closing arr');
+
+    if (isClosingArr) {
+      // Closing ARR: fetch from closing_arr_actuals table (latest month snapshot, eligible only)
+      const { data: closingArr } = await supabase
+        .from('closing_arr_actuals')
+        .select('month_year, closing_arr, end_date')
+        .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId}`)
+        .gte('month_year', `${ctx.fiscalYear}-01-01`)
+        .lte('month_year', ctx.monthYear)
+        .gt('end_date', `${ctx.fiscalYear}-12-31`);
+
+      // Group by month and use the latest month snapshot
+      const closingByMonth = new Map<string, number>();
+      (closingArr || []).forEach(arr => {
+        const monthKey = arr.month_year?.substring(0, 7) || '';
+        closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + (arr.closing_arr || 0));
+      });
+
+      const sortedMonths = Array.from(closingByMonth.keys()).sort();
+      const latestMonth = sortedMonths[sortedMonths.length - 1];
+      const totalActualUsd = latestMonth ? closingByMonth.get(latestMonth) || 0 : 0;
+
+      if (totalActualUsd === 0) continue;
+
+      // Use the aggregate VP calculation (no per-deal attribution for Closing ARR)
+      const { calculateAggregateVariablePay } = await import('./dealVariablePayAttribution');
+      const vpCalc = calculateAggregateVariablePay(totalActualUsd, targetUsd, bonusAllocationUsd, metric);
+
+      totalVpUsd += vpCalc.totalVariablePay;
+      // Apply payout splits from metric config
+      const bookingPct = metric.payout_on_booking_pct ?? 70;
+      const collectionPct = metric.payout_on_collection_pct ?? 25;
+      const yearEndPct = metric.payout_on_year_end_pct ?? 5;
+      totalBookingUsd += vpCalc.totalVariablePay * (bookingPct / 100);
+      totalCollectionUsd += vpCalc.totalVariablePay * (collectionPct / 100);
+      totalYearEndUsd += vpCalc.totalVariablePay * (yearEndPct / 100);
+
+      lastContext = {
+        totalActualUsd,
+        targetUsd,
+        achievementPct: Math.round(vpCalc.achievementPct * 100) / 100,
+        multiplier: vpCalc.multiplier,
+        bonusAllocationUsd,
+        totalVariablePayUsd: Math.round(vpCalc.totalVariablePay * 100) / 100,
+        metricName: metric.metric_name,
+        fiscalYear: ctx.fiscalYear,
+        calculationMonth: ensureFullDate(ctx.monthYear),
+      };
+    } else {
+      // New Software Booking ARR (or any deal-based metric): fetch from deals table
+      const { data: deals } = await supabase
+        .from('deals')
+        .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
+        .or(participantOrFilter)
+        .gte('month_year', `${ctx.fiscalYear}-01-01`)
+        .lte('month_year', ctx.monthYear);
+
+      const validDeals: DealForAttribution[] = (deals || []).map(d => ({
+        id: d.id,
+        new_software_booking_arr_usd: d.new_software_booking_arr_usd,
+        month_year: d.month_year,
+        project_id: d.project_id,
+        customer_name: d.customer_name,
+      }));
+
+      const result = calculateDealVariablePayAttributions(
+        validDeals,
+        ctx.employee.id,
+        metric,
+        targetUsd,
+        bonusAllocationUsd,
+        ctx.fiscalYear,
+        ensureFullDate(ctx.monthYear)
+      );
+
+      totalVpUsd += result.context.totalVariablePayUsd;
+      totalBookingUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnBookingUsd, 0);
+      totalCollectionUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnCollectionUsd, 0);
+      totalYearEndUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnYearEndUsd, 0);
+      allAttributions = allAttributions.concat(result.attributions);
+      lastContext = result.context;
+    }
   }
-  
-  // Get YTD deals for this employee
-  const { data: deals } = await supabase
-    .from('deals')
-    .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
-    .eq('sales_rep_employee_id', ctx.employee.employee_id)
-    .gte('month_year', `${ctx.fiscalYear}-01-01`)
-    .lte('month_year', ctx.monthYear);
-  
-  const validDeals: DealForAttribution[] = (deals || []).map(d => ({
-    id: d.id,
-    new_software_booking_arr_usd: d.new_software_booking_arr_usd,
-    month_year: d.month_year,
-    project_id: d.project_id,
-    customer_name: d.customer_name,
-  }));
-  
-  // Calculate bonus allocation for this metric
-  const bonusAllocationUsd = (ctx.targetBonusUsd * arrMetric.weightage_percent) / 100;
-  
-  // Calculate deal attributions
-  const result = calculateDealVariablePayAttributions(
-    validDeals,
-    ctx.employee.id,
-    arrMetric,
-    targetUsd,
-    bonusAllocationUsd,
-    ctx.fiscalYear,
-    ensureFullDate(ctx.monthYear)
-  );
-  
+
   return {
-    totalVpUsd: result.context.totalVariablePayUsd,
-    bookingUsd: result.attributions.reduce((sum, a) => sum + a.payoutOnBookingUsd, 0),
-    collectionUsd: result.attributions.reduce((sum, a) => sum + a.payoutOnCollectionUsd, 0),
-    yearEndUsd: result.attributions.reduce((sum, a) => sum + a.payoutOnYearEndUsd, 0),
-    attributions: result.attributions,
-    vpContext: result.context,
+    totalVpUsd,
+    bookingUsd: totalBookingUsd,
+    collectionUsd: totalCollectionUsd,
+    yearEndUsd: totalYearEndUsd,
+    attributions: allAttributions,
+    vpContext: lastContext,
   };
 }
 
@@ -355,11 +416,12 @@ async function calculateEmployeeCommissions(
     return { totalCommUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, calculations: [] };
   }
   
-  // Get deals for this month that qualify for commissions
+  // Get deals for this month that qualify for commissions (all 8 participant roles)
+  const empId = ctx.employee.employee_id;
   const { data: deals } = await supabase
     .from('deals')
     .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd')
-    .eq('sales_rep_employee_id', ctx.employee.employee_id)
+    .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`)
     .eq('month_year', ctx.monthYear);
   
   const calculations: CommissionCalculation[] = [];
