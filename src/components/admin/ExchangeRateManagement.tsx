@@ -91,6 +91,7 @@ export function ExchangeRateManagement() {
   const [deletingRate, setDeletingRate] = useState<ExchangeRate | null>(null);
   const [filterCurrency, setFilterCurrency] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>(new Date().getFullYear().toString());
+  const [templateMonth, setTemplateMonth] = useState(format(new Date(), "yyyy-MM"));
 
   // Form state for add/edit
   const [formData, setFormData] = useState({
@@ -198,7 +199,6 @@ export function ExchangeRateManagement() {
 
   const generateTemplate = () => {
     const headers = ["currency_code", "month_year", "rate_to_usd"];
-    const templateMonth = format(new Date(), "yyyy-MM");
     
     // Use all non-USD employee currencies to populate template rows
     const currenciesToInclude = employeeCurrencies?.length
@@ -420,12 +420,20 @@ export function ExchangeRateManagement() {
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - 2 + i).toString());
 
   // Calculate missing currencies (employees have currency but no rate for current month)
-  const currentMonth = format(new Date(), "yyyy-MM");
   const missingRates = employeeCurrencies?.filter(currency => {
     return !exchangeRates?.some(
-      rate => rate.currency_code === currency && rate.month_year.startsWith(currentMonth)
+      rate => rate.currency_code === currency && rate.month_year.startsWith(templateMonth)
     );
   }) || [];
+
+  const templateMonthLabel = (() => {
+    try {
+      const date = parse(templateMonth, "yyyy-MM", new Date());
+      return format(date, "MMMM yyyy");
+    } catch {
+      return templateMonth;
+    }
+  })();
 
   return (
     <div className="space-y-6">
@@ -438,7 +446,7 @@ export function ExchangeRateManagement() {
               <div>
                 <p className="font-medium text-warning">Missing Exchange Rates</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The following currencies are used by employees but have no rate for {format(new Date(), "MMMM yyyy")}:
+                  The following currencies are used by employees but have no rate for {templateMonthLabel}:
                 </p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {missingRates.map(currency => (
@@ -465,15 +473,27 @@ export function ExchangeRateManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={generateTemplate}>
-              <Download className="mr-2 h-4 w-4" />
-              Download Template
-            </Button>
-            <Button variant="accent" onClick={handleAdd}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Rate Manually
-            </Button>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="templateMonth" className="whitespace-nowrap">Month:</Label>
+              <Input
+                id="templateMonth"
+                type="month"
+                value={templateMonth}
+                onChange={(e) => setTemplateMonth(e.target.value)}
+                className="w-48"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={generateTemplate}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Template
+              </Button>
+              <Button variant="accent" onClick={handleAdd}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Rate Manually
+              </Button>
+            </div>
           </div>
 
           <div
