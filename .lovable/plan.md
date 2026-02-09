@@ -1,57 +1,47 @@
 
 
-# Plan: Add Month Selector for Exchange Rate Template & Upload
+# Plan: Fix "invalid input syntax for type date" Error on Create Payout Run
 
 ## Problem
-1. No way to select a specific month before downloading the template -- it defaults to the current month only
-2. The template should dynamically include all currencies required for that specific month (based on employee assignments)
-3. The "Missing Exchange Rates" warning is also hardcoded to the current month
 
-## Changes (single file: `src/components/admin/ExchangeRateManagement.tsx`)
+When clicking "Create Run", the code inserts `month_year: "2026-01"` into the `payout_runs` table, but the column is a `date` type requiring `"2026-01-01"`. This is the same date format bug we fixed earlier in the exchange rate queries, but it also exists in the payout run code.
 
-### 1. Add a Month Picker to the Bulk Upload Card
+## Fix
 
-Add a month input (`<Input type="month" />`) in the upload card, between the header and the Download Template / Add Rate Manually buttons. This `templateMonth` state will:
-- Default to the current month (e.g., `2026-02`)
-- Drive the template download (currencies + pre-filled rates for that month)
-- Update the "Missing Exchange Rates" warning to reflect the selected month
+**File: `src/hooks/usePayoutRuns.ts`**
 
-### 2. Update `generateTemplate` to Use Selected Month
+Two changes in the `useCreatePayoutRun` mutation:
 
-Currently it uses `format(new Date(), "yyyy-MM")`. Change it to use the new `templateMonth` state variable so the downloaded CSV contains rows for the selected month.
+| Line | Current | Fixed |
+|------|---------|-------|
+| 120 | `.eq("month_year", monthYear)` | `.eq("month_year", monthYear + "-01")` |
+| 130 | `month_year: monthYear` | `month_year: monthYear + "-01"` |
 
-### 3. Update Missing Rates Warning to Use Selected Month
+Additionally, the year-based filter in `usePayoutRuns` (line 58-59) also uses incomplete dates:
 
-Currently the warning card checks `currentMonth` (hardcoded to today). Update it to use the `templateMonth` state so it shows which currencies are missing for the month the user is working on.
+| Line | Current | Fixed |
+|------|---------|-------|
+| 58 | `.gte("month_year", \`${year}-01\`)` | `.gte("month_year", \`${year}-01-01\`)` |
+| 59 | `.lte("month_year", \`${year}-12\`)` | `.lte("month_year", \`${year}-12-01\`)` |
 
-### 4. UI Layout
+**File: `src/lib/payoutEngine.ts`** (line 124)
 
-The upload section will look like:
+The validation function also queries `payout_runs` with an unformatted month:
 
-```text
-+--------------------------------------------------+
-| Exchange Rate Bulk Upload                        |
-| Upload monthly market exchange rates via CSV...  |
-|                                                  |
-| Month: [February 2026 v]                        |
-|                                                  |
-| [Download Template]  [+ Add Rate Manually]       |
-|                                                  |
-| +----------------------------------------------+|
-| |  Drag & drop a CSV file here                 ||
-| +----------------------------------------------+|
-+--------------------------------------------------+
-```
+| Line | Current | Fixed |
+|------|---------|-------|
+| 124 | `.eq('month_year', monthYear)` | `.eq('month_year', monthYear + '-01')` |
 
-## Technical Details
+**File: `src/hooks/useMonthLockStatus.ts`** (line 31)
 
-| What | Detail |
-|------|--------|
-| New state | `const [templateMonth, setTemplateMonth] = useState(format(new Date(), "yyyy-MM"))` |
-| Template download | Replace `format(new Date(), "yyyy-MM")` with `templateMonth` in `generateTemplate()` |
-| Missing rates | Replace `currentMonth` (line 423) with `templateMonth` for the warning check |
-| Warning text | Update the label from hardcoded `format(new Date(), "MMMM yyyy")` to dynamically parse `templateMonth` |
-| Lines affected | ~10 lines modified, ~5 lines added |
+| Line | Current | Fixed |
+|------|---------|-------|
+| 31 | `.eq("month_year", monthYear)` | `.eq("month_year", monthYear.length === 7 ? monthYear + "-01" : monthYear)` |
 
-No new files, no database changes.
+**File: `src/hooks/usePayoutStatement.ts`** (lines 204, 229)
 
+Same fix for exchange rate and payout run lookups used in the statement view.
+
+## Scope
+
+5 files, ~8 line changes. No database migrations. No UI changes.
