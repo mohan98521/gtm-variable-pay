@@ -1,36 +1,43 @@
 
 
-# Plan: Fix Remaining Payout Run Date Format Issues
+# Plan: Fix Zero Employees in Payout Calculation
 
 ## Root Cause
 
-The error you saw was likely from before the latest fixes were deployed. The exchange rate data and query are now correct. However, I found two related bugs that should be fixed:
+When "Calculate" is clicked, the `month_year` value from the database is already a full date (`"2026-01-01"`). But many places in `payoutEngine.ts` blindly append `"-01"`, producing the invalid date string `"2026-01-01-01"`. This causes all database queries to silently return no results, so every employee is skipped.
 
-## Bug 1: Validation query lacks defensive date formatting (line 168)
+## Solution
 
-Line 168 of `payoutEngine.ts` always appends `-01` without checking the input length. If `monthYear` is ever passed as `"2026-01-01"`, it would produce the invalid date `"2026-01-01-01"`.
+Add a helper function at the top of `payoutEngine.ts` to normalize date strings, then use it everywhere.
 
-**Fix**: Use the same defensive pattern as line 124:
-```
-.eq('month_year', monthYear.length === 7 ? monthYear + '-01' : monthYear)
-```
+### Helper Function
 
-## Bug 2: Available months not filtering correctly (line 114)
-
-In `PayoutRunManagement.tsx`, the `existingMonths` Set contains full dates from the database (e.g., `"2026-01-01"`), but `monthOptions` values are `"2026-01"`. So `existingMonths.has("2026-01")` is always `false`, meaning months with existing payout runs still show as available in the Create dialog.
-
-**Fix**: Normalize the database values when building the Set:
-```
-const existingMonths = new Set(
-  payoutRuns?.map(r => r.month_year?.substring(0, 7)) || []
-);
+```typescript
+function ensureFullDate(monthYear: string): string {
+  return monthYear.length === 7 ? monthYear + '-01' : monthYear;
+}
 ```
 
-## Files Changed
+### Changes in `src/lib/payoutEngine.ts`
 
-| File | Change |
-|------|--------|
-| `src/lib/payoutEngine.ts` (line 168) | Add defensive date length check |
-| `src/components/admin/PayoutRunManagement.tsx` (line 114) | Normalize `month_year` to `YYYY-MM` for comparison |
+| Line | Current | Fixed |
+|------|---------|-------|
+| 187 | `.lte('effective_start_date', \`${monthYear}-01\`)` | `.lte('effective_start_date', ensureFullDate(monthYear))` |
+| 188 | `.gte('effective_end_date', \`${monthYear}-01\`)` | `.gte('effective_end_date', ensureFullDate(monthYear))` |
+| 223 | `.eq('month_year', monthYear + '-01')` | `.eq('month_year', ensureFullDate(monthYear))` |
+| 302 (already OK) | `.lte('month_year', ctx.monthYear)` | No change needed (raw value works for comparison) |
+| 323 | `\`${ctx.monthYear}-01\`` | `ensureFullDate(ctx.monthYear)` |
+| 501 | `.lte('effective_start_date', \`${monthYear}-01\`)` | `.lte('effective_start_date', ensureFullDate(monthYear))` |
+| 502 | `.gte('effective_end_date', \`${monthYear}-01\`)` | `.gte('effective_end_date', ensureFullDate(monthYear))` |
+| 865 | `calculation_month: \`${monthYear}-01\`` | `calculation_month: ensureFullDate(monthYear)` |
 
-2 files, 2 line changes. No database or UI changes.
+## Scope
+
+1 file (`src/lib/payoutEngine.ts`), ~9 line changes. No database migrations. No UI changes.
+
+## Technical Details
+
+- The `ensureFullDate` helper checks string length: if 7 chars (`YYYY-MM`), appends `"-01"`; otherwise returns as-is
+- This is a defensive pattern already used on lines 124 and 168 of the same file
+- After this fix, the `user_targets` query will correctly match employees' plan assignments, and calculations will produce actual results
+
