@@ -1586,6 +1586,45 @@ export type Database = {
         }
         Relationships: []
       }
+      system_audit_log: {
+        Row: {
+          action: string
+          changed_at: string
+          changed_by: string | null
+          id: string
+          is_retroactive: boolean
+          new_values: Json | null
+          old_values: Json | null
+          reason: string | null
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          action: string
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          is_retroactive?: boolean
+          new_values?: Json | null
+          old_values?: Json | null
+          reason?: string | null
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          action?: string
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          is_retroactive?: boolean
+          new_values?: Json | null
+          old_values?: Json | null
+          reason?: string | null
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
