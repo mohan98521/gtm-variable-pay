@@ -3,13 +3,16 @@ import { MetricsTable } from "@/components/dashboard/MetricsTable";
 import { MonthlyPerformanceTable } from "@/components/dashboard/MonthlyPerformanceTable";
 import { CommissionTable } from "@/components/dashboard/CommissionTable";
 import { PayoutSimulator } from "@/components/dashboard/PayoutSimulator";
-import { Calendar, Loader2, UserCircle, Target, DollarSign, Briefcase } from "lucide-react";
+import { Calendar, Loader2, UserCircle, Target, DollarSign, Briefcase, Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCurrentUserCompensation } from "@/hooks/useCurrentUserCompensation";
+import { useDashboardPayoutSummary } from "@/hooks/useDashboardPayoutSummary";
 
 export default function Dashboard() {
   const { data: compensation, isLoading, error } = useCurrentUserCompensation();
+  const { data: payoutSummary, isLoading: payoutLoading } = useDashboardPayoutSummary();
 
   if (isLoading) {
     return (
@@ -60,9 +63,29 @@ export default function Dashboard() {
     return `$${Math.round(value).toLocaleString()}`;
   };
 
-  const grandTotalEligible = compensation.totalEligiblePayout + compensation.totalCommissionPayout;
-  const grandTotalPaid = compensation.totalPaid + compensation.totalCommissionPaid;
-  const grandTotalHoldback = compensation.totalHoldback + compensation.totalCommissionHoldback;
+  // Use payout run data when available, otherwise fall back to calculated values
+  const usePayoutData = payoutSummary?.isFromPayoutRun === true;
+  
+  const grandTotalEligible = usePayoutData
+    ? payoutSummary.totalEligible
+    : compensation.totalEligiblePayout + compensation.totalCommissionPayout;
+  
+  const grandTotalPaid = usePayoutData
+    ? payoutSummary.totalPaid
+    : compensation.totalPaid + compensation.totalCommissionPaid;
+  
+  const grandTotalHoldback = usePayoutData
+    ? payoutSummary.totalHolding
+    : compensation.totalHoldback + compensation.totalCommissionHoldback;
+  
+  const commissionTotal = usePayoutData
+    ? payoutSummary.totalCommission
+    : compensation.totalCommissionPayout;
+
+  const dataSourceLabel = usePayoutData ? "Finalized" : "Estimated";
+  const dataSourceTooltip = usePayoutData
+    ? `Based on finalized payout runs (${payoutSummary.monthsCovered} month${payoutSummary.monthsCovered !== 1 ? 's' : ''})`
+    : "Estimated from real-time calculation. Run payouts to finalize.";
 
   return (
     <AppLayout>
@@ -76,6 +99,24 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge
+                    variant={usePayoutData ? "default" : "secondary"}
+                    className={usePayoutData 
+                      ? "bg-success text-success-foreground" 
+                      : ""}
+                  >
+                    <Info className="mr-1 h-3 w-3" />
+                    {dataSourceLabel}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{dataSourceTooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Badge variant="outline" className="border-primary/30 text-primary">
               <Calendar className="mr-1.5 h-3.5 w-3.5" />
               FY {compensation.fiscalYear}
@@ -127,7 +168,7 @@ export default function Dashboard() {
                   <DollarSign className="h-5 w-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Amount Paid (75%)</p>
+                  <p className="text-sm text-muted-foreground">Amount Paid</p>
                   <p className="text-xl font-semibold text-foreground">
                     {formatCurrency(grandTotalPaid)}
                   </p>
@@ -143,7 +184,7 @@ export default function Dashboard() {
                   <DollarSign className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Holding (25%)</p>
+                  <p className="text-sm text-muted-foreground">Holding</p>
                   <p className="text-xl font-semibold text-muted-foreground">
                     {formatCurrency(grandTotalHoldback)}
                   </p>
@@ -161,7 +202,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm text-muted-foreground">Commission</p>
                   <p className="text-xl font-semibold text-foreground">
-                    {formatCurrency(compensation.totalCommissionPayout)}
+                    {formatCurrency(commissionTotal)}
                   </p>
                 </div>
               </div>
