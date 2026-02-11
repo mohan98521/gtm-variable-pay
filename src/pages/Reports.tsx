@@ -21,7 +21,7 @@ import { PayoutStatement } from "@/components/reports/PayoutStatement";
 import { ManagementSummary } from "@/components/reports/ManagementSummary";
 import { CurrencyBreakdown } from "@/components/reports/CurrencyBreakdown";
 import { YearEndHoldbackTracker } from "@/components/reports/YearEndHoldbackTracker";
-import { AuditTrailExport } from "@/components/reports/AuditTrailExport";
+import { AuditDashboard } from "@/components/audit/AuditDashboard";
 import { useUserRole } from "@/hooks/useUserRole";
 const SALES_FUNCTIONS = [
   "All",
@@ -903,9 +903,9 @@ export default function Reports() {
             <YearEndHoldbackTracker />
           </TabsContent>
 
-          {/* Tab 10: Audit Trail Export (Admin only) */}
+          {/* Tab 10: Comprehensive Audit Trail (Admin only) */}
           <TabsContent value="audit-trail">
-            <AuditTrailExport />
+            <AuditDashboard />
           </TabsContent>
         </Tabs>
       </div>
