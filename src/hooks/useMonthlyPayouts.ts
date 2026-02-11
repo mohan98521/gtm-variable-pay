@@ -261,10 +261,21 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
       // Map employees by ID
       const employeeMap = new Map(employees?.map(e => [e.id, e]) || []);
       
+      // Deduplicate: keep only latest record per (employee_id, payout_type) by created_at
+      const dedupeKey = (p: any) => `${p.employee_id}::${p.payout_type}`;
+      const latestByKey: Record<string, any> = {};
+      for (const payout of payouts) {
+        const key = dedupeKey(payout);
+        if (!latestByKey[key] || payout.created_at > latestByKey[key].created_at) {
+          latestByKey[key] = payout;
+        }
+      }
+      const dedupedPayouts = Object.values(latestByKey);
+      
       // Group by employee
       const byEmployee: Record<string, EmployeePayoutSummary> = {};
       
-      for (const payout of payouts) {
+      for (const payout of dedupedPayouts) {
         const emp = employeeMap.get(payout.employee_id);
         if (!emp) continue;
         
