@@ -5,6 +5,11 @@
  * - Validates prerequisites (exchange rates, employee data)
  * - Calculates Variable Pay with compensation rate conversion
  * - Calculates Commissions with market rate conversion
+ * - Handles linked_to_impl override (0/100/0)
+ * - Handles clawback-exempt plans (merge booking+collection)
+ * - Calculates incremental monthly VP (YTD minus prior months)
+ * - Releases collection amounts for deals collected this month
+ * - Releases year-end reserves in December
  * - Orchestrates batch calculations for all employees
  */
 
@@ -85,11 +90,21 @@ export interface EmployeePayoutResult {
   commYearEndUsd: number;
   commYearEndLocal: number;
   
+  // Collection Releases
+  collectionReleasesUsd: number;
+  collectionReleasesLocal: number;
+  
+  // Year-End Releases (December only)
+  yearEndReleasesUsd: number;
+  yearEndReleasesLocal: number;
+  
   // Totals
   totalPayoutUsd: number;
   totalPayoutLocal: number;
   totalBookingUsd: number;
   totalBookingLocal: number;
+  payableThisMonthUsd: number;
+  payableThisMonthLocal: number;
   
   // Context
   planId: string | null;
@@ -259,6 +274,27 @@ interface EmployeeCalculationContext {
   commissions: PlanCommission[];
   targetBonusUsd: number;
   marketRate: number;
+  isClawbackExempt: boolean;
+}
+
+/**
+ * Get sum of prior months' VP for incremental calculation
+ */
+async function getPriorMonthsVp(
+  employeeId: string,
+  fiscalYear: number,
+  currentMonthYear: string
+): Promise<number> {
+  const { data } = await supabase
+    .from('monthly_payouts')
+    .select('calculated_amount_usd')
+    .eq('employee_id', employeeId)
+    .eq('payout_type', 'Variable Pay')
+    .gte('month_year', `${fiscalYear}-01-01`)
+    .lt('month_year', ensureFullDate(currentMonthYear))
+    .not('payout_run_id', 'is', null);
+  
+  return (data || []).reduce((sum, p) => sum + (p.calculated_amount_usd || 0), 0);
 }
 
 /**
@@ -281,10 +317,10 @@ async function calculateEmployeeVariablePay(
   const empId = ctx.employee.employee_id;
   const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`;
 
-  let totalVpUsd = 0;
-  let totalBookingUsd = 0;
-  let totalCollectionUsd = 0;
-  let totalYearEndUsd = 0;
+  let ytdVpUsd = 0;
+  let ytdBookingUsd = 0;
+  let ytdCollectionUsd = 0;
+  let ytdYearEndUsd = 0;
   let allAttributions: DealVariablePayAttribution[] = [];
   let lastContext: AggregateVariablePayContext | null = null;
 
@@ -306,6 +342,11 @@ async function calculateEmployeeVariablePay(
 
     // Determine actuals based on metric type
     const isClosingArr = metric.metric_name.toLowerCase().includes('closing arr');
+
+    // Get payout split percentages from metric config
+    const bookingPct = metric.payout_on_booking_pct ?? 0;
+    const collectionPct = metric.payout_on_collection_pct ?? 100;
+    const yearEndPct = metric.payout_on_year_end_pct ?? 0;
 
     if (isClosingArr) {
       // Closing ARR: fetch from closing_arr_actuals table (latest month snapshot, eligible only)
@@ -334,14 +375,10 @@ async function calculateEmployeeVariablePay(
       const { calculateAggregateVariablePay } = await import('./dealVariablePayAttribution');
       const vpCalc = calculateAggregateVariablePay(totalActualUsd, targetUsd, bonusAllocationUsd, metric);
 
-      totalVpUsd += vpCalc.totalVariablePay;
-      // Apply payout splits from metric config
-      const bookingPct = metric.payout_on_booking_pct ?? 70;
-      const collectionPct = metric.payout_on_collection_pct ?? 25;
-      const yearEndPct = metric.payout_on_year_end_pct ?? 5;
-      totalBookingUsd += vpCalc.totalVariablePay * (bookingPct / 100);
-      totalCollectionUsd += vpCalc.totalVariablePay * (collectionPct / 100);
-      totalYearEndUsd += vpCalc.totalVariablePay * (yearEndPct / 100);
+      ytdVpUsd += vpCalc.totalVariablePay;
+      ytdBookingUsd += vpCalc.totalVariablePay * (bookingPct / 100);
+      ytdCollectionUsd += vpCalc.totalVariablePay * (collectionPct / 100);
+      ytdYearEndUsd += vpCalc.totalVariablePay * (yearEndPct / 100);
 
       lastContext = {
         totalActualUsd,
@@ -381,20 +418,36 @@ async function calculateEmployeeVariablePay(
         ensureFullDate(ctx.monthYear)
       );
 
-      totalVpUsd += result.context.totalVariablePayUsd;
-      totalBookingUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnBookingUsd, 0);
-      totalCollectionUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnCollectionUsd, 0);
-      totalYearEndUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnYearEndUsd, 0);
+      ytdVpUsd += result.context.totalVariablePayUsd;
+      ytdBookingUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnBookingUsd, 0);
+      ytdCollectionUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnCollectionUsd, 0);
+      ytdYearEndUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnYearEndUsd, 0);
       allAttributions = allAttributions.concat(result.attributions);
       lastContext = result.context;
     }
   }
 
+  // Calculate incremental VP (subtract prior months)
+  const priorVp = await getPriorMonthsVp(ctx.employee.id, ctx.fiscalYear, ctx.monthYear);
+  const monthlyVpUsd = Math.max(0, ytdVpUsd - priorVp);
+  
+  // Scale splits proportionally to the monthly increment
+  const vpRatio = ytdVpUsd > 0 ? monthlyVpUsd / ytdVpUsd : 0;
+  let monthlyBookingUsd = ytdBookingUsd * vpRatio;
+  let monthlyCollectionUsd = ytdCollectionUsd * vpRatio;
+  let monthlyYearEndUsd = ytdYearEndUsd * vpRatio;
+
+  // For clawback-exempt plans, merge booking + collection into immediate booking
+  if (ctx.isClawbackExempt) {
+    monthlyBookingUsd = monthlyBookingUsd + monthlyCollectionUsd;
+    monthlyCollectionUsd = 0;
+  }
+
   return {
-    totalVpUsd,
-    bookingUsd: totalBookingUsd,
-    collectionUsd: totalCollectionUsd,
-    yearEndUsd: totalYearEndUsd,
+    totalVpUsd: monthlyVpUsd,
+    bookingUsd: monthlyBookingUsd,
+    collectionUsd: monthlyCollectionUsd,
+    yearEndUsd: monthlyYearEndUsd,
     attributions: allAttributions,
     vpContext: lastContext,
   };
@@ -417,27 +470,49 @@ async function calculateEmployeeCommissions(
   }
   
   // Get deals for this month that qualify for commissions (all 8 participant roles)
+  // Include linked_to_impl flag for override logic
   const empId = ctx.employee.employee_id;
   const { data: deals } = await supabase
     .from('deals')
-    .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd')
+    .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl')
     .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`)
     .eq('month_year', ctx.monthYear);
   
   const calculations: CommissionCalculation[] = [];
   
   for (const deal of deals || []) {
+    const isLinkedToImpl = deal.linked_to_impl === true;
+    
+    // Helper to get split values, respecting linked_to_impl override and clawback exemption
+    const getSplits = (comm: PlanCommission) => {
+      if (isLinkedToImpl) {
+        return { booking: 0, collection: 100, yearEnd: 0 };
+      }
+      let booking = comm.payout_on_booking_pct ?? 0;
+      let collection = comm.payout_on_collection_pct ?? 100;
+      const yearEnd = comm.payout_on_year_end_pct ?? 0;
+      
+      // For clawback-exempt plans, merge booking + collection into immediate booking
+      if (ctx.isClawbackExempt) {
+        booking = booking + collection;
+        collection = 0;
+      }
+      
+      return { booking, collection, yearEnd };
+    };
+
     // Perpetual License
     if (deal.perpetual_license_usd && deal.perpetual_license_usd > 0) {
       const comm = ctx.commissions.find(c => c.commission_type === 'Perpetual License' && c.is_active);
       if (comm) {
+        const splits = getSplits(comm);
         const result = calculateDealCommission(
           deal.perpetual_license_usd,
           comm.commission_rate_pct,
           comm.min_threshold_usd,
-          comm.payout_on_booking_pct ?? 70,
-          comm.payout_on_collection_pct ?? 25,
-          comm.payout_on_year_end_pct ?? 5
+          splits.booking,
+          splits.collection,
+          splits.yearEnd
         );
         calculations.push({
           dealId: deal.id,
@@ -458,13 +533,14 @@ async function calculateEmployeeCommissions(
     if (deal.managed_services_usd && deal.managed_services_usd > 0) {
       const comm = ctx.commissions.find(c => c.commission_type === 'Managed Services' && c.is_active);
       if (comm) {
+        const splits = getSplits(comm);
         const result = calculateDealCommission(
           deal.managed_services_usd,
           comm.commission_rate_pct,
           comm.min_threshold_usd,
-          comm.payout_on_booking_pct ?? 70,
-          comm.payout_on_collection_pct ?? 25,
-          comm.payout_on_year_end_pct ?? 5
+          splits.booking,
+          splits.collection,
+          splits.yearEnd
         );
         calculations.push({
           dealId: deal.id,
@@ -485,13 +561,14 @@ async function calculateEmployeeCommissions(
     if (deal.implementation_usd && deal.implementation_usd > 0) {
       const comm = ctx.commissions.find(c => c.commission_type === 'Implementation' && c.is_active);
       if (comm) {
+        const splits = getSplits(comm);
         const result = calculateDealCommission(
           deal.implementation_usd,
           comm.commission_rate_pct,
           comm.min_threshold_usd,
-          comm.payout_on_booking_pct ?? 70,
-          comm.payout_on_collection_pct ?? 25,
-          comm.payout_on_year_end_pct ?? 5
+          splits.booking,
+          splits.collection,
+          splits.yearEnd
         );
         calculations.push({
           dealId: deal.id,
@@ -513,13 +590,14 @@ async function calculateEmployeeCommissions(
     if (crErUsd > 0) {
       const comm = ctx.commissions.find(c => c.commission_type === 'CR/ER' && c.is_active);
       if (comm) {
+        const splits = getSplits(comm);
         const result = calculateDealCommission(
           crErUsd,
           comm.commission_rate_pct,
           comm.min_threshold_usd,
-          comm.payout_on_booking_pct ?? 70,
-          comm.payout_on_collection_pct ?? 25,
-          comm.payout_on_year_end_pct ?? 5
+          splits.booking,
+          splits.collection,
+          splits.yearEnd
         );
         calculations.push({
           dealId: deal.id,
@@ -548,6 +626,79 @@ async function calculateEmployeeCommissions(
   };
 }
 
+// ============= COLLECTION RELEASES =============
+
+/**
+ * Calculate collection releases for deals collected in the current month.
+ * Looks up VP attributions and commission holdbacks from prior months.
+ */
+async function calculateCollectionReleases(
+  employeeId: string,
+  employeeCode: string,
+  monthYear: string,
+  fiscalYear: number
+): Promise<{ vpReleaseUsd: number; commReleaseUsd: number }> {
+  // Find deals collected this month
+  const { data: collections } = await supabase
+    .from('deal_collections')
+    .select('deal_id')
+    .eq('collection_month', ensureFullDate(monthYear))
+    .eq('is_collected', true);
+  
+  if (!collections || collections.length === 0) {
+    return { vpReleaseUsd: 0, commReleaseUsd: 0 };
+  }
+  
+  const collectedDealIds = collections.map(c => c.deal_id);
+  
+  // VP releases: sum payout_on_collection_usd from deal_variable_pay_attribution for this employee
+  const { data: vpAttrs } = await supabase
+    .from('deal_variable_pay_attribution')
+    .select('payout_on_collection_usd')
+    .eq('employee_id', employeeId)
+    .eq('fiscal_year', fiscalYear)
+    .in('deal_id', collectedDealIds);
+  
+  const vpReleaseUsd = (vpAttrs || []).reduce((sum, a) => sum + (a.payout_on_collection_usd || 0), 0);
+  
+  // Commission releases: sum collection_amount_usd from monthly_payouts for collected deals
+  const { data: commPayouts } = await supabase
+    .from('monthly_payouts')
+    .select('collection_amount_usd')
+    .eq('employee_id', employeeId)
+    .neq('payout_type', 'Variable Pay')
+    .neq('payout_type', 'Clawback')
+    .neq('payout_type', 'Collection Release')
+    .neq('payout_type', 'Year-End Release')
+    .in('deal_id', collectedDealIds);
+  
+  const commReleaseUsd = (commPayouts || []).reduce((sum, p) => sum + (p.collection_amount_usd || 0), 0);
+  
+  return { vpReleaseUsd, commReleaseUsd };
+}
+
+// ============= YEAR-END RELEASES (DECEMBER) =============
+
+/**
+ * Calculate year-end releases for December payout run.
+ * Sums all year_end_amount_usd from monthly_payouts in the fiscal year.
+ */
+async function calculateYearEndReleases(
+  employeeId: string,
+  fiscalYear: number
+): Promise<number> {
+  const { data } = await supabase
+    .from('monthly_payouts')
+    .select('year_end_amount_usd')
+    .eq('employee_id', employeeId)
+    .gte('month_year', `${fiscalYear}-01-01`)
+    .lte('month_year', `${fiscalYear}-12-01`)
+    .neq('payout_type', 'Year-End Release')
+    .not('year_end_amount_usd', 'is', null);
+  
+  return (data || []).reduce((sum, p) => sum + (p.year_end_amount_usd || 0), 0);
+}
+
 /**
  * Calculate full monthly payout for a single employee
  */
@@ -556,6 +707,8 @@ export async function calculateMonthlyPayout(
   monthYear: string
 ): Promise<EmployeePayoutResult | null> {
   const fiscalYear = parseInt(monthYear.substring(0, 4));
+  const currentMonth = parseInt(monthYear.substring(5, 7));
+  const isDecember = currentMonth === 12;
   
   // Get employee's plan assignment
   const { data: target } = await supabase
@@ -563,7 +716,7 @@ export async function calculateMonthlyPayout(
     .select(`
       plan_id,
       target_bonus_usd,
-      comp_plans (id, name)
+      comp_plans (id, name, is_clawback_exempt)
     `)
     .eq('user_id', employee.id)
     .lte('effective_start_date', ensureFullDate(monthYear))
@@ -575,7 +728,9 @@ export async function calculateMonthlyPayout(
   }
   
   const planId = target.plan_id;
-  const planName = (target.comp_plans as any)?.name || 'Unknown Plan';
+  const planData = target.comp_plans as any;
+  const planName = planData?.name || 'Unknown Plan';
+  const isClawbackExempt = planData?.is_clawback_exempt === true;
   const targetBonusUsd = target.target_bonus_usd ?? employee.tvp_usd ?? 0;
   
   // Get plan metrics with multiplier grids
@@ -607,13 +762,26 @@ export async function calculateMonthlyPayout(
     commissions: (commissions || []) as unknown as PlanCommission[],
     targetBonusUsd,
     marketRate,
+    isClawbackExempt,
   };
   
-  // Calculate VP
+  // Calculate VP (now returns incremental monthly amount)
   const vpResult = await calculateEmployeeVariablePay(ctx);
   
   // Calculate Commissions
   const commResult = await calculateEmployeeCommissions(ctx);
+  
+  // Calculate Collection Releases
+  const collReleases = await calculateCollectionReleases(
+    employee.id, employee.employee_id, monthYear, fiscalYear
+  );
+  const collectionReleasesUsd = collReleases.vpReleaseUsd + collReleases.commReleaseUsd;
+  
+  // Calculate Year-End Releases (December only)
+  let yearEndReleasesUsd = 0;
+  if (isDecember) {
+    yearEndReleasesUsd = await calculateYearEndReleases(employee.id, fiscalYear);
+  }
   
   // Convert to local currency
   const vpLocal = convertVPToLocal(vpResult.totalVpUsd, compensationRate);
@@ -625,6 +793,13 @@ export async function calculateMonthlyPayout(
   const commBookingLocal = convertCommissionToLocal(commResult.bookingUsd, marketRate);
   const commCollectionLocal = convertCommissionToLocal(commResult.collectionUsd, marketRate);
   const commYearEndLocal = convertCommissionToLocal(commResult.yearEndUsd, marketRate);
+  
+  const collectionReleasesLocal = convertVPToLocal(collectionReleasesUsd, compensationRate);
+  const yearEndReleasesLocal = convertVPToLocal(yearEndReleasesUsd, compensationRate);
+  
+  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases (Dec)
+  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd;
+  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal;
   
   return {
     employeeId: employee.id,
@@ -652,10 +827,17 @@ export async function calculateMonthlyPayout(
     commYearEndUsd: commResult.yearEndUsd,
     commYearEndLocal,
     
+    collectionReleasesUsd,
+    collectionReleasesLocal,
+    yearEndReleasesUsd,
+    yearEndReleasesLocal,
+    
     totalPayoutUsd: vpResult.totalVpUsd + commResult.totalCommUsd,
     totalPayoutLocal: vpLocal + commLocal,
     totalBookingUsd: vpResult.bookingUsd + commResult.bookingUsd,
     totalBookingLocal: vpBookingLocal + commBookingLocal,
+    payableThisMonthUsd,
+    payableThisMonthLocal,
     
     planId,
     planName,
@@ -843,11 +1025,12 @@ async function persistPayoutResults(
   fiscalYear: number,
   employeePayouts: EmployeePayoutResult[]
 ): Promise<void> {
-  // Delete existing payouts for this run
+  // Delete existing payouts for this run (except clawbacks which are created before)
   await supabase
     .from('monthly_payouts')
     .delete()
-    .eq('payout_run_id', payoutRunId);
+    .eq('payout_run_id', payoutRunId)
+    .neq('payout_type', 'Clawback');
   
   await supabase
     .from('deal_variable_pay_attribution')
@@ -856,7 +1039,7 @@ async function persistPayoutResults(
   
   // Insert monthly payouts
   const payoutRecords = employeePayouts.flatMap(emp => {
-    const records = [];
+    const records: any[] = [];
     
     // Variable Pay record
     if (emp.variablePayUsd > 0) {
@@ -913,6 +1096,46 @@ async function persistPayoutResults(
         year_end_amount_usd: amounts.yearEnd,
         year_end_amount_local: amounts.yearEnd * emp.commissionMarketRate,
         status: 'calculated',
+      });
+    }
+    
+    // Collection Release record
+    if (emp.collectionReleasesUsd > 0) {
+      records.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        month_year: monthYear,
+        payout_type: 'Collection Release',
+        plan_id: emp.planId,
+        calculated_amount_usd: emp.collectionReleasesUsd,
+        calculated_amount_local: emp.collectionReleasesLocal,
+        local_currency: emp.localCurrency,
+        exchange_rate_used: emp.vpCompensationRate,
+        exchange_rate_type: 'compensation',
+        booking_amount_usd: emp.collectionReleasesUsd,
+        booking_amount_local: emp.collectionReleasesLocal,
+        status: 'calculated',
+        notes: 'Released upon collection of previously held amounts',
+      });
+    }
+    
+    // Year-End Release record (December only)
+    if (emp.yearEndReleasesUsd > 0) {
+      records.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        month_year: monthYear,
+        payout_type: 'Year-End Release',
+        plan_id: emp.planId,
+        calculated_amount_usd: emp.yearEndReleasesUsd,
+        calculated_amount_local: emp.yearEndReleasesLocal,
+        local_currency: emp.localCurrency,
+        exchange_rate_used: emp.vpCompensationRate,
+        exchange_rate_type: 'compensation',
+        booking_amount_usd: emp.yearEndReleasesUsd,
+        booking_amount_local: emp.yearEndReleasesLocal,
+        status: 'calculated',
+        notes: 'Year-end release of accumulated reserves',
       });
     }
     

@@ -39,9 +39,9 @@ export function calculateDealCommission(
   tcvUsd: number,
   commissionRatePct: number,
   minThresholdUsd: number | null = null,
-  payoutOnBookingPct: number = 70,
-  payoutOnCollectionPct: number = 25,
-  payoutOnYearEndPct: number = 5
+  payoutOnBookingPct: number = 0,
+  payoutOnCollectionPct: number = 100,
+  payoutOnYearEndPct: number = 0
 ): { qualifies: boolean; gross: number; paid: number; holdback: number; yearEndHoldback: number } {
   // Check if deal meets minimum threshold
   const qualifies = minThresholdUsd === null || tcvUsd >= minThresholdUsd;
@@ -101,9 +101,9 @@ export function calculateCommissionForDeal(
     tcvUsd,
     commission.commission_rate_pct,
     commission.min_threshold_usd,
-    commission.payout_on_booking_pct ?? 70,
-    commission.payout_on_collection_pct ?? 25,
-    commission.payout_on_year_end_pct ?? 5
+    commission.payout_on_booking_pct ?? 0,
+    commission.payout_on_collection_pct ?? 100,
+    commission.payout_on_year_end_pct ?? 0
   );
   
   return {
