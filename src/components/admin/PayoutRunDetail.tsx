@@ -2,8 +2,8 @@
  * Payout Run Detail View
  * 
  * Detailed view showing:
- * - Run summary
- * - Employee breakdown with dual-currency display
+ * - Run summary with Total Eligible + Payable This Month
+ * - Employee breakdown with three-way split columns
  * - Filter by currency
  * - Export functionality (CSV + XLSX)
  * - Clawbacks display
@@ -49,7 +49,8 @@ import {
   FileSpreadsheet,
   FileText,
   ChevronDown,
-  Banknote
+  Banknote,
+  Wallet
 } from "lucide-react";
 import { generateMultiSheetXLSX, downloadXLSX, SheetData } from "@/lib/xlsxExport";
 import { PayoutAdjustments } from "./PayoutAdjustments";
@@ -106,9 +107,25 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
   const filteredTotals = filteredEmployees?.reduce((acc, emp) => ({
     variablePayUsd: acc.variablePayUsd + emp.variablePayUsd,
     commissionsUsd: acc.commissionsUsd + emp.commissionsUsd,
-    totalUsd: acc.totalUsd + emp.totalUsd,
-    bookingUsd: acc.bookingUsd + emp.bookingUsd,
-  }), { variablePayUsd: 0, commissionsUsd: 0, totalUsd: 0, bookingUsd: 0 });
+    totalEligibleUsd: acc.totalEligibleUsd + emp.totalEligibleUsd,
+    totalBookingUsd: acc.totalBookingUsd + emp.totalBookingUsd,
+    totalCollectionUsd: acc.totalCollectionUsd + emp.totalCollectionUsd,
+    totalYearEndUsd: acc.totalYearEndUsd + emp.totalYearEndUsd,
+    collectionReleasesUsd: acc.collectionReleasesUsd + emp.collectionReleasesUsd,
+    payableThisMonthUsd: acc.payableThisMonthUsd + emp.payableThisMonthUsd,
+  }), { 
+    variablePayUsd: 0, commissionsUsd: 0, totalEligibleUsd: 0, 
+    totalBookingUsd: 0, totalCollectionUsd: 0, totalYearEndUsd: 0,
+    collectionReleasesUsd: 0, payableThisMonthUsd: 0
+  });
+
+  // Grand totals for summary cards
+  const grandTotals = employeeBreakdown?.reduce((acc, emp) => ({
+    totalEligibleUsd: acc.totalEligibleUsd + emp.totalEligibleUsd,
+    variablePayUsd: acc.variablePayUsd + emp.variablePayUsd,
+    commissionsUsd: acc.commissionsUsd + emp.commissionsUsd,
+    payableThisMonthUsd: acc.payableThisMonthUsd + emp.payableThisMonthUsd,
+  }), { totalEligibleUsd: 0, variablePayUsd: 0, commissionsUsd: 0, payableThisMonthUsd: 0 });
   
   const handleExportCSV = () => {
     if (!filteredEmployees) return;
@@ -118,14 +135,13 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       'Employee Name',
       'Currency',
       'VP (USD)',
-      'VP (Local)',
-      'Comp Rate',
       'Comm (USD)',
-      'Comm (Local)',
-      'Market Rate',
-      'Total (USD)',
-      'Total (Local)',
-      'Booking (USD)',
+      'Total Eligible (USD)',
+      'Upon Booking (USD)',
+      'Upon Collection (USD)',
+      'At Year End (USD)',
+      'Collection Releases (USD)',
+      'Payable This Month (USD)',
     ];
     
     const rows = filteredEmployees.map(emp => [
@@ -133,14 +149,13 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       emp.employeeName,
       emp.localCurrency,
       emp.variablePayUsd.toFixed(2),
-      emp.variablePayLocal.toFixed(2),
-      emp.vpCompRate.toFixed(4),
       emp.commissionsUsd.toFixed(2),
-      emp.commissionsLocal.toFixed(2),
-      emp.commMarketRate.toFixed(4),
-      emp.totalUsd.toFixed(2),
-      emp.totalLocal.toFixed(2),
-      emp.bookingUsd.toFixed(2),
+      emp.totalEligibleUsd.toFixed(2),
+      emp.totalBookingUsd.toFixed(2),
+      emp.totalCollectionUsd.toFixed(2),
+      emp.totalYearEndUsd.toFixed(2),
+      emp.collectionReleasesUsd.toFixed(2),
+      emp.payableThisMonthUsd.toFixed(2),
     ]);
     
     const csvContent = [
@@ -162,15 +177,30 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
     
     const sheets: SheetData[] = [];
     
+    const allEmployeesColumns = [
+      { key: 'employeeCode', header: 'Employee Code' },
+      { key: 'employeeName', header: 'Employee Name' },
+      { key: 'localCurrency', header: 'Currency' },
+      { key: 'variablePayUsd', header: 'VP (USD)' },
+      { key: 'commissionsUsd', header: 'Comm (USD)' },
+      { key: 'totalEligibleUsd', header: 'Total Eligible (USD)' },
+      { key: 'totalBookingUsd', header: 'Upon Booking (USD)' },
+      { key: 'totalCollectionUsd', header: 'Upon Collection (USD)' },
+      { key: 'totalYearEndUsd', header: 'At Year End (USD)' },
+      { key: 'collectionReleasesUsd', header: 'Collection Releases (USD)' },
+      { key: 'payableThisMonthUsd', header: 'Payable This Month (USD)' },
+    ];
+    
     // Sheet 1: Summary
     sheets.push({
       sheetName: 'Summary',
       data: [{
         month: formatMonthYear(run.month_year),
         status: run.run_status,
-        totalPayoutUsd: run.total_payout_usd || 0,
-        variablePayUsd: run.total_variable_pay_usd || 0,
-        commissionsUsd: run.total_commissions_usd || 0,
+        totalEligibleUsd: grandTotals?.totalEligibleUsd || 0,
+        variablePayUsd: grandTotals?.variablePayUsd || 0,
+        commissionsUsd: grandTotals?.commissionsUsd || 0,
+        payableThisMonthUsd: grandTotals?.payableThisMonthUsd || 0,
         clawbacksUsd: run.total_clawbacks_usd || 0,
         employeeCount: employeeBreakdown.length,
         calculatedAt: run.calculated_at ? format(new Date(run.calculated_at), 'yyyy-MM-dd HH:mm') : '',
@@ -178,9 +208,10 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       columns: [
         { key: 'month', header: 'Month' },
         { key: 'status', header: 'Status' },
-        { key: 'totalPayoutUsd', header: 'Total Payout (USD)' },
+        { key: 'totalEligibleUsd', header: 'Total Eligible (USD)' },
         { key: 'variablePayUsd', header: 'Variable Pay (USD)' },
         { key: 'commissionsUsd', header: 'Commissions (USD)' },
+        { key: 'payableThisMonthUsd', header: 'Payable This Month (USD)' },
         { key: 'clawbacksUsd', header: 'Clawbacks (USD)' },
         { key: 'employeeCount', header: 'Employee Count' },
         { key: 'calculatedAt', header: 'Calculated At' },
@@ -188,21 +219,6 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
     });
     
     // Sheet 2: All Employees
-    const allEmployeesColumns = [
-      { key: 'employeeCode', header: 'Employee Code' },
-      { key: 'employeeName', header: 'Employee Name' },
-      { key: 'localCurrency', header: 'Currency' },
-      { key: 'variablePayUsd', header: 'VP (USD)' },
-      { key: 'variablePayLocal', header: 'VP (Local)' },
-      { key: 'vpCompRate', header: 'Comp Rate' },
-      { key: 'commissionsUsd', header: 'Comm (USD)' },
-      { key: 'commissionsLocal', header: 'Comm (Local)' },
-      { key: 'commMarketRate', header: 'Market Rate' },
-      { key: 'totalUsd', header: 'Total (USD)' },
-      { key: 'totalLocal', header: 'Total (Local)' },
-      { key: 'bookingUsd', header: 'Booking (USD)' },
-    ];
-    
     sheets.push({
       sheetName: 'All Employees',
       data: employeeBreakdown,
@@ -217,16 +233,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       sheets.push({
         sheetName: currency,
         data: currencyEmployees,
-        columns: [
-          { key: 'employeeCode', header: 'Employee Code' },
-          { key: 'employeeName', header: 'Employee Name' },
-          { key: 'variablePayLocal', header: `VP (${currency})` },
-          { key: 'commissionsLocal', header: `Comm (${currency})` },
-          { key: 'totalLocal', header: `Total (${currency})` },
-          { key: 'variablePayUsd', header: 'VP (USD)' },
-          { key: 'commissionsUsd', header: 'Comm (USD)' },
-          { key: 'totalUsd', header: 'Total (USD)' },
-        ] as any,
+        columns: allEmployeesColumns as any,
       });
     }
     
@@ -282,7 +289,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       </div>
       
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
@@ -290,9 +297,9 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                 <DollarSign className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Payout</p>
+                <p className="text-sm text-muted-foreground">Total Eligible</p>
                 <p className="text-2xl font-semibold">
-                  {formatCurrency(run.total_payout_usd)}
+                  {formatCurrency(grandTotals?.totalEligibleUsd)}
                 </p>
               </div>
             </div>
@@ -307,7 +314,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Variable Pay</p>
                 <p className="text-2xl font-semibold">
-                  {formatCurrency(run.total_variable_pay_usd)}
+                  {formatCurrency(grandTotals?.variablePayUsd)}
                 </p>
               </div>
             </div>
@@ -322,7 +329,22 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Commissions</p>
                 <p className="text-2xl font-semibold">
-                  {formatCurrency(run.total_commissions_usd)}
+                  {formatCurrency(grandTotals?.commissionsUsd)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Payable This Month</p>
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(grandTotals?.payableThisMonthUsd)}
                 </p>
               </div>
             </div>
@@ -388,7 +410,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
           <div>
             <CardTitle className="text-base">Employee Payouts</CardTitle>
             <CardDescription>
-              Detailed breakdown with dual-rate conversion
+              Three-way split breakdown with collection releases
             </CardDescription>
           </div>
           {currencies.length > 1 && (
@@ -418,12 +440,13 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                     <TableHead>Employee</TableHead>
                     <TableHead>Currency</TableHead>
                     <TableHead className="text-right">VP (USD)</TableHead>
-                    <TableHead className="text-right">VP (Local)</TableHead>
-                    <TableHead className="text-right">Comp Rate</TableHead>
                     <TableHead className="text-right">Comm (USD)</TableHead>
-                    <TableHead className="text-right">Comm (Local)</TableHead>
-                    <TableHead className="text-right">Market Rate</TableHead>
-                    <TableHead className="text-right">Total (USD)</TableHead>
+                    <TableHead className="text-right">Total Eligible</TableHead>
+                    <TableHead className="text-right">Upon Booking</TableHead>
+                    <TableHead className="text-right">Upon Collection</TableHead>
+                    <TableHead className="text-right">At Year End</TableHead>
+                    <TableHead className="text-right">Coll. Releases</TableHead>
+                    <TableHead className="text-right">Payable This Month</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -439,21 +462,18 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                         <Badge variant="outline">{emp.localCurrency}</Badge>
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.variablePayUsd)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(emp.variablePayLocal, emp.localCurrency)}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {emp.vpCompRate.toFixed(2)}
-                      </TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.commissionsUsd)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(emp.totalEligibleUsd)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(emp.totalBookingUsd)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(emp.totalCollectionUsd)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(emp.totalYearEndUsd)}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(emp.commissionsLocal, emp.localCurrency)}
+                        {emp.collectionReleasesUsd > 0 
+                          ? formatCurrency(emp.collectionReleasesUsd) 
+                          : '-'}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {emp.commMarketRate.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(emp.totalUsd)}
+                      <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
+                        {formatCurrency(emp.payableThisMonthUsd)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -466,15 +486,26 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                       <TableCell className="text-right">
                         {formatCurrency(filteredTotals.variablePayUsd)}
                       </TableCell>
-                      <TableCell className="text-right">-</TableCell>
-                      <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(filteredTotals.commissionsUsd)}
                       </TableCell>
-                      <TableCell className="text-right">-</TableCell>
-                      <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.totalUsd)}
+                        {formatCurrency(filteredTotals.totalEligibleUsd)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(filteredTotals.totalBookingUsd)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(filteredTotals.totalCollectionUsd)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(filteredTotals.totalYearEndUsd)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(filteredTotals.collectionReleasesUsd)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
+                        {formatCurrency(filteredTotals.payableThisMonthUsd)}
                       </TableCell>
                     </TableRow>
                   )}

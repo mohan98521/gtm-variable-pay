@@ -177,7 +177,7 @@ export function usePayoutSummary(payoutRunId: string | undefined) {
         if (payout.payout_type === 'Variable Pay') {
           summary.variablePayUsd += payout.calculated_amount_usd || 0;
           summary.variablePayLocal += payout.calculated_amount_local || 0;
-        } else {
+        } else if (payout.payout_type !== 'Collection Release' && payout.payout_type !== 'Year-End Release' && payout.payout_type !== 'Clawback') {
           summary.commissionsUsd += payout.calculated_amount_usd || 0;
           summary.commissionsLocal += payout.calculated_amount_local || 0;
         }
@@ -211,6 +211,22 @@ export interface EmployeePayoutSummary {
   totalLocal: number;
   bookingUsd: number;
   bookingLocal: number;
+  // Three-way split fields
+  vpBookingUsd: number;
+  vpCollectionUsd: number;
+  vpYearEndUsd: number;
+  commBookingUsd: number;
+  commCollectionUsd: number;
+  commYearEndUsd: number;
+  // Releases
+  collectionReleasesUsd: number;
+  yearEndReleasesUsd: number;
+  // Computed totals
+  totalEligibleUsd: number;
+  totalBookingUsd: number;
+  totalCollectionUsd: number;
+  totalYearEndUsd: number;
+  payableThisMonthUsd: number;
 }
 
 /**
@@ -268,6 +284,19 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
             totalLocal: 0,
             bookingUsd: 0,
             bookingLocal: 0,
+            vpBookingUsd: 0,
+            vpCollectionUsd: 0,
+            vpYearEndUsd: 0,
+            commBookingUsd: 0,
+            commCollectionUsd: 0,
+            commYearEndUsd: 0,
+            collectionReleasesUsd: 0,
+            yearEndReleasesUsd: 0,
+            totalEligibleUsd: 0,
+            totalBookingUsd: 0,
+            totalCollectionUsd: 0,
+            totalYearEndUsd: 0,
+            payableThisMonthUsd: 0,
           };
         }
         
@@ -277,16 +306,38 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
           summary.variablePayUsd += payout.calculated_amount_usd || 0;
           summary.variablePayLocal += payout.calculated_amount_local || 0;
           summary.vpCompRate = payout.exchange_rate_used || 1;
+          summary.vpBookingUsd += payout.booking_amount_usd || 0;
+          summary.vpCollectionUsd += payout.collection_amount_usd || 0;
+          summary.vpYearEndUsd += payout.year_end_amount_usd || 0;
+        } else if (payout.payout_type === 'Collection Release') {
+          summary.collectionReleasesUsd += payout.calculated_amount_usd || 0;
+        } else if (payout.payout_type === 'Year-End Release') {
+          summary.yearEndReleasesUsd += payout.calculated_amount_usd || 0;
+        } else if (payout.payout_type === 'Clawback') {
+          // Clawbacks are negative, tracked separately
         } else {
+          // Commission types (Managed Services, Perpetual License, etc.)
           summary.commissionsUsd += payout.calculated_amount_usd || 0;
           summary.commissionsLocal += payout.calculated_amount_local || 0;
           summary.commMarketRate = payout.exchange_rate_used || 1;
+          summary.commBookingUsd += payout.booking_amount_usd || 0;
+          summary.commCollectionUsd += payout.collection_amount_usd || 0;
+          summary.commYearEndUsd += payout.year_end_amount_usd || 0;
         }
         
         summary.totalUsd += payout.calculated_amount_usd || 0;
         summary.totalLocal += payout.calculated_amount_local || 0;
         summary.bookingUsd += payout.booking_amount_usd || 0;
         summary.bookingLocal += payout.booking_amount_local || 0;
+      }
+      
+      // Compute derived totals
+      for (const summary of Object.values(byEmployee)) {
+        summary.totalEligibleUsd = summary.variablePayUsd + summary.commissionsUsd;
+        summary.totalBookingUsd = summary.vpBookingUsd + summary.commBookingUsd;
+        summary.totalCollectionUsd = summary.vpCollectionUsd + summary.commCollectionUsd;
+        summary.totalYearEndUsd = summary.vpYearEndUsd + summary.commYearEndUsd;
+        summary.payableThisMonthUsd = summary.totalBookingUsd + summary.collectionReleasesUsd + summary.yearEndReleasesUsd;
       }
       
       return Object.values(byEmployee).sort((a, b) => 
