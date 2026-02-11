@@ -20,7 +20,7 @@ import {
 export interface PayoutRun {
   id: string;
   month_year: string;
-  run_status: 'draft' | 'review' | 'approved' | 'finalized' | 'paid';
+  run_status: 'draft' | 'calculating' | 'review' | 'approved' | 'finalized' | 'paid';
   is_locked: boolean;
   total_payout_usd: number | null;
   total_variable_pay_usd: number | null;
@@ -199,7 +199,7 @@ export function useUpdatePayoutRunStatus() {
       userId 
     }: { 
       runId: string; 
-      status: 'draft' | 'review' | 'approved' | 'finalized' | 'paid';
+      status: 'draft' | 'calculating' | 'review' | 'approved' | 'finalized' | 'paid';
       userId?: string;
     }) => {
       const now = new Date().toISOString();

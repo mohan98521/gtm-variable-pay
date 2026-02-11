@@ -76,6 +76,7 @@ import { PayoutRunDetail } from "./PayoutRunDetail";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; icon: any }> = {
   draft: { label: "Draft", variant: "secondary", icon: Clock },
+  calculating: { label: "Calculating", variant: "outline", icon: Loader2 },
   review: { label: "Review", variant: "outline", icon: Eye },
   approved: { label: "Approved", variant: "default", icon: CheckCircle2 },
   finalized: { label: "Finalized", variant: "default", icon: Lock },
@@ -242,20 +243,20 @@ export function PayoutRunManagement() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {run.run_status === 'draft' && (
+                          {(run.run_status === 'draft' || run.run_status === 'calculating') && (
                             <>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleCalculate(run)}
-                                disabled={isCalculating}
+                                disabled={isCalculating || calculateMutation.isPending || run.run_status === 'calculating'}
                               >
-                                {isCalculating ? (
+                                {isCalculating || run.run_status === 'calculating' ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                   <Calculator className="h-4 w-4" />
                                 )}
-                                <span className="ml-1">Calculate</span>
+                                <span className="ml-1">{run.run_status === 'calculating' ? 'Calculating...' : 'Calculate'}</span>
                               </Button>
                               <Button
                                 variant="ghost"
@@ -273,7 +274,7 @@ export function PayoutRunManagement() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleCalculate(run)}
-                                disabled={isCalculating}
+                                disabled={isCalculating || calculateMutation.isPending}
                               >
                                 {isCalculating ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />

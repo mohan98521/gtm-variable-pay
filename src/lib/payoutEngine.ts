@@ -956,6 +956,37 @@ export async function runPayoutCalculation(
   payoutRunId: string,
   monthYear: string
 ): Promise<PayoutRunResult> {
+  // === Calculation Lock: prevent concurrent runs ===
+  // Use CAS pattern: only proceed if current status is 'draft' or 'review'
+  const { data: lockResult, error: lockError } = await supabase
+    .from('payout_runs')
+    .update({ run_status: 'calculating', updated_at: new Date().toISOString() })
+    .eq('id', payoutRunId)
+    .in('run_status', ['draft', 'review'])
+    .select('id')
+    .maybeSingle();
+  
+  if (lockError || !lockResult) {
+    throw new Error('Cannot start calculation: another calculation may already be in progress, or the run is not in draft/review status.');
+  }
+  
+  try {
+    return await executePayoutCalculation(payoutRunId, monthYear);
+  } catch (error) {
+    // Reset status back to draft on failure
+    await supabase
+      .from('payout_runs')
+      .update({ run_status: 'draft', updated_at: new Date().toISOString() })
+      .eq('id', payoutRunId)
+      .eq('run_status', 'calculating');
+    throw error;
+  }
+}
+
+async function executePayoutCalculation(
+  payoutRunId: string,
+  monthYear: string
+): Promise<PayoutRunResult> {
   const calculatedAt = new Date().toISOString();
   const fiscalYear = parseInt(monthYear.substring(0, 4));
   
@@ -1026,16 +1057,36 @@ async function persistPayoutResults(
   employeePayouts: EmployeePayoutResult[]
 ): Promise<void> {
   // Delete existing payouts for this run (except clawbacks which are created before)
-  await supabase
+  const { error: deletePayoutsError } = await supabase
     .from('monthly_payouts')
     .delete()
     .eq('payout_run_id', payoutRunId)
     .neq('payout_type', 'Clawback');
   
-  await supabase
+  if (deletePayoutsError) {
+    throw new Error(`Failed to clear old payout records: ${deletePayoutsError.message}`);
+  }
+  
+  // Verify deletion succeeded - check if non-clawback records still exist
+  const { data: remainingRecords } = await supabase
+    .from('monthly_payouts')
+    .select('id')
+    .eq('payout_run_id', payoutRunId)
+    .neq('payout_type', 'Clawback')
+    .limit(1);
+  
+  if (remainingRecords && remainingRecords.length > 0) {
+    throw new Error('Failed to clear old payout records: records still exist after deletion. This may be due to database policies. Please contact an administrator.');
+  }
+  
+  const { error: deleteAttrError } = await supabase
     .from('deal_variable_pay_attribution')
     .delete()
     .eq('payout_run_id', payoutRunId);
+  
+  if (deleteAttrError) {
+    throw new Error(`Failed to clear old attribution records: ${deleteAttrError.message}`);
+  }
   
   // Insert monthly payouts
   const payoutRecords = employeePayouts.flatMap(emp => {
