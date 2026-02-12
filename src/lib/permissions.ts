@@ -12,6 +12,7 @@ export type PermissionKey =
   | "tab:bulk_upload"
   | "tab:role_management"
   | "tab:permissions"
+  | "tab:roles"
   | "tab:comp_plans"
   | "tab:performance_targets"
   | "tab:payout_runs"
@@ -53,6 +54,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "tab:performance_targets", label: "Performance Targets", description: "Manage employee performance targets", category: "tab" },
   { key: "tab:role_management", label: "Role Management", description: "Assign roles to users", category: "tab" },
   { key: "tab:permissions", label: "Permissions", description: "Configure role permissions", category: "tab", isLocked: true },
+  { key: "tab:roles", label: "Role Builder", description: "Create and manage custom roles", category: "tab" },
   { key: "tab:payout_runs", label: "Payout Runs", description: "Manage payout run lifecycle", category: "tab" },
   { key: "tab:exchange_rates", label: "Exchange Rates", description: "Manage exchange rates", category: "tab" },
   
@@ -71,14 +73,9 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "action:export_reports", label: "Export Reports", description: "Download report data", category: "action" },
 ];
 
-export const ALL_ROLES: { role: AppRole; label: string }[] = [
-  { role: "admin", label: "Admin" },
-  { role: "gtm_ops", label: "GTM Ops" },
-  { role: "finance", label: "Finance" },
-  { role: "executive", label: "Executive" },
-  { role: "sales_head", label: "Sales Head" },
-  { role: "sales_rep", label: "Sales Rep" },
-];
+// ALL_ROLES is now fetched dynamically from the `roles` table via useRoles hook.
+// This empty array is kept as a fallback for static imports but should not be used.
+export const ALL_ROLES: { role: AppRole; label: string }[] = [];
 
 export const CATEGORY_LABELS: Record<PermissionDefinition["category"], string> = {
   page: "Page Access",

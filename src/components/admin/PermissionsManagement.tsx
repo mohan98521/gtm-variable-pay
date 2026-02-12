@@ -9,15 +9,14 @@ import { Loader2, Lock, RotateCcw, Save, Shield } from "lucide-react";
 import { toast } from "sonner";
 import {
   PERMISSION_DEFINITIONS,
-  ALL_ROLES,
   CATEGORY_LABELS,
   type PermissionKey,
 } from "@/lib/permissions";
-import type { AppRole } from "@/hooks/useUserRole";
+import { useRoles } from "@/hooks/useRoles";
 
 interface RolePermission {
   id: string;
-  role: AppRole;
+  role: string;
   permission_key: string;
   is_allowed: boolean;
 }
@@ -26,6 +25,7 @@ export function PermissionsManagement() {
   const queryClient = useQueryClient();
   const [localChanges, setLocalChanges] = useState<Record<string, boolean>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const { roles: roleDefinitions, allRoles: dynamicRoles, isLoading: rolesLoading } = useRoles();
 
   // Fetch all permissions
   const { data: permissions, isLoading } = useQuery({
@@ -41,36 +41,29 @@ export function PermissionsManagement() {
   });
 
   // Build a lookup map for current permission state
-  const getPermissionKey = (role: AppRole, permKey: PermissionKey) => `${role}:${permKey}`;
+  const getPermissionKey = (role: string, permKey: PermissionKey) => `${role}:${permKey}`;
   
-  const getCurrentValue = (role: AppRole, permKey: PermissionKey): boolean => {
+  const getCurrentValue = (role: string, permKey: PermissionKey): boolean => {
     const key = getPermissionKey(role, permKey);
     if (key in localChanges) return localChanges[key];
-    
     const perm = permissions?.find(p => p.role === role && p.permission_key === permKey);
     return perm?.is_allowed ?? false;
   };
 
-  // Handle toggle
-  const handleToggle = (role: AppRole, permKey: PermissionKey, checked: boolean) => {
+  const handleToggle = (role: string, permKey: PermissionKey, checked: boolean) => {
     const key = getPermissionKey(role, permKey);
     setLocalChanges(prev => ({ ...prev, [key]: checked }));
     setHasChanges(true);
   };
 
-  // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const updates: { role: AppRole; permission_key: string; is_allowed: boolean }[] = [];
+      const updates: { role: string; permission_key: string; is_allowed: boolean }[] = [];
       
       for (const [key, value] of Object.entries(localChanges)) {
         const [role, ...permParts] = key.split(":");
         const permKey = permParts.join(":");
-        updates.push({
-          role: role as AppRole,
-          permission_key: permKey,
-          is_allowed: value,
-        });
+        updates.push({ role, permission_key: permKey, is_allowed: value });
       }
 
       // Batch upsert
@@ -110,10 +103,10 @@ export function PermissionsManagement() {
   }, {} as Record<string, typeof PERMISSION_DEFINITIONS>);
 
   // Stats
-  const totalPermissions = PERMISSION_DEFINITIONS.length * ALL_ROLES.length;
+  const totalPermissions = PERMISSION_DEFINITIONS.length * dynamicRoles.length;
   const enabledCount = permissions?.filter(p => p.is_allowed).length || 0;
 
-  if (isLoading) {
+  if (isLoading || rolesLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -159,7 +152,7 @@ export function PermissionsManagement() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Roles Managed</p>
-                <p className="text-2xl font-semibold text-foreground">{ALL_ROLES.length}</p>
+                <p className="text-2xl font-semibold text-foreground">{dynamicRoles.length}</p>
               </div>
             </div>
           </CardContent>
@@ -210,7 +203,7 @@ export function PermissionsManagement() {
                   <th className="text-left py-3 px-2 font-medium text-muted-foreground min-w-[200px]">
                     Permission
                   </th>
-                  {ALL_ROLES.map(({ role, label }) => (
+                  {dynamicRoles.map(({ role, label }) => (
                     <th key={role} className="text-center py-3 px-2 font-medium text-muted-foreground min-w-[80px]">
                       <span className="text-xs">{label}</span>
                     </th>
@@ -222,7 +215,7 @@ export function PermissionsManagement() {
                   <>
                     {/* Category Header */}
                     <tr key={`cat-${category}`} className="bg-muted/50">
-                      <td colSpan={ALL_ROLES.length + 1} className="py-2 px-2 font-semibold text-foreground">
+                      <td colSpan={dynamicRoles.length + 1} className="py-2 px-2 font-semibold text-foreground">
                         {CATEGORY_LABELS[category]}
                       </td>
                     </tr>
@@ -241,7 +234,7 @@ export function PermissionsManagement() {
                           </div>
                           <p className="text-xs text-muted-foreground">{perm.description}</p>
                         </td>
-                        {ALL_ROLES.map(({ role }) => {
+                        {dynamicRoles.map(({ role }) => {
                           const isLocked = perm.isLocked && role === "admin";
                           const isDisabled = perm.isLocked && role !== "admin";
                           const value = getCurrentValue(role, perm.key);

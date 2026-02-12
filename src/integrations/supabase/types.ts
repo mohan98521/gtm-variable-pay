@@ -1565,7 +1565,7 @@ export type Database = {
           id: string
           is_allowed: boolean
           permission_key: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: string
           updated_at: string
         }
         Insert: {
@@ -1573,7 +1573,7 @@ export type Database = {
           id?: string
           is_allowed?: boolean
           permission_key: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: string
           updated_at?: string
         }
         Update: {
@@ -1581,8 +1581,46 @@ export type Database = {
           id?: string
           is_allowed?: boolean
           permission_key?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: string
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_role_fkey"
+            columns: ["role"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["name"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_system_role: boolean
+          label: string
+          name: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system_role?: boolean
+          label: string
+          name: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system_role?: boolean
+          label?: string
+          name?: string
         }
         Relationships: []
       }
@@ -1629,22 +1667,30 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: string
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: string
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_role_fkey"
+            columns: ["role"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["name"]
+          },
+        ]
       }
       user_targets: {
         Row: {
@@ -1721,22 +1767,9 @@ export type Database = {
         Args: { _permission_key: string; _user_id: string }
         Returns: boolean
       }
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
+      has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role:
-        | "admin"
-        | "sales_head"
-        | "sales_rep"
-        | "gtm_ops"
-        | "finance"
-        | "executive"
       logic_type: "Stepped_Accelerator" | "Gated_Threshold" | "Linear"
       user_role: "Admin" | "Sales_Head" | "Sales_Rep"
     }
@@ -1866,14 +1899,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: [
-        "admin",
-        "sales_head",
-        "sales_rep",
-        "gtm_ops",
-        "finance",
-        "executive",
-      ],
       logic_type: ["Stepped_Accelerator", "Gated_Threshold", "Linear"],
       user_role: ["Admin", "Sales_Head", "Sales_Rep"],
     },
