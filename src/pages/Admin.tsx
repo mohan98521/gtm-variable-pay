@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Layers, Users, UserCog, Shield, Upload, Target, DollarSign, Calculator, Lock, Settings, type LucideIcon } from "lucide-react";
+import { Layers, Users, UserCog, Shield, Upload, Target, DollarSign, Calculator, Lock, Settings, UserPlus, type LucideIcon } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { CompensationPlansTab } from "@/components/admin/CompensationPlansTab";
@@ -13,6 +13,7 @@ import { PermissionsManagement } from "@/components/admin/PermissionsManagement"
 import { PerformanceTargetsManagement } from "@/components/admin/PerformanceTargetsManagement";
 import { ExchangeRateManagement } from "@/components/admin/ExchangeRateManagement";
 import { PayoutRunManagement } from "@/components/admin/PayoutRunManagement";
+import { RoleBuilder } from "@/components/admin/RoleBuilder";
 
 // --- Section / Item types ---
 interface NavItem {
@@ -69,6 +70,7 @@ const sections: NavSection[] = [
     label: "System",
     icon: Settings,
     items: [
+      { id: "roles-builder", label: "Roles", icon: UserPlus, permissionCheck: (c) => c.canAccessTab("tab:roles") },
       { id: "permissions", label: "Permissions", icon: Lock, permissionCheck: (c) => c.isAdmin() },
     ],
   },
@@ -84,6 +86,7 @@ const contentMap: Record<string, React.ComponentType> = {
   "exchange-rates": ExchangeRateManagement,
   "payout-runs": PayoutRunManagement,
   "permissions": PermissionsManagement,
+  "roles-builder": RoleBuilder,
 };
 
 export default function Admin() {

@@ -25,29 +25,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Shield, Search, Loader2, UserCog, Plus, X } from "lucide-react";
 import type { AppRole } from "@/hooks/useUserRole";
+import { useRoles } from "@/hooks/useRoles";
 
 interface UserWithRoles {
   id: string;
   email: string;
   full_name: string;
-  roles: AppRole[];
+  roles: string[];
 }
-
-const ALL_ROLES: { role: AppRole; label: string; description: string; color: string }[] = [
-  { role: "admin", label: "Admin", description: "Full system access", color: "bg-destructive/10 text-destructive" },
-  { role: "gtm_ops", label: "GTM Ops", description: "Data inputs & operations", color: "bg-primary/10 text-primary" },
-  { role: "finance", label: "Finance", description: "View compensation data", color: "bg-success/10 text-success" },
-  { role: "executive", label: "Executive", description: "View-only dashboards", color: "bg-accent/10 text-accent" },
-  { role: "sales_head", label: "Sales Head", description: "Team management", color: "bg-warning/10 text-warning" },
-  { role: "sales_rep", label: "Sales Rep", description: "Personal dashboard", color: "bg-muted text-muted-foreground" },
-];
 
 export function RoleManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
-  const [selectedRoles, setSelectedRoles] = useState<AppRole[]>([]);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { roles: roleDefinitions, isLoading: rolesLoading } = useRoles();
 
   // Fetch all users with their roles
   const { data: users, isLoading } = useQuery({
@@ -75,7 +68,7 @@ export function RoleManagement() {
         full_name: profile.full_name,
         roles: (allRoles || [])
           .filter(r => r.user_id === profile.id)
-          .map(r => r.role as AppRole)
+          .map(r => r.role as string)
       }));
 
       return usersWithRoles;
@@ -84,7 +77,7 @@ export function RoleManagement() {
 
   // Update user roles mutation
   const updateRolesMutation = useMutation({
-    mutationFn: async ({ userId, newRoles }: { userId: string; newRoles: AppRole[] }) => {
+    mutationFn: async ({ userId, newRoles }: { userId: string; newRoles: string[] }) => {
       // Delete existing roles for user
       const { error: deleteError } = await supabase
         .from('user_roles')
@@ -132,12 +125,11 @@ export function RoleManagement() {
     }
   };
 
-  const toggleRole = (role: AppRole) => {
-    // Single-role selection: selecting a role unchecks all others
+  const toggleRole = (role: string) => {
     setSelectedRoles(prev => 
       prev.includes(role) 
-        ? [] // Allow unchecking to have no role
-        : [role] // Only allow one role at a time
+        ? [] 
+        : [role]
     );
   };
 
@@ -148,9 +140,20 @@ export function RoleManagement() {
     user.roles.some(r => r.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const getRoleBadgeStyle = (role: AppRole) => {
-    const roleInfo = ALL_ROLES.find(r => r.role === role);
-    return roleInfo?.color || "bg-muted text-muted-foreground";
+  const getRoleBadgeStyle = (role: string) => {
+    const roleInfo = roleDefinitions.find(r => r.name === role);
+    const color = roleInfo?.color || "slate";
+    const colorMap: Record<string, string> = {
+      red: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+      blue: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+      green: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+      purple: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+      orange: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+      slate: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300",
+      pink: "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300",
+      teal: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
+    };
+    return colorMap[color] || colorMap.slate;
   };
 
   // Stats
@@ -250,7 +253,7 @@ export function RoleManagement() {
                           {user.roles.length > 0 ? (
                             user.roles.map(role => (
                               <Badge key={role} className={getRoleBadgeStyle(role)}>
-                                {ALL_ROLES.find(r => r.role === role)?.label || role}
+                                {roleDefinitions.find(r => r.name === role)?.label || role}
                               </Badge>
                             ))
                           ) : (
@@ -286,10 +289,10 @@ export function RoleManagement() {
           <div className="mt-6 pt-4 border-t">
             <h4 className="text-sm font-medium mb-3">Role Descriptions</h4>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {ALL_ROLES.map(roleInfo => (
-                <div key={roleInfo.role} className="flex items-center gap-2">
-                  <Badge className={roleInfo.color}>{roleInfo.label}</Badge>
-                  <span className="text-sm text-muted-foreground">{roleInfo.description}</span>
+              {roleDefinitions.map(roleInfo => (
+                <div key={roleInfo.name} className="flex items-center gap-2">
+                  <Badge className={getRoleBadgeStyle(roleInfo.name)}>{roleInfo.label}</Badge>
+                  <span className="text-sm text-muted-foreground">{roleInfo.description || "—"}</span>
                 </div>
               ))}
             </div>
@@ -308,22 +311,22 @@ export function RoleManagement() {
           </DialogHeader>
           
           <div className="py-4 space-y-4">
-            {ALL_ROLES.map(roleInfo => (
+            {roleDefinitions.map(roleInfo => (
               <div 
-                key={roleInfo.role} 
+                key={roleInfo.name} 
                 className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer"
-                onClick={() => toggleRole(roleInfo.role)}
+                onClick={() => toggleRole(roleInfo.name)}
               >
                 <Checkbox 
-                  checked={selectedRoles.includes(roleInfo.role)}
-                  onCheckedChange={() => toggleRole(roleInfo.role)}
+                  checked={selectedRoles.includes(roleInfo.name)}
+                  onCheckedChange={() => toggleRole(roleInfo.name)}
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{roleInfo.label}</span>
-                    <Badge variant="outline" className="text-xs">{roleInfo.role}</Badge>
+                    <Badge variant="outline" className="text-xs">{roleInfo.name}</Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{roleInfo.description}</p>
+                  <p className="text-sm text-muted-foreground">{roleInfo.description || "—"}</p>
                 </div>
               </div>
             ))}
