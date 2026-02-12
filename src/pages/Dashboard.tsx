@@ -3,6 +3,7 @@ import { MetricsTable } from "@/components/dashboard/MetricsTable";
 import { MonthlyPerformanceTable } from "@/components/dashboard/MonthlyPerformanceTable";
 import { CommissionTable } from "@/components/dashboard/CommissionTable";
 import { PayoutSimulator } from "@/components/dashboard/PayoutSimulator";
+import { StaffLandingPage } from "@/components/dashboard/StaffLandingPage";
 import { Calendar, Loader2, UserCircle, Target, DollarSign, Briefcase, Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,15 +41,7 @@ export default function Dashboard() {
   if (!compensation) {
     return (
       <AppLayout>
-        <div className="flex h-full items-center justify-center p-8">
-          <div className="text-center">
-            <UserCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-foreground font-medium">No compensation data found</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Please contact your administrator to set up your compensation plan.
-            </p>
-          </div>
-        </div>
+        <StaffLandingPage />
       </AppLayout>
     );
   }
