@@ -14,6 +14,8 @@ export type PermissionKey =
   | "tab:permissions"
   | "tab:comp_plans"
   | "tab:performance_targets"
+  | "tab:payout_runs"
+  | "tab:exchange_rates"
   // Actions
   | "action:create_comp_plan"
   | "action:edit_comp_plan"
@@ -51,6 +53,8 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "tab:performance_targets", label: "Performance Targets", description: "Manage employee performance targets", category: "tab" },
   { key: "tab:role_management", label: "Role Management", description: "Assign roles to users", category: "tab" },
   { key: "tab:permissions", label: "Permissions", description: "Configure role permissions", category: "tab", isLocked: true },
+  { key: "tab:payout_runs", label: "Payout Runs", description: "Manage payout run lifecycle", category: "tab" },
+  { key: "tab:exchange_rates", label: "Exchange Rates", description: "Manage exchange rates", category: "tab" },
   
   // Actions
   { key: "action:create_comp_plan", label: "Create Comp Plan", description: "Create new compensation plans", category: "action" },
