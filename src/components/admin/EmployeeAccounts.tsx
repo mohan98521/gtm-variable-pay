@@ -50,6 +50,7 @@ import {
 import { EmployeeFormDialog, EmployeeFormData } from "./EmployeeFormDialog";
 import { PlanAssignmentDialog } from "./PlanAssignmentDialog";
 import { EmployeeAssignmentsPopover } from "./EmployeeAssignmentsPopover";
+import { StaffUserFormDialog } from "./StaffUserFormDialog";
 
 interface Employee {
   id: string;
@@ -92,6 +93,7 @@ export function EmployeeAccounts() {
   const [deactivatingEmployee, setDeactivatingEmployee] = useState<Employee | null>(null);
   const [impersonatingEmployee, setImpersonatingEmployee] = useState<Employee | null>(null);
   const [assigningEmployee, setAssigningEmployee] = useState<Employee | null>(null);
+  const [showStaffDialog, setShowStaffDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("active");
   const queryClient = useQueryClient();
 
@@ -478,6 +480,10 @@ export function EmployeeAccounts() {
               <CardDescription>Add, edit, and manage employee records and authentication accounts</CardDescription>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowStaffDialog(true)}>
+                <UserPlus className="h-4 w-4 mr-1.5" />
+                Add Staff User
+              </Button>
               <Button variant="outline" onClick={() => setShowAddDialog(true)}>
                 <Plus className="h-4 w-4 mr-1.5" />
                 Add Employee
@@ -734,6 +740,9 @@ export function EmployeeAccounts() {
         onOpenChange={(open) => !open && setAssigningEmployee(null)}
         employee={assigningEmployee}
       />
+
+      {/* Staff User Dialog */}
+      <StaffUserFormDialog open={showStaffDialog} onOpenChange={setShowStaffDialog} />
     </div>
   );
 }
