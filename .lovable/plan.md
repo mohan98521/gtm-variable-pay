@@ -1,118 +1,46 @@
 
 
-## Full Self-Service Role Management System
+## Add Staff User -- Simplified One-Step Onboarding
 
-### Problem
-Currently, the 6 system roles (Admin, GTM Ops, Finance, Executive, Sales Head, Sales Rep) are hardcoded as a Postgres enum (`app_role`) and TypeScript type. There is no UI to create new roles (e.g., "Regional Manager", "Auditor") or configure their permissions dynamically.
+### What This Solves
 
-### Architecture Change: Enum to Table-Driven Roles
+Today, onboarding a non-sales user (GTM Ops, Finance, Admin, Executive) requires three separate steps across two different admin screens: add employee, create account, then assign role. This plan adds a single streamlined dialog that does all three in one click.
 
-The core change is migrating from a rigid Postgres enum to a flexible table-driven approach.
+### User Experience
 
-```text
-CURRENT (rigid)                    NEW (flexible)
---------------------------         --------------------------
-app_role ENUM                      roles TABLE
-  admin                              id, name, label,
-  sales_head                         description, color,
-  sales_rep                          is_system_role, created_at
-  gtm_ops
-  finance                          user_roles.role -> TEXT
-  executive                        role_permissions.role -> TEXT
-```
+A new "Add Staff User" button will appear alongside the existing "Add Employee" button on the Employee Accounts page. Clicking it opens a compact dialog with only 4 fields:
 
-### Step-by-Step Plan
+- **Full Name** (required)
+- **Employee ID** (required)
+- **Email** (required, must be @azentio.com)
+- **Role** (required, dropdown populated from the `roles` table)
 
-#### 1. Database Migration
-
-**Create `roles` reference table:**
-- `id` (UUID, PK)
-- `name` (TEXT, UNIQUE) -- machine name like "admin", "regional_manager"
-- `label` (TEXT) -- display name like "Admin", "Regional Manager"  
-- `description` (TEXT) -- e.g., "Full system access"
-- `color` (TEXT) -- CSS class for badge styling
-- `is_system_role` (BOOLEAN, default false) -- protects built-in roles from deletion
-- `created_at` (TIMESTAMPTZ)
-
-**Seed with existing 6 roles** (all marked `is_system_role = true`).
-
-**Alter `user_roles` and `role_permissions` tables:**
-- Change `role` column from `app_role` enum to `TEXT`
-- Add foreign key to `roles(name)` for referential integrity
-
-**RLS:** Only admins can manage the `roles` table.
-
-#### 2. Code Changes -- Type System
-
-**`src/hooks/useUserRole.ts`:**
-- Change `AppRole` from a static string union to `string` type
-- Fetch role metadata from the `roles` table instead of hardcoding
-- Keep helper functions like `isAdmin()`, `hasRole()` working with string comparison
-
-**`src/lib/permissions.ts`:**
-- Remove hardcoded `ALL_ROLES` array
-- Fetch roles dynamically from the `roles` table
-- `PermissionKey` type stays as-is (permissions are still predefined)
-
-#### 3. New UI -- "Role Builder" in System Section
-
-Add a new admin sub-page under **System > Roles** (alongside Permissions):
-
-**Role List View:**
-- Table showing all roles with: Name, Label, Description, User Count, System badge
-- "Add Role" button
-- Edit/Delete actions (delete disabled for system roles)
-
-**Add/Edit Role Dialog:**
-- Fields: Name (slug, auto-generated from label), Label, Description, Color picker (preset options)
-- On create: inserts into `roles` table AND auto-generates `role_permissions` rows for all permission keys (defaulting to `false`)
-- Validation: name must be unique, lowercase, no spaces
-
-**Delete Role:**
-- Only allowed for non-system roles
-- Confirmation dialog warning about affected users
-- Cascades: removes from `user_roles` and `role_permissions`
-
-#### 4. Update Existing UIs
-
-**Role Management (`RoleManagement.tsx`):**
-- Fetch roles from `roles` table instead of hardcoded `ALL_ROLES` array
-- Dynamically render role options in the assignment dialog
-
-**Permissions Matrix (`PermissionsManagement.tsx`):**
-- Fetch column headers from `roles` table instead of hardcoded `ALL_ROLES`
-- New roles automatically appear as columns
-
-**Sidebar/Navigation:**
-- No changes needed -- already driven by `role_permissions` table
-
-#### 5. Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/hooks/useUserRole.ts` | `AppRole` becomes `string`, add `useRoles()` hook |
-| `src/lib/permissions.ts` | Remove hardcoded `ALL_ROLES`, export fetcher |
-| `src/hooks/usePermissions.ts` | Update `AppRole` references to `string` |
-| `src/components/admin/RoleManagement.tsx` | Fetch roles dynamically |
-| `src/components/admin/PermissionsManagement.tsx` | Fetch role columns dynamically |
-| `src/pages/Admin.tsx` | Add "Roles" nav item under System section |
-| `src/components/admin/RoleBuilder.tsx` | **NEW** -- Role CRUD UI |
-| `src/hooks/useRoles.ts` | **NEW** -- Hook to fetch/manage roles table |
-
-#### 6. Safety Measures
-
-- The 6 existing roles are marked `is_system_role = true` and cannot be deleted
-- The "admin" role's permission to the Permissions tab remains locked
-- Creating a new role auto-generates all permission rows (all `false` by default) so it appears immediately in the Permissions Matrix for configuration
-- Role name validation prevents duplicates and special characters
+On submit, the system will automatically:
+1. Insert the employee record (with no sales/compensation fields)
+2. Call the `create-employee-account` edge function to create the auth account
+3. Assign the selected role in `user_roles`
+4. Show a success toast with the temporary password
 
 ### Technical Details
 
-**Migration SQL overview:**
-1. Create `roles` table with RLS
-2. Seed 6 system roles
-3. Alter `user_roles.role` from `app_role` enum to `TEXT` with FK to `roles(name)`
-4. Alter `role_permissions.role` from `app_role` enum to `TEXT` with FK to `roles(name)`
-5. Drop the `app_role` enum (after migration)
-6. Add `tab:roles` permission key for access control
+#### New File: `src/components/admin/StaffUserFormDialog.tsx`
+- A lightweight dialog component with a Zod-validated form (4 fields only)
+- Uses `useRoles()` hook to populate the role dropdown dynamically
+- On submit, orchestrates 3 sequential operations:
+  1. `supabase.from('employees').insert(...)` -- minimal record (employee_id, full_name, email, is_active, local_currency default)
+  2. `supabase.functions.invoke('create-employee-account', ...)` -- creates auth user
+  3. `supabase.from('user_roles').insert(...)` -- assigns selected role using the `auth_user_id` returned from step 2
+- Handles errors at each step with clear feedback (e.g., if employee already exists, if account creation fails)
+- On success, invalidates employee and role queries to refresh the table
 
+#### Modified File: `src/components/admin/EmployeeAccounts.tsx`
+- Add a second button "Add Staff User" (with a `UserPlus` icon) next to the existing "Add Employee" button
+- Wire up the new `StaffUserFormDialog` with open/close state
+
+#### Edge Function: No changes needed
+- The existing `create-employee-account` edge function already handles everything needed (creates auth user, links to employee, creates profile, assigns `sales_rep` role by default)
+- The staff user flow will override the default `sales_rep` role by inserting the correct role after account creation
+
+#### No database migration needed
+- All tables and columns already exist
+- The `roles` table is already queryable for the dropdown
