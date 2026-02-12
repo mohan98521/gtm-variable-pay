@@ -60,8 +60,8 @@ const sections: NavSection[] = [
     label: "Finance",
     icon: DollarSign,
     items: [
-      { id: "exchange-rates", label: "Exchange Rates", icon: DollarSign, permissionCheck: (c) => c.isAdmin() || c.canAccessTab("tab:bulk_upload") },
-      { id: "payout-runs", label: "Payout Runs", icon: Calculator, permissionCheck: (c) => c.isAdmin() || c.canAccessTab("tab:bulk_upload") },
+      { id: "exchange-rates", label: "Exchange Rates", icon: DollarSign, permissionCheck: (c) => c.canAccessTab("tab:exchange_rates") },
+      { id: "payout-runs", label: "Payout Runs", icon: Calculator, permissionCheck: (c) => c.canAccessTab("tab:payout_runs") },
     ],
   },
   {
