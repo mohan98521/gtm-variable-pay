@@ -59,6 +59,9 @@ export function StaffUserFormDialog({ open, onOpenChange }: StaffUserFormDialogP
   const queryClient = useQueryClient();
   const { roles, isLoading: rolesLoading } = useRoles();
 
+  const SALES_ROLES = ["sales_rep", "sales_head"];
+  const staffRoles = roles.filter(r => !SALES_ROLES.includes(r.name));
+
   const form = useForm<StaffUserFormValues>({
     resolver: zodResolver(staffUserSchema),
     defaultValues: { full_name: "", employee_id: "", email: "", role: "" },
@@ -199,7 +202,7 @@ export function StaffUserFormDialog({ open, onOpenChange }: StaffUserFormDialogP
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {roles.map((r) => (
+                      {staffRoles.map((r) => (
                         <SelectItem key={r.id} value={r.name}>
                           {r.label}
                         </SelectItem>
