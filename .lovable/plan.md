@@ -1,46 +1,61 @@
 
 
-## Add Staff User -- Simplified One-Step Onboarding
+## Staff User Restrictions and Friendly Dashboard
 
-### What This Solves
+### Overview
 
-Today, onboarding a non-sales user (GTM Ops, Finance, Admin, Executive) requires three separate steps across two different admin screens: add employee, create account, then assign role. This plan adds a single streamlined dialog that does all three in one click.
+Two targeted changes to improve the experience for non-sales staff users:
 
-### User Experience
+1. **Filter the Staff User role dropdown** to exclude sales roles (`sales_rep`, `sales_head`), preventing accidental misuse of the simplified form for sales employees who need the full onboarding flow.
 
-A new "Add Staff User" button will appear alongside the existing "Add Employee" button on the Employee Accounts page. Clicking it opens a compact dialog with only 4 fields:
+2. **Replace the empty "No compensation data found" screen** with a welcoming landing page for non-sales users, showing their name, role, and quick-navigation links to the sections they have access to (Admin, Reports, Data Inputs, etc.).
 
-- **Full Name** (required)
-- **Employee ID** (required)
-- **Email** (required, must be @azentio.com)
-- **Role** (required, dropdown populated from the `roles` table)
+---
 
-On submit, the system will automatically:
-1. Insert the employee record (with no sales/compensation fields)
-2. Call the `create-employee-account` edge function to create the auth account
-3. Assign the selected role in `user_roles`
-4. Show a success toast with the temporary password
+### Change 1: Filter Role Dropdown in StaffUserFormDialog
+
+**File:** `src/components/admin/StaffUserFormDialog.tsx`
+
+- Define a constant list of excluded sales role names: `["sales_rep", "sales_head"]`
+- Filter the `roles` array before rendering the `SelectContent`, removing any role whose `name` matches the exclusion list
+- This ensures the dropdown only shows staff-appropriate roles (Admin, GTM Ops, Finance, Executive, and any custom roles)
+
+---
+
+### Change 2: Friendly Staff Dashboard Landing Page
+
+**File:** `src/pages/Dashboard.tsx`
+
+When `compensation` is `null` (no plan assigned), instead of showing a bare "No compensation data found" message, render a welcoming landing page:
+
+- Use `useUserRole()` to get the current user's roles
+- Use `usePermissions()` to determine which pages are accessible
+- Display:
+  - A greeting with the user's name (fetched from the `profiles` table via a lightweight query)
+  - Their assigned role as a badge (e.g., "GTM Ops", "Finance")
+  - A set of quick-link cards for the pages they have permission to access (Admin, Reports, Data Inputs, Team View), each with an icon and short description
+  - A subtle note: "You are not assigned to a compensation plan. This is expected for staff roles."
+- This turns an empty dead-end screen into a useful navigation hub
+
+---
 
 ### Technical Details
 
-#### New File: `src/components/admin/StaffUserFormDialog.tsx`
-- A lightweight dialog component with a Zod-validated form (4 fields only)
-- Uses `useRoles()` hook to populate the role dropdown dynamically
-- On submit, orchestrates 3 sequential operations:
-  1. `supabase.from('employees').insert(...)` -- minimal record (employee_id, full_name, email, is_active, local_currency default)
-  2. `supabase.functions.invoke('create-employee-account', ...)` -- creates auth user
-  3. `supabase.from('user_roles').insert(...)` -- assigns selected role using the `auth_user_id` returned from step 2
-- Handles errors at each step with clear feedback (e.g., if employee already exists, if account creation fails)
-- On success, invalidates employee and role queries to refresh the table
+#### StaffUserFormDialog.tsx
+```
+const SALES_ROLES = ["sales_rep", "sales_head"];
+const staffRoles = roles.filter(r => !SALES_ROLES.includes(r.name));
+// Render staffRoles in the Select instead of roles
+```
 
-#### Modified File: `src/components/admin/EmployeeAccounts.tsx`
-- Add a second button "Add Staff User" (with a `UserPlus` icon) next to the existing "Add Employee" button
-- Wire up the new `StaffUserFormDialog` with open/close state
+#### Dashboard.tsx
+- Import `useUserRole` hook to detect role
+- Import `usePermissions` hook to check page access
+- Add a small query to fetch the current user's profile name (or use a lightweight existing hook)
+- Replace the `!compensation` block (lines 40-53) with a new `StaffLandingPage` section containing:
+  - Welcome header with user name
+  - Role badge
+  - Grid of navigation cards (filtered by permission) linking to `/admin`, `/reports`, `/data-inputs`, `/team`
+  - Each card uses the same icon as the sidebar for consistency
 
-#### Edge Function: No changes needed
-- The existing `create-employee-account` edge function already handles everything needed (creates auth user, links to employee, creates profile, assigns `sales_rep` role by default)
-- The staff user flow will override the default `sales_rep` role by inserting the correct role after account creation
-
-#### No database migration needed
-- All tables and columns already exist
-- The `roles` table is already queryable for the dropdown
+No database changes or migrations are required.
