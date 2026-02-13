@@ -19,6 +19,9 @@ const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
   "SE": "Sales Engineering",
   "Solution Architect": "Product Specialist or Solution Architect",
   "Solution Manager": "Product Specialist or Solution Architect",
+  "Team Lead": "Team Lead",
+  "Team Lead - Farmer": "Team Lead",
+  "Team Lead - Hunter": "Team Lead",
 };
 
 const PARTICIPANT_ROLES = [
@@ -225,7 +228,7 @@ export function useTeamCompensation() {
         .gt("end_date", `${selectedYear}-12-31`);
 
       // 4. Calculate compensation for each direct report
-      const members: TeamMemberCompensation[] = directReports.map(emp => {
+      const members: TeamMemberCompensation[] = await Promise.all(directReports.map(async (emp) => {
         const employeeId = emp.employee_id;
         const salesFunction = emp.sales_function || "";
         const planName = SALES_FUNCTION_TO_PLAN[salesFunction] || salesFunction;
@@ -248,12 +251,28 @@ export function useTeamCompensation() {
           ? allPlanCommissions.filter(c => c.plan_id === planId)
           : [];
 
+        // Check for team metrics
+        const hasTeamMetrics = planMetrics.some(pm => pm.metric_name.startsWith("Team "));
+        const isTeamLead = salesFunction.startsWith("Team Lead");
+
+        // Fetch sub-reports if this employee is a Team Lead with team metrics
+        let subReportIds: string[] = [];
+        if (hasTeamMetrics) {
+          const { data: subReports } = await supabase
+            .from("employees")
+            .select("employee_id")
+            .eq("manager_employee_id", employeeId)
+            .eq("is_active", true);
+          subReportIds = (subReports || []).map(e => e.employee_id);
+        }
+
         // Aggregate deal actuals
         let newBookingYtd = 0;
         let managedServicesYtd = 0;
         let perpetualLicenseYtd = 0;
         let crErYtd = 0;
         let implementationYtd = 0;
+        let teamNewBookingYtd = 0;
 
         (deals || []).forEach((deal: any) => {
           const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
@@ -264,14 +283,28 @@ export function useTeamCompensation() {
             crErYtd += (deal.cr_usd || 0) + (deal.er_usd || 0);
             implementationYtd += deal.implementation_usd || 0;
           }
+          // Team metrics: aggregate subordinate deals
+          if (hasTeamMetrics && subReportIds.length > 0) {
+            const isSubordinateDeal = PARTICIPANT_ROLES.some(role =>
+              subReportIds.includes(deal[role])
+            );
+            if (isSubordinateDeal) {
+              teamNewBookingYtd += deal.new_software_booking_arr_usd || 0;
+            }
+          }
         });
 
         // Closing ARR - latest month snapshot
+        // For Team Leads: include sub-reports' closing ARR for combined portfolio
         const closingByMonth = new Map<string, number>();
         (closingArr || []).forEach(arr => {
           const isMatch = arr.sales_rep_employee_id === employeeId ||
                           arr.sales_head_employee_id === employeeId;
-          if (isMatch) {
+          const isSubReportMatch = isTeamLead && hasTeamMetrics && subReportIds.length > 0 && (
+            subReportIds.includes(arr.sales_rep_employee_id || "") ||
+            subReportIds.includes(arr.sales_head_employee_id || "")
+          );
+          if (isMatch || isSubReportMatch) {
             const monthKey = arr.month_year?.substring(0, 7) || "";
             closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + (arr.closing_arr || 0));
           }
@@ -280,10 +313,11 @@ export function useTeamCompensation() {
         const latestClosingMonth = sortedClosingMonths[sortedClosingMonths.length - 1];
         const closingYtd = latestClosingMonth ? closingByMonth.get(latestClosingMonth) || 0 : 0;
 
-        // Actuals map
+        // Actuals map (includes team metrics)
         const actualsMap = new Map<string, number>([
           ["New Software Booking ARR", newBookingYtd],
           ["Closing ARR", closingYtd],
+          ["Team New Software Booking ARR", teamNewBookingYtd],
         ]);
 
         const targetBonusUsd = emp.tvp_usd || 0;
@@ -398,7 +432,7 @@ export function useTeamCompensation() {
           overallAchievementPct,
           status: getStatus(overallAchievementPct),
         };
-      });
+      }));
 
       // 5. Team aggregates
       const teamTotalTvp = members.reduce((s, m) => s + m.targetBonusUsd, 0);
