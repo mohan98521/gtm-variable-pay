@@ -64,7 +64,7 @@ const sections: NavSection[] = [
     items: [
       { id: "exchange-rates", label: "Exchange Rates", icon: DollarSign, permissionCheck: (c) => c.canAccessTab("tab:exchange_rates") },
       { id: "payout-runs", label: "Payout Runs", icon: Calculator, permissionCheck: (c) => c.canAccessTab("tab:payout_runs") },
-      { id: "deal-team-spiffs", label: "Deal Team SPIFFs", icon: Gift, permissionCheck: (c) => c.canAccessTab("tab:payout_runs") },
+      { id: "deal-team-spiffs", label: "Deal Team SPIFFs", icon: Gift, permissionCheck: (c) => c.canAccessTab("tab:deal_team_spiffs") },
     ],
   },
   {
