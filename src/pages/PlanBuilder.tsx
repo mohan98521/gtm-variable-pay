@@ -52,6 +52,7 @@ import { usePlanCommissions } from "@/hooks/usePlanCommissions";
 import { AssignedEmployeesCard } from "@/components/admin/AssignedEmployeesCard";
 import { NrrSettingsCard } from "@/components/admin/NrrSettingsCard";
 import { SpiffEditor } from "@/components/admin/SpiffEditor";
+import { ClosingArrRenewalMultiplierEditor } from "@/components/admin/ClosingArrRenewalMultiplierEditor";
 
 interface MultiplierGrid {
   id: string;
@@ -551,6 +552,9 @@ export default function PlanBuilder() {
           planId={planId!}
           metricNames={metrics.map(m => m.metric_name)}
         />
+
+        {/* Closing ARR Renewal Multipliers */}
+        <ClosingArrRenewalMultiplierEditor planId={planId!} />
 
         {/* Assigned Employees Section */}
         <AssignedEmployeesCard planId={planId!} planName={plan.name} />

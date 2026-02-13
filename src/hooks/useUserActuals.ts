@@ -109,7 +109,7 @@ export function useUserActuals() {
       // Attribution: Both sales_rep and sales_head receive credit
       const { data: closingArr, error: closingError } = await supabase
         .from("closing_arr_actuals")
-        .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id")
+        .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id, is_multi_year, renewal_years")
         .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd)
@@ -118,8 +118,10 @@ export function useUserActuals() {
       if (closingError) throw closingError;
 
       // Aggregate Eligible Closing ARR by month
+      // Note: renewal multipliers are NOT applied here in dashboard display
+      // They are only applied in the payout engine for compensation calculation
       const closingByMonth = new Map<string, number>();
-      (closingArr || []).forEach((arr) => {
+      (closingArr || []).forEach((arr: any) => {
         const monthKey = arr.month_year?.substring(0, 7) || "";
         const current = closingByMonth.get(monthKey) || 0;
         closingByMonth.set(monthKey, current + (arr.closing_arr || 0));

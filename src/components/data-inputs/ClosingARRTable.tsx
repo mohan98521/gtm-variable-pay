@@ -326,6 +326,8 @@ export function ClosingARRTable({
               <TableHead className="text-right">Opening ARR</TableHead>
               <TableHead className="text-right">Changes (+/−)</TableHead>
               <TableHead className="text-right">Closing ARR</TableHead>
+              <TableHead className="text-center">Multi-Year</TableHead>
+              <TableHead className="text-center">Renewal Yrs</TableHead>
               <TableHead>End Date</TableHead>
               <TableHead className="text-center">Eligible</TableHead>
               <TableHead>Sales Rep</TableHead>
@@ -359,6 +361,16 @@ export function ClosingARRTable({
                   </TableCell>
                   <TableCell className="text-right font-mono font-semibold">
                     {formatCurrency(record.closing_arr)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(record as any).is_multi_year ? (
+                      <Badge className="bg-primary/10 text-primary">Yes</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">No</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(record as any).is_multi_year ? (record as any).renewal_years : "-"}
                   </TableCell>
                   <TableCell>{formatDate(record.end_date)}</TableCell>
                   <TableCell className="text-center">

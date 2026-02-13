@@ -30,6 +30,7 @@ export type Database = {
           end_date: string | null
           id: string
           inflation: number | null
+          is_multi_year: boolean
           month_year: string
           new: number | null
           opening_arr: number | null
@@ -38,6 +39,7 @@ export type Database = {
           pid: string
           product: string
           renewal_status: string | null
+          renewal_years: number
           revised_region: string | null
           sales_head_employee_id: string | null
           sales_head_name: string | null
@@ -62,6 +64,7 @@ export type Database = {
           end_date?: string | null
           id?: string
           inflation?: number | null
+          is_multi_year?: boolean
           month_year: string
           new?: number | null
           opening_arr?: number | null
@@ -70,6 +73,7 @@ export type Database = {
           pid: string
           product: string
           renewal_status?: string | null
+          renewal_years?: number
           revised_region?: string | null
           sales_head_employee_id?: string | null
           sales_head_name?: string | null
@@ -94,6 +98,7 @@ export type Database = {
           end_date?: string | null
           id?: string
           inflation?: number | null
+          is_multi_year?: boolean
           month_year?: string
           new?: number | null
           opening_arr?: number | null
@@ -102,6 +107,7 @@ export type Database = {
           pid?: string
           product?: string
           renewal_status?: string | null
+          renewal_years?: number
           revised_region?: string | null
           sales_head_employee_id?: string | null
           sales_head_name?: string | null
@@ -112,6 +118,41 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      closing_arr_renewal_multipliers: {
+        Row: {
+          created_at: string
+          id: string
+          max_years: number | null
+          min_years: number
+          multiplier_value: number
+          plan_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          max_years?: number | null
+          min_years: number
+          multiplier_value?: number
+          plan_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          max_years?: number | null
+          min_years?: number
+          multiplier_value?: number
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_arr_renewal_multipliers_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "comp_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       closing_arr_targets: {
         Row: {
