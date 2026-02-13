@@ -63,6 +63,7 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
     is_active?: boolean;
     payout_on_booking_pct?: number;
     payout_on_collection_pct?: number;
+    payout_on_year_end_pct?: number;
   }) => {
     if (editingCommission) {
       updateMutation.mutate(
@@ -74,6 +75,7 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
           is_active: values.is_active,
           payout_on_booking_pct: values.payout_on_booking_pct,
           payout_on_collection_pct: values.payout_on_collection_pct,
+          payout_on_year_end_pct: values.payout_on_year_end_pct,
         },
         {
           onSuccess: () => {
@@ -92,6 +94,7 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
           is_active: values.is_active,
           payout_on_booking_pct: values.payout_on_booking_pct,
           payout_on_collection_pct: values.payout_on_collection_pct,
+          payout_on_year_end_pct: values.payout_on_year_end_pct,
         },
         {
           onSuccess: () => {
