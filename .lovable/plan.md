@@ -1,81 +1,126 @@
 
+## Report Audit: Broken and Inconsistent Reports
 
-## Broken Systems Identified in Payout Engine
-
-After a comprehensive audit of `payoutEngine.ts`, `useCollections.ts`, and related calculation modules, here are the issues found:
-
----
-
-### Issue 1: NRR and SPIFF Payouts Are Double-Counted Every Month (CRITICAL)
-
-**Problem**: Variable Pay correctly uses incremental logic -- it calculates YTD total, then subtracts the sum of prior finalized months to get the monthly increment. NRR Additional Pay and SPIFF payouts do NOT do this. They calculate the full YTD amount every month and persist it as the month's payout.
-
-**Example**: If an employee's YTD SPIFF payout is $5,000 by March:
-- January run: $2,000 (correct)
-- February run: $3,500 YTD (should pay $1,500 incremental, currently pays $3,500)
-- March run: $5,000 YTD (should pay $1,500 incremental, currently pays $5,000)
-- Total paid: $10,500 instead of $5,000
-
-**Fix**: Add `getPriorMonthsNrr` and `getPriorMonthsSpiff` functions (mirroring the existing `getPriorMonthsVp` pattern). Subtract prior months' NRR and SPIFF totals from the YTD calculation before persisting.
-
-**File**: `src/lib/payoutEngine.ts`
+After a thorough review of all 10 report tabs and their underlying hooks, here are the issues found:
 
 ---
 
-### Issue 2: Clawback Carry-Forward Recovery Is Never Applied (CRITICAL)
+### Issue 1: Management Summary Misclassifies NRR, SPIFF, and Collection Releases (CRITICAL)
 
-**Problem**: The `applyClawbackRecoveries()` function was created to deduct outstanding clawback ledger balances from an employee's payable amount. However, it is **never called** anywhere in the calculation pipeline. The function exists but `calculateMonthlyPayout` and `executePayoutCalculation` both skip it entirely. The `payableThisMonthUsd` is calculated without any clawback ledger deduction.
+**Problem**: The Management Summary hook (`useManagementSummary.ts`) classifies payouts using simple string matching:
+- `payout_type.includes('variable')` for VP
+- `payout_type.includes('commission')` for commissions
 
-**Impact**: If a clawback exceeds the employee's earnings in the trigger month, the unrecovered balance sits in the ledger forever and is never deducted from future payouts.
+This means NRR Additional Pay, SPIFF, Deal Team SPIFF, Collection Release, and Year-End Release payout types are **completely ignored** in both VP and Commission totals. They fall through both checks and are only counted toward clawback totals (since `totalClawback += clawback` runs unconditionally but the amounts themselves are skipped).
 
-**Fix**: Call `applyClawbackRecoveries(employee.id, payableThisMonthUsd, monthYear)` inside `calculateMonthlyPayout` before returning the final result. Use the adjusted amount for `payableThisMonthUsd`. Store the recovery amount for audit trail purposes.
+**Result**: The executive Management Summary report **understates total payouts** by the sum of all NRR, SPIFF, and release payouts. The quarterly and by-function breakdowns are similarly incomplete.
 
-**File**: `src/lib/payoutEngine.ts`
+**Fix**: Expand the classification logic to properly categorize all 8 payout types:
+- VP: 'Variable Pay'
+- Commission: 'Managed Services', 'Implementation', 'CR/ER', 'Perpetual License' (or any type not in the known non-commission set)
+- Separate line items for: 'NRR Additional Pay', 'SPIFF', 'Deal Team SPIFF'
+- Releases: 'Collection Release', 'Year-End Release' should be added to the appropriate category
+- Clawback: 'Clawback' type only
 
----
-
-### Issue 3: Commission Collection Releases Are Always $0 (MAJOR)
-
-**Problem**: When a deal is collected, the engine tries to release commission holdbacks by querying `monthly_payouts` records filtered by `.in('deal_id', collectedDealIds)`. However, commission payout records are persisted **without a `deal_id`** -- they are aggregated by commission type (e.g., "Managed Services", "Implementation"). Since `deal_id` is never set on commission records, the filter `.in('deal_id', collectedDealIds)` matches nothing.
-
-**Result**: Commission holdbacks (the "Upon Collection" portion) are never released, even when the deal is collected and the employee is owed that money.
-
-**Fix**: Two options:
-- **Option A** (Recommended): Persist commission records per-deal (with `deal_id`) instead of aggregating by type. This enables correct collection release matching.
-- **Option B**: Change the commission release query to look up commission holdback amounts from `deal_variable_pay_attribution` or a dedicated commission holdback tracking table instead of relying on `deal_id` in `monthly_payouts`.
-
-**File**: `src/lib/payoutEngine.ts` (both `persistPayoutResults` and `calculateCollectionReleases`)
+**Files**: `src/hooks/useManagementSummary.ts`, `src/components/reports/ManagementSummary.tsx`
 
 ---
 
-### Issue 4: Bulk Update Hook Missing `collection_month` (MINOR)
+### Issue 2: Currency Breakdown Has Same Classification Bug (MAJOR)
 
-**Problem**: The `useBulkUpdateCollections` mutation in `useCollections.ts` does not derive or set the `collection_month` field from `collection_date`. The single-record `useUpdateCollectionStatus` and `useBulkImportCollections` both correctly calculate `collection_month = format(parseISO(collection_date), "yyyy-MM-01")`, but the bulk update skips this.
+**Problem**: `CurrencyBreakdown.tsx` uses the same flawed `payout_type.includes('variable')` check. NRR, SPIFF, and release types are silently dropped from VP totals and incorrectly added to commission totals (since the else branch catches everything non-VP).
 
-**Impact**: Deals updated via bulk operations may have no `collection_month`, causing the payout engine to miss them when calculating collection releases (since it queries by `collection_month`).
+**Result**: Currency-level reporting overstates commissions and understates/omits other payout categories.
 
-**Fix**: Add `collection_month` derivation to `useBulkUpdateCollections`, matching the pattern already used in the other two mutations.
+**Fix**: Align payout type classification with the engine's actual types, matching the fix in Issue 1.
 
-**File**: `src/hooks/useCollections.ts`
+**File**: `src/components/reports/CurrencyBreakdown.tsx`
 
 ---
 
-### Summary
+### Issue 3: Year-End Holdback Tracker Same Classification Bug (MAJOR)
 
-| # | Issue | Severity | Impact |
+**Problem**: `useYearEndHoldbacks.ts` uses `payout_type.includes('variable')` to split VP vs commission holdbacks. NRR and SPIFF year-end holdback amounts are miscategorized as commission holdbacks.
+
+**Fix**: Use exact type matching consistent with Issue 1.
+
+**File**: `src/hooks/useYearEndHoldbacks.ts`
+
+---
+
+### Issue 4: Payout Statement Missing NRR, SPIFF, and Release Types (MAJOR)
+
+**Problem**: The `usePayoutStatement.ts` hook only recognizes three payout types: 'Variable Pay', 'Clawback', and everything else as "commission." This means:
+- NRR Additional Pay appears as a commission item (wrong category, no metric breakdown)
+- SPIFF and Deal Team SPIFF appear as commission items
+- Collection Release and Year-End Release appear as commission items
+- These types display without deal value or rate context, showing confusing $0 values
+
+**Fix**: Add dedicated sections or proper categorization for NRR, SPIFF, and release types in the payout statement. At minimum, group them correctly (NRR/SPIFF under VP-adjacent section, releases as a separate section).
+
+**Files**: `src/hooks/usePayoutStatement.ts`, `src/components/reports/PayoutStatement.tsx`
+
+---
+
+### Issue 5: Incentive Audit Missing NRR, SPIFF, and Org-Level Actuals (MODERATE)
+
+**Problem**: The Incentive Audit report (`useIncentiveAuditData.ts`) calculates VP and commissions from live data (not payout runs), but:
+- Does not include NRR Additional Pay calculations
+- Does not include SPIFF or Deal Team SPIFF calculations
+- Does not handle "Org " prefixed metrics (organization-wide rollup actuals)
+- The commission table header says "Paid (75%) / Holdback (25%)" which is hardcoded but the actual splits come from the plan configuration and may differ
+
+**Fix**:
+- Add NRR and SPIFF sections to the audit report (or note their absence)
+- Fix hardcoded "75%/25%" column headers to show "Paid / Holdback" without percentages
+- Consider adding Org-level metric support for overlay/executive roles
+
+**Files**: `src/pages/Reports.tsx` (commission table headers), `src/hooks/useIncentiveAuditData.ts`
+
+---
+
+### Issue 6: Incentive Audit Grand Total Missing Year-End Holdback (MINOR)
+
+**Problem**: The Grand Total table at the bottom of the Incentive Audit shows `Commission (Holdback)` but this only includes the collection holdback. The year-end holdback column (`totalCommissionYearEndHoldback`) is calculated but never displayed in the UI table, even though it's included in the CSV export.
+
+**Fix**: Add a "Year-End Holdback" column to the Grand Total table, or combine it into a "Total Holdback" column.
+
+**File**: `src/pages/Reports.tsx`
+
+---
+
+### Issue 7: Compensation Snapshot Missing TVP Column (MINOR)
+
+**Problem**: The Compensation Snapshot table shows OTE, Target Bonus, and Pro-Ration but does not show TVP (Total Variable Pay) in either local currency or USD. The `user_targets` table has `target_bonus_usd` but TVP is on the employee record. The report derives `targetBonusLocal` with a formula `ote_local - tfp_local` which may not match the actual TVP field.
+
+**Fix**: Source TVP directly from the employee/target record rather than calculating it. Add TVP column to the table for completeness.
+
+**File**: `src/pages/Reports.tsx`
+
+---
+
+### Summary of Changes
+
+| # | Issue | Severity | Scope |
 |---|---|---|---|
-| 1 | NRR/SPIFF double-counted monthly | Critical | Overpayment -- employees paid full YTD amount every month |
-| 2 | Clawback carry-forward never applied | Critical | Unrecovered clawbacks never deducted from future payouts |
-| 3 | Commission holdbacks never released | Major | Employees never receive commission collection portion |
-| 4 | Bulk update missing collection_month | Minor | Bulk-updated collections invisible to payout engine |
+| 1 | Mgmt Summary ignores NRR/SPIFF/Releases | Critical | Hook + Component |
+| 2 | Currency Breakdown same classification bug | Major | Component |
+| 3 | Holdback Tracker same classification bug | Major | Hook |
+| 4 | Payout Statement miscategorizes non-VP/non-commission types | Major | Hook + Component |
+| 5 | Incentive Audit missing NRR/SPIFF, hardcoded split labels | Moderate | Hook + Page |
+| 6 | Incentive Audit Grand Total missing year-end holdback | Minor | Page |
+| 7 | Compensation Snapshot missing TVP, derived formula mismatch | Minor | Page |
 
-### Implementation Plan
+### Implementation Approach
 
-1. Add `getPriorMonthsNrr()` and `getPriorMonthsSpiff()` helper functions
-2. Apply incremental logic to NRR and SPIFF in `calculateMonthlyPayout`
-3. Integrate `applyClawbackRecoveries()` call into the payable calculation flow
-4. Persist commission records per-deal with `deal_id` for correct collection release
-5. Add `collection_month` derivation to `useBulkUpdateCollections`
+Create a shared payout type classification utility (`src/lib/payoutTypes.ts`) to ensure consistent categorization across all reports:
 
-All changes are in two files: `src/lib/payoutEngine.ts` and `src/hooks/useCollections.ts`.
+```text
+VP_TYPES = ['Variable Pay']
+COMMISSION_TYPES = ['Managed Services', 'Implementation', 'CR/ER', 'Perpetual License']
+ADDITIONAL_PAY_TYPES = ['NRR Additional Pay', 'SPIFF', 'Deal Team SPIFF']
+RELEASE_TYPES = ['Collection Release', 'Year-End Release']
+DEDUCTION_TYPES = ['Clawback']
+```
 
+All hooks and components will import from this shared module instead of using ad-hoc string matching. The Management Summary, Currency Breakdown, Holdback Tracker, and Payout Statement will be updated to properly handle all payout types with correct aggregation.
