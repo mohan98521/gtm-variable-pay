@@ -8,7 +8,7 @@
  */
 
 import { PlanMetric } from "@/hooks/usePlanMetrics";
-import { getMultiplierFromGrid, calculateAchievementPercent } from "./compensationEngine";
+import { getMultiplierFromGrid, calculateAchievementPercent, calculateMarginalPayout } from "./compensationEngine";
 
 // ============= INTERFACES =============
 
@@ -74,7 +74,6 @@ export function calculateAggregateVariablePay(
   }
   
   const achievementPct = calculateAchievementPercent(totalActualUsd, targetUsd);
-  const multiplier = getMultiplierFromGrid(achievementPct, metric);
   
   // Check gate threshold
   const isGated = metric.logic_type === "Gated_Threshold";
@@ -82,9 +81,20 @@ export function calculateAggregateVariablePay(
     metric.gate_threshold_percent && 
     achievementPct <= metric.gate_threshold_percent;
   
-  const totalVariablePay = belowGate 
-    ? 0 
-    : (achievementPct / 100) * bonusAllocationUsd * multiplier;
+  if (belowGate) {
+    return { achievementPct, multiplier: 0, totalVariablePay: 0 };
+  }
+
+  // Use marginal calculation for Stepped Accelerator and Gated with grids
+  if (metric.logic_type === "Stepped_Accelerator" || 
+      (metric.logic_type === "Gated_Threshold" && (metric.multiplier_grids?.length ?? 0) > 0)) {
+    const result = calculateMarginalPayout(achievementPct, bonusAllocationUsd, metric);
+    return { achievementPct, multiplier: result.weightedMultiplier, totalVariablePay: result.payout };
+  }
+
+  // Linear fallback
+  const multiplier = getMultiplierFromGrid(achievementPct, metric);
+  const totalVariablePay = (achievementPct / 100) * bonusAllocationUsd * multiplier;
   
   return { achievementPct, multiplier, totalVariablePay };
 }
