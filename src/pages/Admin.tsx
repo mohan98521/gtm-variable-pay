@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Layers, Users, UserCog, Shield, Upload, Target, DollarSign, Calculator, Lock, Settings, UserPlus, type LucideIcon } from "lucide-react";
+import { Layers, Users, UserCog, Shield, Upload, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, type LucideIcon } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { CompensationPlansTab } from "@/components/admin/CompensationPlansTab";
@@ -14,6 +14,7 @@ import { PerformanceTargetsManagement } from "@/components/admin/PerformanceTarg
 import { ExchangeRateManagement } from "@/components/admin/ExchangeRateManagement";
 import { PayoutRunManagement } from "@/components/admin/PayoutRunManagement";
 import { RoleBuilder } from "@/components/admin/RoleBuilder";
+import { DealTeamSpiffManager } from "@/components/admin/DealTeamSpiffManager";
 
 // --- Section / Item types ---
 interface NavItem {
@@ -63,6 +64,7 @@ const sections: NavSection[] = [
     items: [
       { id: "exchange-rates", label: "Exchange Rates", icon: DollarSign, permissionCheck: (c) => c.canAccessTab("tab:exchange_rates") },
       { id: "payout-runs", label: "Payout Runs", icon: Calculator, permissionCheck: (c) => c.canAccessTab("tab:payout_runs") },
+      { id: "deal-team-spiffs", label: "Deal Team SPIFFs", icon: Gift, permissionCheck: (c) => c.canAccessTab("tab:payout_runs") },
     ],
   },
   {
@@ -85,6 +87,7 @@ const contentMap: Record<string, React.ComponentType> = {
   "bulk-upload": BulkUpload,
   "exchange-rates": ExchangeRateManagement,
   "payout-runs": PayoutRunManagement,
+  "deal-team-spiffs": DealTeamSpiffManager,
   "permissions": PermissionsManagement,
   "roles-builder": RoleBuilder,
 };

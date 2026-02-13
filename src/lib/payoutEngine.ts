@@ -116,6 +116,10 @@ export interface EmployeePayoutResult {
   spiffCollectionPct: number;
   spiffYearEndPct: number;
   
+  // Deal Team SPIFFs (manual allocation)
+  dealTeamSpiffUsd: number;
+  dealTeamSpiffLocal: number;
+  
   // Totals
   totalPayoutUsd: number;
   totalPayoutLocal: number;
@@ -985,6 +989,21 @@ export async function calculateMonthlyPayout(
     spiffPayoutUsd = spiffResult.totalSpiffUsd;
     spiffBreakdowns = spiffResult.breakdowns;
   }
+
+  // === Deal Team SPIFF (manual allocations) ===
+  let dealTeamSpiffUsd = 0;
+  {
+    const { data: dtsAllocations } = await supabase
+      .from('deal_team_spiff_allocations' as any)
+      .select('allocated_amount_usd')
+      .eq('employee_id', employee.employee_id)
+      .eq('status', 'approved')
+      .eq('payout_month', ensureFullDate(monthYear));
+    
+    dealTeamSpiffUsd = ((dtsAllocations as any[]) || []).reduce(
+      (sum: number, a: any) => sum + (a.allocated_amount_usd || 0), 0
+    );
+  }
   
   // Convert to local currency
   const vpLocal = convertVPToLocal(vpResult.totalVpUsd, compensationRate);
@@ -1002,8 +1021,9 @@ export async function calculateMonthlyPayout(
   
   const nrrPayoutLocal = convertVPToLocal(nrrPayoutUsd, compensationRate);
   const spiffPayoutLocal = convertVPToLocal(spiffPayoutUsd, compensationRate);
+  const dealTeamSpiffLocal = convertVPToLocal(dealTeamSpiffUsd, compensationRate);
   
-  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases + NRR booking portion + SPIFF booking portions
+  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases + NRR booking portion + SPIFF booking portions + Deal Team SPIFF (100% booking)
   const nrrBookingUsd = nrrPayoutUsd * nrrBookingPct;
   
   // Calculate SPIFF booking portion from individual spiff splits
@@ -1022,8 +1042,8 @@ export async function calculateMonthlyPayout(
     }
   }
   
-  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrBookingUsd + spiffBookingUsd;
-  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal + convertVPToLocal(nrrBookingUsd, compensationRate) + convertVPToLocal(spiffBookingUsd, compensationRate);
+  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrBookingUsd + spiffBookingUsd + dealTeamSpiffUsd;
+  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal + convertVPToLocal(nrrBookingUsd, compensationRate) + convertVPToLocal(spiffBookingUsd, compensationRate) + dealTeamSpiffLocal;
   
   return {
     employeeId: employee.id,
@@ -1069,8 +1089,11 @@ export async function calculateMonthlyPayout(
     spiffCollectionPct: spiffPayoutUsd > 0 ? spiffCollectionUsd / spiffPayoutUsd : 1,
     spiffYearEndPct: spiffPayoutUsd > 0 ? spiffYearEndUsd / spiffPayoutUsd : 0,
     
-    totalPayoutUsd: vpResult.totalVpUsd + commResult.totalCommUsd + nrrPayoutUsd + spiffPayoutUsd,
-    totalPayoutLocal: vpLocal + commLocal + nrrPayoutLocal + spiffPayoutLocal,
+    dealTeamSpiffUsd,
+    dealTeamSpiffLocal,
+    
+    totalPayoutUsd: vpResult.totalVpUsd + commResult.totalCommUsd + nrrPayoutUsd + spiffPayoutUsd + dealTeamSpiffUsd,
+    totalPayoutLocal: vpLocal + commLocal + nrrPayoutLocal + spiffPayoutLocal + dealTeamSpiffLocal,
     totalBookingUsd: vpResult.bookingUsd + commResult.bookingUsd,
     totalBookingLocal: vpBookingLocal + commBookingLocal,
     payableThisMonthUsd,
@@ -1480,6 +1503,30 @@ async function persistPayoutResults(
         year_end_amount_local: sYe * emp.vpCompensationRate,
         status: 'calculated',
         notes: emp.spiffBreakdowns.map(b => `${b.spiffName}: $${b.spiffPayoutUsd.toLocaleString()} (${b.customerName || b.projectId})`).join('; '),
+      });
+    }
+
+    // Deal Team SPIFF records (100% upon booking, no holdback)
+    if (emp.dealTeamSpiffUsd > 0) {
+      records.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        month_year: monthYear,
+        payout_type: 'Deal Team SPIFF',
+        plan_id: emp.planId,
+        calculated_amount_usd: emp.dealTeamSpiffUsd,
+        calculated_amount_local: emp.dealTeamSpiffLocal,
+        local_currency: emp.localCurrency,
+        exchange_rate_used: emp.vpCompensationRate,
+        exchange_rate_type: 'compensation',
+        booking_amount_usd: emp.dealTeamSpiffUsd,
+        booking_amount_local: emp.dealTeamSpiffLocal,
+        collection_amount_usd: 0,
+        collection_amount_local: 0,
+        year_end_amount_usd: 0,
+        year_end_amount_local: 0,
+        status: 'calculated',
+        notes: 'Deal Team SPIFF - Manual allocation',
       });
     }
     
