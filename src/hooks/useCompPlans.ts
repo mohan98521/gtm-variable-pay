@@ -13,6 +13,9 @@ export interface CompPlan {
   nrr_ote_percent: number;
   cr_er_min_gp_margin_pct: number;
   impl_min_gp_margin_pct: number;
+  nrr_payout_on_booking_pct: number;
+  nrr_payout_on_collection_pct: number;
+  nrr_payout_on_year_end_pct: number;
   created_at: string;
   updated_at: string;
 }

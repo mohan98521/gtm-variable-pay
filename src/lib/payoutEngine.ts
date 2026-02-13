@@ -104,11 +104,17 @@ export interface EmployeePayoutResult {
   nrrPayoutUsd: number;
   nrrPayoutLocal: number;
   nrrResult: NRRCalculationResult | null;
+  nrrBookingPct: number;
+  nrrCollectionPct: number;
+  nrrYearEndPct: number;
   
   // SPIFFs
   spiffPayoutUsd: number;
   spiffPayoutLocal: number;
   spiffBreakdowns: SpiffDealBreakdown[];
+  spiffBookingPct: number;
+  spiffCollectionPct: number;
+  spiffYearEndPct: number;
   
   // Totals
   totalPayoutUsd: number;
@@ -801,6 +807,9 @@ export async function calculateMonthlyPayout(
   const nrrOtePct = (planData as any)?.nrr_ote_percent ?? 0;
   const crErMinGp = (planData as any)?.cr_er_min_gp_margin_pct ?? 0;
   const implMinGp = (planData as any)?.impl_min_gp_margin_pct ?? 0;
+  const nrrBookingPct = ((planData as any)?.nrr_payout_on_booking_pct ?? 0) / 100;
+  const nrrCollectionPct = ((planData as any)?.nrr_payout_on_collection_pct ?? 100) / 100;
+  const nrrYearEndPct = ((planData as any)?.nrr_payout_on_year_end_pct ?? 0) / 100;
   
   if (nrrOtePct > 0) {
     const empId = employee.employee_id;
@@ -911,9 +920,27 @@ export async function calculateMonthlyPayout(
   const nrrPayoutLocal = convertVPToLocal(nrrPayoutUsd, compensationRate);
   const spiffPayoutLocal = convertVPToLocal(spiffPayoutUsd, compensationRate);
   
-  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases + NRR + SPIFFs
-  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrPayoutUsd + spiffPayoutUsd;
-  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal + nrrPayoutLocal + spiffPayoutLocal;
+  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases + NRR booking portion + SPIFF booking portions
+  const nrrBookingUsd = nrrPayoutUsd * nrrBookingPct;
+  
+  // Calculate SPIFF booking portion from individual spiff splits
+  let spiffBookingUsd = 0;
+  let spiffCollectionUsd = 0;
+  let spiffYearEndUsd = 0;
+  if (planSpiffs && planSpiffs.length > 0) {
+    for (const breakdown of spiffBreakdowns) {
+      const matchingSpiff = planSpiffs.find(s => s.spiff_name === breakdown.spiffName);
+      const bkPct = (matchingSpiff as any)?.payout_on_booking_pct ?? 0;
+      const coPct = (matchingSpiff as any)?.payout_on_collection_pct ?? 100;
+      const yePct = (matchingSpiff as any)?.payout_on_year_end_pct ?? 0;
+      spiffBookingUsd += breakdown.spiffPayoutUsd * (bkPct / 100);
+      spiffCollectionUsd += breakdown.spiffPayoutUsd * (coPct / 100);
+      spiffYearEndUsd += breakdown.spiffPayoutUsd * (yePct / 100);
+    }
+  }
+  
+  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrBookingUsd + spiffBookingUsd;
+  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal + convertVPToLocal(nrrBookingUsd, compensationRate) + convertVPToLocal(spiffBookingUsd, compensationRate);
   
   return {
     employeeId: employee.id,
@@ -949,9 +976,15 @@ export async function calculateMonthlyPayout(
     nrrPayoutUsd,
     nrrPayoutLocal,
     nrrResult,
+    nrrBookingPct,
+    nrrCollectionPct,
+    nrrYearEndPct,
     spiffPayoutUsd,
     spiffPayoutLocal,
     spiffBreakdowns,
+    spiffBookingPct: spiffPayoutUsd > 0 ? spiffBookingUsd / spiffPayoutUsd : 0,
+    spiffCollectionPct: spiffPayoutUsd > 0 ? spiffCollectionUsd / spiffPayoutUsd : 1,
+    spiffYearEndPct: spiffPayoutUsd > 0 ? spiffYearEndUsd / spiffPayoutUsd : 0,
     
     totalPayoutUsd: vpResult.totalVpUsd + commResult.totalCommUsd + nrrPayoutUsd + spiffPayoutUsd,
     totalPayoutLocal: vpLocal + commLocal + nrrPayoutLocal + spiffPayoutLocal,
@@ -1313,6 +1346,9 @@ async function persistPayoutResults(
 
     // NRR Additional Pay record
     if (emp.nrrPayoutUsd > 0) {
+      const nBk = emp.nrrPayoutUsd * (emp.nrrBookingPct ?? 0);
+      const nCo = emp.nrrPayoutUsd * (emp.nrrCollectionPct ?? 1);
+      const nYe = emp.nrrPayoutUsd * (emp.nrrYearEndPct ?? 0);
       records.push({
         payout_run_id: payoutRunId,
         employee_id: emp.employeeId,
@@ -1324,8 +1360,12 @@ async function persistPayoutResults(
         local_currency: emp.localCurrency,
         exchange_rate_used: emp.vpCompensationRate,
         exchange_rate_type: 'compensation',
-        booking_amount_usd: emp.nrrPayoutUsd,
-        booking_amount_local: emp.nrrPayoutLocal,
+        booking_amount_usd: nBk,
+        booking_amount_local: nBk * emp.vpCompensationRate,
+        collection_amount_usd: nCo,
+        collection_amount_local: nCo * emp.vpCompensationRate,
+        year_end_amount_usd: nYe,
+        year_end_amount_local: nYe * emp.vpCompensationRate,
         status: 'calculated',
         notes: emp.nrrResult
           ? `NRR Achievement: ${emp.nrrResult.achievementPct}% (Actuals: $${emp.nrrResult.nrrActuals.toLocaleString()} / Target: $${emp.nrrResult.nrrTarget.toLocaleString()})`
@@ -1335,6 +1375,9 @@ async function persistPayoutResults(
 
     // SPIFF records
     if (emp.spiffPayoutUsd > 0) {
+      const sBk = emp.spiffPayoutUsd * (emp.spiffBookingPct ?? 0);
+      const sCo = emp.spiffPayoutUsd * (emp.spiffCollectionPct ?? 1);
+      const sYe = emp.spiffPayoutUsd * (emp.spiffYearEndPct ?? 0);
       records.push({
         payout_run_id: payoutRunId,
         employee_id: emp.employeeId,
@@ -1346,8 +1389,12 @@ async function persistPayoutResults(
         local_currency: emp.localCurrency,
         exchange_rate_used: emp.vpCompensationRate,
         exchange_rate_type: 'compensation',
-        booking_amount_usd: emp.spiffPayoutUsd,
-        booking_amount_local: emp.spiffPayoutLocal,
+        booking_amount_usd: sBk,
+        booking_amount_local: sBk * emp.vpCompensationRate,
+        collection_amount_usd: sCo,
+        collection_amount_local: sCo * emp.vpCompensationRate,
+        year_end_amount_usd: sYe,
+        year_end_amount_local: sYe * emp.vpCompensationRate,
         status: 'calculated',
         notes: emp.spiffBreakdowns.map(b => `${b.spiffName}: $${b.spiffPayoutUsd.toLocaleString()} (${b.customerName || b.projectId})`).join('; '),
       });

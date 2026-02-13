@@ -10,6 +10,9 @@ export interface PlanSpiff {
   linked_metric_name: string;
   spiff_rate_pct: number;
   min_deal_value_usd: number | null;
+  payout_on_booking_pct: number;
+  payout_on_collection_pct: number;
+  payout_on_year_end_pct: number;
   is_active: boolean;
   created_at: string;
 }
@@ -44,6 +47,9 @@ export function useCreatePlanSpiff() {
       spiff_rate_pct: number;
       min_deal_value_usd?: number | null;
       is_active?: boolean;
+      payout_on_booking_pct?: number;
+      payout_on_collection_pct?: number;
+      payout_on_year_end_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_spiffs")
@@ -55,6 +61,9 @@ export function useCreatePlanSpiff() {
           spiff_rate_pct: values.spiff_rate_pct,
           min_deal_value_usd: values.min_deal_value_usd ?? null,
           is_active: values.is_active ?? true,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 0,
+          payout_on_collection_pct: values.payout_on_collection_pct ?? 100,
+          payout_on_year_end_pct: values.payout_on_year_end_pct ?? 0,
         })
         .select()
         .single();
@@ -85,6 +94,9 @@ export function useUpdatePlanSpiff() {
       spiff_rate_pct: number;
       min_deal_value_usd?: number | null;
       is_active?: boolean;
+      payout_on_booking_pct?: number;
+      payout_on_collection_pct?: number;
+      payout_on_year_end_pct?: number;
     }) => {
       const { data, error } = await supabase
         .from("plan_spiffs")
@@ -95,6 +107,9 @@ export function useUpdatePlanSpiff() {
           spiff_rate_pct: values.spiff_rate_pct,
           min_deal_value_usd: values.min_deal_value_usd ?? null,
           is_active: values.is_active,
+          payout_on_booking_pct: values.payout_on_booking_pct ?? 0,
+          payout_on_collection_pct: values.payout_on_collection_pct ?? 100,
+          payout_on_year_end_pct: values.payout_on_year_end_pct ?? 0,
         })
         .eq("id", values.id)
         .select()

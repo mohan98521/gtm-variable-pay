@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { PlanSpiff } from "@/hooks/usePlanSpiffs";
 
 interface SpiffFormDialogProps {
@@ -33,6 +33,9 @@ interface SpiffFormDialogProps {
     spiff_rate_pct: number;
     min_deal_value_usd?: number | null;
     is_active: boolean;
+    payout_on_booking_pct: number;
+    payout_on_collection_pct: number;
+    payout_on_year_end_pct: number;
   }) => void;
   isSubmitting: boolean;
 }
@@ -51,6 +54,9 @@ export function SpiffFormDialog({
   const [ratePct, setRatePct] = useState(0);
   const [minDealValue, setMinDealValue] = useState<string>("");
   const [isActive, setIsActive] = useState(true);
+  const [bookingPct, setBookingPct] = useState(0);
+  const [collectionPct, setCollectionPct] = useState(100);
+  const [yearEndPct, setYearEndPct] = useState(0);
 
   useEffect(() => {
     if (spiff) {
@@ -60,6 +66,9 @@ export function SpiffFormDialog({
       setRatePct(spiff.spiff_rate_pct);
       setMinDealValue(spiff.min_deal_value_usd?.toString() || "");
       setIsActive(spiff.is_active);
+      setBookingPct(spiff.payout_on_booking_pct ?? 0);
+      setCollectionPct(spiff.payout_on_collection_pct ?? 100);
+      setYearEndPct(spiff.payout_on_year_end_pct ?? 0);
     } else {
       setName("");
       setDescription("");
@@ -67,8 +76,49 @@ export function SpiffFormDialog({
       setRatePct(25);
       setMinDealValue("");
       setIsActive(true);
+      setBookingPct(0);
+      setCollectionPct(100);
+      setYearEndPct(0);
     }
   }, [spiff, metricNames, open]);
+
+  const payoutSum = (bookingPct || 0) + (collectionPct || 0) + (yearEndPct || 0);
+
+  const handleBookingChange = (value: number) => {
+    const v = Math.min(100, Math.max(0, value || 0));
+    setBookingPct(v);
+    const remaining = 100 - v;
+    if (collectionPct > remaining) {
+      setCollectionPct(remaining);
+      setYearEndPct(0);
+    } else {
+      setYearEndPct(remaining - collectionPct);
+    }
+  };
+
+  const handleCollectionChange = (value: number) => {
+    const v = Math.min(100, Math.max(0, value || 0));
+    setCollectionPct(v);
+    const remaining = 100 - bookingPct - v;
+    if (remaining >= 0) {
+      setYearEndPct(remaining);
+    } else {
+      setBookingPct(Math.max(0, bookingPct + remaining));
+      setYearEndPct(0);
+    }
+  };
+
+  const handleYearEndChange = (value: number) => {
+    const v = Math.min(100, Math.max(0, value || 0));
+    setYearEndPct(v);
+    const remaining = 100 - bookingPct - v;
+    if (remaining >= 0) {
+      setCollectionPct(remaining);
+    } else {
+      setBookingPct(Math.max(0, bookingPct + remaining));
+      setCollectionPct(0);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,14 +129,17 @@ export function SpiffFormDialog({
       spiff_rate_pct: ratePct,
       min_deal_value_usd: minDealValue ? parseFloat(minDealValue) : null,
       is_active: isActive,
+      payout_on_booking_pct: bookingPct,
+      payout_on_collection_pct: collectionPct,
+      payout_on_year_end_pct: yearEndPct,
     });
   };
 
-  const isValid = name.trim() && linkedMetric && ratePct > 0;
+  const isValid = name.trim() && linkedMetric && ratePct > 0 && payoutSum === 100;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{spiff ? "Edit SPIFF" : "Add SPIFF"}</DialogTitle>
           <DialogDescription>
@@ -172,6 +225,54 @@ export function SpiffFormDialog({
               checked={isActive}
               onCheckedChange={setIsActive}
             />
+          </div>
+
+          {/* Payout Split Section */}
+          <div className="pt-4 border-t">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium">Payout Split</h4>
+              {payoutSum !== 100 && (
+                <div className="flex items-center gap-1 text-warning text-xs">
+                  <AlertTriangle className="h-3 w-3" />
+                  <span>Must sum to 100% (currently {payoutSum}%)</span>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Upon Bookings (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={bookingPct}
+                  onChange={(e) => handleBookingChange(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Paid on booking</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Upon Collections (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={collectionPct}
+                  onChange={(e) => handleCollectionChange(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Held until collected</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">At Year End (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={yearEndPct}
+                  onChange={(e) => handleYearEndChange(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Released in December</p>
+              </div>
+            </div>
           </div>
 
           <DialogFooter>

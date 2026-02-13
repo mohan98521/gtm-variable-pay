@@ -204,6 +204,9 @@ export type Database = {
           is_clawback_exempt: boolean
           name: string
           nrr_ote_percent: number
+          nrr_payout_on_booking_pct: number
+          nrr_payout_on_collection_pct: number
+          nrr_payout_on_year_end_pct: number
           payout_frequency: string | null
           updated_at: string
         }
@@ -219,6 +222,9 @@ export type Database = {
           is_clawback_exempt?: boolean
           name: string
           nrr_ote_percent?: number
+          nrr_payout_on_booking_pct?: number
+          nrr_payout_on_collection_pct?: number
+          nrr_payout_on_year_end_pct?: number
           payout_frequency?: string | null
           updated_at?: string
         }
@@ -234,6 +240,9 @@ export type Database = {
           is_clawback_exempt?: boolean
           name?: string
           nrr_ote_percent?: number
+          nrr_payout_on_booking_pct?: number
+          nrr_payout_on_collection_pct?: number
+          nrr_payout_on_year_end_pct?: number
           payout_frequency?: string | null
           updated_at?: string
         }
@@ -1472,6 +1481,9 @@ export type Database = {
           is_active: boolean
           linked_metric_name: string
           min_deal_value_usd: number | null
+          payout_on_booking_pct: number
+          payout_on_collection_pct: number
+          payout_on_year_end_pct: number
           plan_id: string
           spiff_name: string
           spiff_rate_pct: number
@@ -1483,6 +1495,9 @@ export type Database = {
           is_active?: boolean
           linked_metric_name: string
           min_deal_value_usd?: number | null
+          payout_on_booking_pct?: number
+          payout_on_collection_pct?: number
+          payout_on_year_end_pct?: number
           plan_id: string
           spiff_name: string
           spiff_rate_pct?: number
@@ -1494,6 +1509,9 @@ export type Database = {
           is_active?: boolean
           linked_metric_name?: string
           min_deal_value_usd?: number | null
+          payout_on_booking_pct?: number
+          payout_on_collection_pct?: number
+          payout_on_year_end_pct?: number
           plan_id?: string
           spiff_name?: string
           spiff_rate_pct?: number

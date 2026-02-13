@@ -541,6 +541,9 @@ export default function PlanBuilder() {
           nrrOtePercent={(plan as any).nrr_ote_percent ?? 0}
           crErMinGpMarginPct={(plan as any).cr_er_min_gp_margin_pct ?? 0}
           implMinGpMarginPct={(plan as any).impl_min_gp_margin_pct ?? 0}
+          nrrPayoutOnBookingPct={(plan as any).nrr_payout_on_booking_pct ?? 0}
+          nrrPayoutOnCollectionPct={(plan as any).nrr_payout_on_collection_pct ?? 100}
+          nrrPayoutOnYearEndPct={(plan as any).nrr_payout_on_year_end_pct ?? 0}
         />
 
         {/* SPIFFs Section */}
