@@ -1,12 +1,9 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { Users, Target, TrendingUp, DollarSign, Wallet } from "lucide-react";
 import { TeamCompensationResult } from "@/hooks/useTeamCompensation";
+import { MetricCard } from "@/components/dashboard/MetricCard";
+import { formatCurrencyValue } from "@/lib/utils";
 
-const formatCurrency = (value: number) => {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
-  if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
-  return `$${Math.round(value).toLocaleString()}`;
-};
+const formatCurrency = (value: number) => formatCurrencyValue(value);
 
 interface TeamSummaryCardsProps {
   data: TeamCompensationResult;
@@ -49,20 +46,13 @@ export function TeamSummaryCards({ data }: TeamSummaryCardsProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {cards.map((card) => (
-        <Card key={card.label}>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <card.icon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground truncate">{card.label}</p>
-                <p className="text-xl font-semibold text-foreground">{card.value}</p>
-                <p className="text-xs text-muted-foreground">{card.sub}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <MetricCard
+          key={card.label}
+          title={card.label}
+          value={card.value}
+          subtitle={card.sub}
+          icon={<card.icon className="h-5 w-5" />}
+        />
       ))}
     </div>
   );

@@ -465,33 +465,42 @@ export default function Reports() {
         </div>
 
         <Tabs defaultValue="employees" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="bg-[hsl(var(--azentio-navy))] text-white flex-wrap h-auto gap-1 p-1">
-            <TabsTrigger value="employees" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
-              <Users className="mr-2 h-4 w-4" />
-              Employee Master
-            </TabsTrigger>
-            <TabsTrigger value="compensation" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
-              <DollarSign className="mr-2 h-4 w-4" />
-              Compensation Snapshot
-            </TabsTrigger>
-            <TabsTrigger value="audit" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
-              <Calculator className="mr-2 h-4 w-4" />
-              Incentive Audit
-            </TabsTrigger>
-            <TabsTrigger value="my-deals" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
-              <Briefcase className="mr-2 h-4 w-4" />
-              My Deals
-            </TabsTrigger>
-            <TabsTrigger value="my-closing-arr" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
-              <Database className="mr-2 h-4 w-4" />
-              My Closing ARR
-            </TabsTrigger>
-            <TabsTrigger value="payout-statement" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
-              <Receipt className="mr-2 h-4 w-4" />
-              Payout Statement
-            </TabsTrigger>
-            {canViewAllData() && (
-              <>
+          {/* Personal Reports */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Personal Reports</p>
+            <TabsList className="bg-[hsl(var(--azentio-navy))] text-white flex-wrap h-auto gap-1 p-1">
+              <TabsTrigger value="employees" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <Users className="mr-2 h-4 w-4" />
+                Employee Master
+              </TabsTrigger>
+              <TabsTrigger value="compensation" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <DollarSign className="mr-2 h-4 w-4" />
+                Compensation
+              </TabsTrigger>
+              <TabsTrigger value="audit" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <Calculator className="mr-2 h-4 w-4" />
+                Incentive Audit
+              </TabsTrigger>
+              <TabsTrigger value="my-deals" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <Briefcase className="mr-2 h-4 w-4" />
+                My Deals
+              </TabsTrigger>
+              <TabsTrigger value="my-closing-arr" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <Database className="mr-2 h-4 w-4" />
+                My Closing ARR
+              </TabsTrigger>
+              <TabsTrigger value="payout-statement" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <Receipt className="mr-2 h-4 w-4" />
+                Payout Statement
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Management Reports */}
+          {canViewAllData() && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Management Reports</p>
+              <TabsList className="bg-[hsl(var(--azentio-navy))] text-white flex-wrap h-auto gap-1 p-1">
                 <TabsTrigger value="mgmt-summary" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
                   <BarChart3 className="mr-2 h-4 w-4" />
                   Mgmt Summary
@@ -508,9 +517,9 @@ export default function Reports() {
                   <FileText className="mr-2 h-4 w-4" />
                   Audit Trail
                 </TabsTrigger>
-              </>
-            )}
-          </TabsList>
+              </TabsList>
+            </div>
+          )}
 
           {/* Filters - Only show for Employee Master and Incentive Audit tabs */}
           {(activeTab === "employees" || activeTab === "audit") && (
@@ -552,7 +561,7 @@ export default function Reports() {
                 <div className="flex gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="border-[hsl(var(--azentio-navy))]">
+                      <Button variant="outline">
                         <Columns className="mr-2 h-4 w-4" />
                         Columns
                       </Button>
@@ -569,7 +578,7 @@ export default function Reports() {
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button onClick={exportEmployees} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+                  <Button onClick={exportEmployees} className="bg-accent hover:bg-accent/90 text-accent-foreground">
                     <Download className="mr-2 h-4 w-4" />
                     Export All Fields
                   </Button>
@@ -579,9 +588,9 @@ export default function Reports() {
                 <ScrollArea className="w-full whitespace-nowrap">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                      <TableRow className="bg-muted/50">
                         {ALL_EMPLOYEE_COLUMNS.filter((c) => visibleColumns.includes(c.key)).map((col) => (
-                          <TableHead key={col.key} className="text-white font-semibold whitespace-nowrap">
+                          <TableHead key={col.key} className="font-semibold whitespace-nowrap">
                             {col.label}
                           </TableHead>
                         ))}
@@ -622,7 +631,7 @@ export default function Reports() {
                   <CardTitle>Compensation Snapshot</CardTitle>
                   <CardDescription>OTE, Target Bonus, and Pro-ration factors for FY{selectedYear}</CardDescription>
                 </div>
-                <Button onClick={exportCompensation} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+                <Button onClick={exportCompensation} className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   <Download className="mr-2 h-4 w-4" />
                   Export CSV
                 </Button>
@@ -630,13 +639,13 @@ export default function Reports() {
               <CardContent>
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                      <TableHead className="text-white font-semibold">Name</TableHead>
-                      <TableHead className="text-white font-semibold">Sales Function</TableHead>
-                      <TableHead className="text-white font-semibold text-right">OTE (USD)</TableHead>
-                      <TableHead className="text-white font-semibold text-right">OTE (Local)</TableHead>
-                      <TableHead className="text-white font-semibold text-right">Target Bonus (USD)</TableHead>
-                      <TableHead className="text-white font-semibold text-right">Pro-Ration</TableHead>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Name</TableHead>
+                      <TableHead className="font-semibold">Sales Function</TableHead>
+                      <TableHead className="font-semibold text-right">OTE (USD)</TableHead>
+                      <TableHead className="font-semibold text-right">OTE (Local)</TableHead>
+                      <TableHead className="font-semibold text-right">Target Bonus (USD)</TableHead>
+                      <TableHead className="font-semibold text-right">Pro-Ration</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -673,7 +682,7 @@ export default function Reports() {
                     Variable Pay: (Actual / Target) × Multiplier × Allocation = Payout | Commission: Deal Value × Rate (Paid / Holdback)
                   </CardDescription>
                 </div>
-                <Button onClick={exportIncentiveAudit} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+                <Button onClick={exportIncentiveAudit} className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   <Download className="mr-2 h-4 w-4" />
                   Export CSV
                 </Button>
@@ -688,22 +697,22 @@ export default function Reports() {
                     {/* Variable Pay Section */}
                     <div>
                       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                        <Calculator className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
+                        <Calculator className="h-5 w-5 text-accent" />
                         Variable Pay
                       </h3>
                       <ScrollArea className="w-full whitespace-nowrap">
                         <Table>
                           <TableHeader>
-                            <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                              <TableHead className="text-white font-semibold">Name</TableHead>
-                              <TableHead className="text-white font-semibold">Plan</TableHead>
-                              <TableHead className="text-white font-semibold">Metric</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Target</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Actual</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Achievement</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Multiplier</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Allocation</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Payout</TableHead>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="font-semibold">Name</TableHead>
+                              <TableHead className="font-semibold">Plan</TableHead>
+                              <TableHead className="font-semibold">Metric</TableHead>
+                              <TableHead className="font-semibold text-right">Target</TableHead>
+                              <TableHead className="font-semibold text-right">Actual</TableHead>
+                              <TableHead className="font-semibold text-right">Achievement</TableHead>
+                              <TableHead className="font-semibold text-right">Multiplier</TableHead>
+                              <TableHead className="font-semibold text-right">Allocation</TableHead>
+                              <TableHead className="font-semibold text-right">Payout</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -736,7 +745,7 @@ export default function Reports() {
                                   </TableCell>
                                   <TableCell className="text-right">{metric.multiplier.toFixed(2)}x</TableCell>
                                   <TableCell className="text-right">${metric.allocation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                  <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                                  <TableCell className="text-right font-semibold text-accent">
                                     ${metric.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                   </TableCell>
                                 </TableRow>
@@ -748,7 +757,7 @@ export default function Reports() {
                                 <TableCell colSpan={8} className="text-right">
                                   Variable Pay Total for {row.employeeName}:
                                 </TableCell>
-                                <TableCell className="text-right text-[hsl(var(--azentio-teal))]">
+                                <TableCell className="text-right text-accent">
                                   ${row.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </TableCell>
                               </TableRow>
@@ -762,21 +771,21 @@ export default function Reports() {
                     {/* Commission Section */}
                     <div>
                       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                        <Percent className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
+                        <Percent className="h-5 w-5 text-accent" />
                         Commission Payouts
                       </h3>
                       <ScrollArea className="w-full whitespace-nowrap">
                         <Table>
                           <TableHeader>
-                            <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                              <TableHead className="text-white font-semibold">Name</TableHead>
-                              <TableHead className="text-white font-semibold">Plan</TableHead>
-                              <TableHead className="text-white font-semibold">Commission Type</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Deal Value</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Rate</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Gross</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Paid</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Holdback</TableHead>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="font-semibold">Name</TableHead>
+                              <TableHead className="font-semibold">Plan</TableHead>
+                              <TableHead className="font-semibold">Commission Type</TableHead>
+                              <TableHead className="font-semibold text-right">Deal Value</TableHead>
+                              <TableHead className="font-semibold text-right">Rate</TableHead>
+                              <TableHead className="font-semibold text-right">Gross</TableHead>
+                              <TableHead className="font-semibold text-right">Paid</TableHead>
+                              <TableHead className="font-semibold text-right">Holdback</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -795,7 +804,7 @@ export default function Reports() {
                                   <TableCell className="text-right">${comm.dealValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
                                   <TableCell className="text-right">{comm.rate}%</TableCell>
                                   <TableCell className="text-right">${comm.grossCommission.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                  <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                                  <TableCell className="text-right font-semibold text-accent">
                                     ${comm.immediatePayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                   </TableCell>
                                   <TableCell className="text-right text-warning">
@@ -813,7 +822,7 @@ export default function Reports() {
                                 <TableCell className="text-right">
                                   ${(row.totalCommissionGross || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </TableCell>
-                                <TableCell className="text-right text-[hsl(var(--azentio-teal))]">
+                                <TableCell className="text-right text-accent">
                                   ${(row.totalCommissionPaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </TableCell>
                                 <TableCell className="text-right text-warning">
@@ -835,13 +844,13 @@ export default function Reports() {
                       <h3 className="text-lg font-semibold mb-3">Grand Total by Employee</h3>
                       <Table>
                         <TableHeader>
-                          <TableRow className="bg-[hsl(var(--azentio-navy))]">
-                            <TableHead className="text-white font-semibold">Name</TableHead>
-                            <TableHead className="text-white font-semibold text-right">Variable Pay</TableHead>
-                            <TableHead className="text-white font-semibold text-right">Commission (Paid)</TableHead>
-                            <TableHead className="text-white font-semibold text-right">Commission (Holdback)</TableHead>
-                            <TableHead className="text-white font-semibold text-right">Year-End Holdback</TableHead>
-                            <TableHead className="text-white font-semibold text-right">Total Payout</TableHead>
+                          <TableRow className="bg-muted/50">
+                            <TableHead className="font-semibold">Name</TableHead>
+                            <TableHead className="font-semibold text-right">Variable Pay</TableHead>
+                            <TableHead className="font-semibold text-right">Commission (Paid)</TableHead>
+                            <TableHead className="font-semibold text-right">Commission (Holdback)</TableHead>
+                            <TableHead className="font-semibold text-right">Year-End Holdback</TableHead>
+                            <TableHead className="font-semibold text-right">Total Payout</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -860,7 +869,7 @@ export default function Reports() {
                               <TableCell className="text-right text-muted-foreground">
                                 ${(row.totalCommissionYearEndHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </TableCell>
-                              <TableCell className="text-right font-bold text-[hsl(var(--azentio-teal))]">
+                              <TableCell className="text-right font-bold text-accent">
                                 ${(row.totalPayout + (row.totalCommissionPaid || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </TableCell>
                             </TableRow>
