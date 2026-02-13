@@ -45,12 +45,14 @@ import {
   UserCheck,
   Plus,
   LogIn,
-  Target
+  Target,
+  Upload
 } from "lucide-react";
 import { EmployeeFormDialog, EmployeeFormData } from "./EmployeeFormDialog";
 import { PlanAssignmentDialog } from "./PlanAssignmentDialog";
 import { EmployeeAssignmentsPopover } from "./EmployeeAssignmentsPopover";
 import { StaffUserFormDialog } from "./StaffUserFormDialog";
+import { BulkUpload } from "./BulkUpload";
 
 interface Employee {
   id: string;
@@ -514,8 +516,17 @@ export function EmployeeAccounts() {
             <TabsList>
               <TabsTrigger value="active">Active ({totalActive})</TabsTrigger>
               <TabsTrigger value="inactive">Inactive ({totalInactive})</TabsTrigger>
+              <TabsTrigger value="bulk-upload">
+                <Upload className="h-3.5 w-3.5 mr-1.5" />
+                Bulk Upload
+              </TabsTrigger>
             </TabsList>
           </Tabs>
+
+          {activeTab === "bulk-upload" ? (
+            <BulkUpload />
+          ) : (
+            <>
 
           {/* Search */}
           <div className="relative mb-4">
@@ -650,9 +661,10 @@ export function EmployeeAccounts() {
             <strong>Default password:</strong> Welcome@123 — Share this with employees offline. 
             They should change it after first login.
           </p>
+          </>
+          )}
         </CardContent>
       </Card>
-
       {/* Add Employee Dialog */}
       <EmployeeFormDialog
         open={showAddDialog}
