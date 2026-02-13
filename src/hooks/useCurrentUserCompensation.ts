@@ -18,6 +18,9 @@ const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
   "SE": "Sales Engineering",
   "Solution Architect": "Product Specialist or Solution Architect",
   "Solution Manager": "Product Specialist or Solution Architect",
+  "Team Lead": "Team Lead",
+  "Team Lead - Farmer": "Team Lead",
+  "Team Lead - Hunter": "Team Lead",
 };
 
 // Participant roles for deal attribution
@@ -254,13 +257,58 @@ export function useCurrentUserCompensation() {
         }
       });
 
+      // 8b. Team actuals aggregation for "Team " prefix metrics
+      // Check if any plan metric starts with "Team " — if so, fetch subordinate deals
+      const hasTeamMetrics = planMetrics.some(pm => pm.metric_name.startsWith("Team "));
+      let teamNewBookingYtd = 0;
+
+      if (hasTeamMetrics) {
+        // Fetch direct reports
+        const { data: directReports } = await supabase
+          .from("employees")
+          .select("employee_id")
+          .eq("manager_employee_id", employeeId)
+          .eq("is_active", true);
+
+        const reportIds = (directReports || []).map(e => e.employee_id);
+
+        if (reportIds.length > 0) {
+          // Aggregate subordinate deals for "Team " metrics
+          (deals || []).forEach((deal: any) => {
+            const isSubordinateDeal = PARTICIPANT_ROLES.some(role =>
+              reportIds.includes(deal[role])
+            );
+            if (isSubordinateDeal) {
+              teamNewBookingYtd += deal.new_software_booking_arr_usd || 0;
+            }
+          });
+        }
+      }
+
       // 9. Get ELIGIBLE closing ARR actuals (only records with end_date > fiscal year end)
       // Attribution: Both sales_rep and sales_head receive credit
       // Logic: Use LATEST month's value (not cumulative) since uploads are portfolio snapshots
+      // For Team Leads: also include direct reports' closing ARR for combined portfolio
+      const isTeamLead = (employee.sales_function || "").startsWith("Team Lead");
+      let closingArrOrFilter = `sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`;
+
+      if (isTeamLead && hasTeamMetrics) {
+        const { data: directReports } = await supabase
+          .from("employees")
+          .select("employee_id")
+          .eq("manager_employee_id", employeeId)
+          .eq("is_active", true);
+
+        const reportIds = (directReports || []).map(e => e.employee_id);
+        reportIds.forEach(rid => {
+          closingArrOrFilter += `,sales_rep_employee_id.eq.${rid},sales_head_employee_id.eq.${rid}`;
+        });
+      }
+
       const { data: closingArr } = await supabase
         .from("closing_arr_actuals")
         .select("month_year, closing_arr, end_date, sales_rep_employee_id, sales_head_employee_id")
-        .or(`sales_rep_employee_id.eq.${employeeId},sales_head_employee_id.eq.${employeeId}`)
+        .or(closingArrOrFilter)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd)
         .gt("end_date", `${selectedYear}-12-31`); // ELIGIBILITY FILTER
@@ -281,10 +329,11 @@ export function useCurrentUserCompensation() {
       // 10. Build metrics with calculations
       const targetBonusUsd = employee.tvp_usd || 0;
 
-      // Create actuals map
+      // Create actuals map (includes team metrics if applicable)
       const actualsMap = new Map<string, number>([
         ["New Software Booking ARR", newBookingYtd],
         ["Closing ARR", closingYtd],
+        ["Team New Software Booking ARR", teamNewBookingYtd],
       ]);
 
       // Calculate metrics

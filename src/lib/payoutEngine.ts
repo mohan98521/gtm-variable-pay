@@ -360,18 +360,51 @@ async function calculateEmployeeVariablePay(
 
     // Determine actuals based on metric type
     const isClosingArr = metric.metric_name.toLowerCase().includes('closing arr');
+    const isTeamMetric = metric.metric_name.startsWith("Team ");
 
     // Get payout split percentages from metric config
     const bookingPct = metric.payout_on_booking_pct ?? 0;
     const collectionPct = metric.payout_on_collection_pct ?? 100;
     const yearEndPct = metric.payout_on_year_end_pct ?? 0;
 
+    // For "Team " prefix metrics, fetch subordinate employee IDs
+    let teamReportIds: string[] = [];
+    if (isTeamMetric) {
+      const { data: subReports } = await supabase
+        .from('employees')
+        .select('employee_id')
+        .eq('manager_employee_id', empId)
+        .eq('is_active', true);
+      teamReportIds = (subReports || []).map(e => e.employee_id);
+    }
+
     if (isClosingArr) {
       // Closing ARR: fetch from closing_arr_actuals table (latest month snapshot, eligible only)
+      // For Team Leads with team metrics: include subordinate records for combined portfolio
+      let closingArrOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId}`;
+      
+      // Check if this employee is a Team Lead — extend Closing ARR to include team
+      const isTeamLead = (ctx.employee.sales_function || "").startsWith("Team Lead");
+      if (isTeamLead && ctx.metrics.some(m => m.metric_name.startsWith("Team "))) {
+        // Fetch sub-reports if not already fetched
+        let tlReportIds = teamReportIds;
+        if (tlReportIds.length === 0) {
+          const { data: subReports } = await supabase
+            .from('employees')
+            .select('employee_id')
+            .eq('manager_employee_id', empId)
+            .eq('is_active', true);
+          tlReportIds = (subReports || []).map(e => e.employee_id);
+        }
+        tlReportIds.forEach(rid => {
+          closingArrOrFilter += `,sales_rep_employee_id.eq.${rid},sales_head_employee_id.eq.${rid}`;
+        });
+      }
+
       const { data: closingArr } = await supabase
         .from('closing_arr_actuals')
         .select('month_year, closing_arr, end_date, is_multi_year, renewal_years')
-        .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId}`)
+        .or(closingArrOrFilter)
         .gte('month_year', `${ctx.fiscalYear}-01-01`)
         .lte('month_year', ctx.monthYear)
         .gt('end_date', `${ctx.fiscalYear}-12-31`);
@@ -434,11 +467,24 @@ async function calculateEmployeeVariablePay(
         calculationMonth: ensureFullDate(ctx.monthYear),
       };
     } else {
-      // New Software Booking ARR (or any deal-based metric): fetch from deals table
+      // Deal-based metric (New Software Booking ARR or Team New Software Booking ARR)
+      // For "Team " metrics: fetch subordinates' deals instead of employee's own deals
+      let dealOrFilter: string;
+      if (isTeamMetric && teamReportIds.length > 0) {
+        // Build OR filter for all subordinate employee IDs
+        const parts: string[] = [];
+        teamReportIds.forEach(rid => {
+          parts.push(`sales_rep_employee_id.eq.${rid},sales_head_employee_id.eq.${rid},sales_engineering_employee_id.eq.${rid},sales_engineering_head_employee_id.eq.${rid},product_specialist_employee_id.eq.${rid},product_specialist_head_employee_id.eq.${rid},solution_manager_employee_id.eq.${rid},solution_manager_head_employee_id.eq.${rid}`);
+        });
+        dealOrFilter = parts.join(',');
+      } else {
+        dealOrFilter = participantOrFilter;
+      }
+
       const { data: deals } = await supabase
         .from('deals')
         .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
-        .or(participantOrFilter)
+        .or(dealOrFilter)
         .gte('month_year', `${ctx.fiscalYear}-01-01`)
         .lte('month_year', ctx.monthYear);
 
