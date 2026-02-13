@@ -2,13 +2,13 @@ import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Layers, Users, UserCog, Shield, Upload, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, type LucideIcon } from "lucide-react";
+import { Layers, Users, UserCog, Shield, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, type LucideIcon } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { CompensationPlansTab } from "@/components/admin/CompensationPlansTab";
 import { EmployeeAccounts } from "@/components/admin/EmployeeAccounts";
 import { RoleManagement } from "@/components/admin/RoleManagement";
-import { BulkUpload } from "@/components/admin/BulkUpload";
+
 import { PermissionsManagement } from "@/components/admin/PermissionsManagement";
 import { PerformanceTargetsManagement } from "@/components/admin/PerformanceTargetsManagement";
 import { ExchangeRateManagement } from "@/components/admin/ExchangeRateManagement";
@@ -54,7 +54,7 @@ const sections: NavSection[] = [
     items: [
       { id: "accounts", label: "Employee Accounts", icon: UserCog, permissionCheck: (c) => c.canAccessTab("tab:employee_accounts") },
       { id: "roles", label: "Role Management", icon: Shield, permissionCheck: (c) => c.canAccessTab("tab:role_management") },
-      { id: "bulk-upload", label: "Bulk Upload", icon: Upload, permissionCheck: (c) => c.canAccessTab("tab:bulk_upload") },
+      
     ],
   },
   {
@@ -84,7 +84,7 @@ const contentMap: Record<string, React.ComponentType> = {
   "performance-targets": PerformanceTargetsManagement,
   "accounts": EmployeeAccounts,
   "roles": RoleManagement,
-  "bulk-upload": BulkUpload,
+  
   "exchange-rates": ExchangeRateManagement,
   "payout-runs": PayoutRunManagement,
   "deal-team-spiffs": DealTeamSpiffManager,
