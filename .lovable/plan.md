@@ -1,91 +1,121 @@
 
 
-## Add Configurable Payout Split to NRR and SPIFF
+## Multi-Year Renewal Multiplier for Closing ARR
 
 ### Overview
 
-Instead of hardcoding NRR and SPIFF payouts as 100% collection-linked, we add the same three-way payout split UI (Upon Bookings %, Upon Collections %, At Year End %) that the Commission Structure already uses. This makes the payout timing fully configurable per plan for NRR and per SPIFF entry.
+Add a configurable multi-year renewal multiplier system to the Closing ARR computation. When a project has a multi-year renewal, its Closing ARR value is multiplied by a factor based on the number of renewal years. The multipliers are managed per compensation plan via a CRUD UI, making them easy to adjust.
+
+**Example**: Closing ARR = 100,000 USD, Multi-Year = Yes, Renewal Years = 2 --> Adjusted Closing ARR = 100,000 x 1.1 = 110,000.
 
 ---
 
 ### Database Migration
 
-**Add 3 columns to `comp_plans`** (for NRR payout split):
+**1. Add 2 columns to `closing_arr_actuals`** (data capture):
 
 | Column | Type | Default | Description |
 |--------|------|---------|-------------|
-| `nrr_payout_on_booking_pct` | numeric | 0 | % paid upon booking |
-| `nrr_payout_on_collection_pct` | numeric | 100 | % held for collection |
-| `nrr_payout_on_year_end_pct` | numeric | 0 | % reserved for year-end |
+| `is_multi_year` | boolean | false | Whether this is a multi-year renewal |
+| `renewal_years` | integer | 1 | Number of renewal years (1, 2, 3+) |
 
-Defaults to 0/100/0 (100% collection-linked) matching the stated business requirement, but now configurable.
+**2. Create new table `closing_arr_renewal_multipliers`** (plan-level config):
 
-**Add 3 columns to `plan_spiffs`** (per-SPIFF payout split):
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid (PK) | Auto-generated |
+| `plan_id` | uuid (FK to comp_plans) | Which plan this applies to |
+| `min_years` | integer | Minimum renewal years (inclusive) |
+| `max_years` | integer or null | Maximum renewal years (inclusive), null = unlimited |
+| `multiplier_value` | numeric | Multiplier to apply (e.g., 1.0, 1.1, 1.2) |
+| `created_at` | timestamptz | Auto-set |
 
-| Column | Type | Default | Description |
-|--------|------|---------|-------------|
-| `payout_on_booking_pct` | numeric | 0 | % paid upon booking |
-| `payout_on_collection_pct` | numeric | 100 | % held for collection |
-| `payout_on_year_end_pct` | numeric | 0 | % reserved for year-end |
+Default seed rows (per plan, inserted via UI):
+- 1 year: multiplier 1.0
+- 2 years: multiplier 1.1
+- 3+ years: multiplier 1.2
 
-Same defaults (0/100/0).
+RLS policies matching existing plan-related tables (authenticated users can read/write).
 
 ---
 
 ### UI Changes
 
-#### 1. NRR Settings Card (`NrrSettingsCard.tsx`)
+#### 1. New "Closing ARR Renewal Multipliers" Card in Plan Builder
 
-Rewrite to a table + dialog pattern (matching Commission Structure):
+A new CRUD card component (similar to the Commission Structure or Multiplier Grid pattern) placed in the Plan Builder page:
 
-- **Table view**: Shows one row with NRR OTE %, CR/ER Min GP %, Impl Min GP %, Payout Split (Booking/Collection/Year End), and Edit/Delete actions
-- **Add/Edit Dialog**: All 6 fields (3 existing + 3 new payout split inputs) with the same auto-balancing logic used in `CommissionFormDialog` (the three percentages must sum to 100%, and changing one auto-adjusts the others)
-- **Empty state**: "No NRR Additional Pay Configured" with an Add button
-- Formula info callout remains in the dialog
+- **Table view**: Columns -- Renewal Years Range, Multiplier, Actions (Edit/Delete)
+- **Add button**: Opens a dialog to add a new tier
+- **Edit/Delete**: Inline actions per row
+- **Dialog fields**: Min Years (integer), Max Years (integer, optional -- blank means "and above"), Multiplier Value (numeric, step 0.01)
+- **Empty state**: "No Renewal Multipliers Configured" with an Add button
+- **Info callout**: Explains the formula: "Adjusted Closing ARR = Closing ARR x Renewal Multiplier (based on number of renewal years)"
 
-#### 2. SPIFF Form Dialog (`SpiffFormDialog.tsx`)
+#### 2. Closing ARR Data Input Form (`ClosingARRFormDialog.tsx`)
 
-Add a "Payout Split" section at the bottom (identical to `CommissionFormDialog`):
-- Three inputs: Upon Bookings (%), Upon Collections (%), At Year End (%)
-- Auto-balancing logic (must sum to 100%)
-- Warning indicator when sum is not 100%
+Add two new fields at the bottom of the form:
+- **Multi-Year Renewal**: Yes/No toggle (Switch component)
+- **No. of Renewal Years**: Number input (shown only when Multi-Year = Yes, minimum 1)
 
-#### 3. SPIFF Editor Table (`SpiffEditor.tsx`)
+#### 3. Closing ARR Bulk Upload (`ClosingARRBulkUpload.tsx`)
 
-Add a "Payout Split" column to the table showing the configured split (e.g., "0% Booking / 100% Collection / 0% Year End").
+Add two new CSV columns to the template:
+- `is_multi_year` (yes/no or true/false)
+- `renewal_years` (integer, defaults to 1)
 
----
+#### 4. Closing ARR Table (`ClosingARRTable.tsx`)
 
-### Payout Engine Updates (`payoutEngine.ts`)
-
-**NRR record persistence**: Read `nrr_payout_on_booking_pct`, `nrr_payout_on_collection_pct`, `nrr_payout_on_year_end_pct` from the plan and apply the three-way split to the NRR payout amount (instead of hardcoding all to booking).
-
-**SPIFF record persistence**: Read `payout_on_booking_pct`, `payout_on_collection_pct`, `payout_on_year_end_pct` from each `plan_spiff` record and apply the split.
-
-**Payable This Month**: Only the booking portion of NRR/SPIFF is included in immediate payable; collection and year-end portions are held.
+Add columns to display Multi-Year (Yes/No badge) and Renewal Years.
 
 ---
 
-### Hook Updates
+### Payout Engine Update (`payoutEngine.ts`)
 
-- **`useCompPlans.ts`**: Add `nrr_payout_on_booking_pct`, `nrr_payout_on_collection_pct`, `nrr_payout_on_year_end_pct` to the `CompPlan` interface
-- **`usePlanSpiffs.ts`**: Add the 3 payout split fields to `PlanSpiff` interface and CRUD mutations
+In the Closing ARR calculation block (around line 369-411):
+
+1. Fetch `closing_arr_renewal_multipliers` for the current plan
+2. Modify the query to also select `is_multi_year` and `renewal_years` from `closing_arr_actuals`
+3. For each eligible record where `is_multi_year = true`, look up the matching multiplier from the plan's renewal multiplier grid based on `renewal_years`
+4. Apply: `adjusted_closing_arr = closing_arr x renewal_multiplier`
+5. Use the adjusted value for aggregation instead of the raw `closing_arr`
+
+Records with `is_multi_year = false` (or null) use the default multiplier of 1.0.
+
+---
+
+### Hook for Renewal Multipliers
+
+Create `src/hooks/useClosingArrRenewalMultipliers.ts`:
+- `useClosingArrRenewalMultipliers(planId)` -- fetch all multipliers for a plan
+- `useCreateClosingArrRenewalMultiplier()` -- create
+- `useUpdateClosingArrRenewalMultiplier()` -- update
+- `useDeleteClosingArrRenewalMultiplier()` -- delete
+
+Standard CRUD pattern matching existing hooks like `usePlanCommissions`.
 
 ---
 
 ### Technical Details
 
+#### Files to Create
+- `src/hooks/useClosingArrRenewalMultipliers.ts` -- CRUD hook for renewal multipliers
+- `src/components/admin/ClosingArrRenewalMultiplierEditor.tsx` -- Table + dialog CRUD component
+
 #### Files to Modify
-- `src/components/admin/NrrSettingsCard.tsx` -- Full rewrite to table+dialog with payout split
-- `src/components/admin/SpiffFormDialog.tsx` -- Add payout split section
-- `src/components/admin/SpiffEditor.tsx` -- Add payout split column to table
-- `src/hooks/useCompPlans.ts` -- Add NRR payout split fields to interface
-- `src/hooks/usePlanSpiffs.ts` -- Add payout split fields to interface and mutations
-- `src/lib/payoutEngine.ts` -- Use configurable splits instead of hardcoded booking
+- `src/components/data-inputs/ClosingARRFormDialog.tsx` -- Add is_multi_year switch and renewal_years input
+- `src/components/data-inputs/ClosingARRBulkUpload.tsx` -- Add 2 new CSV columns
+- `src/components/data-inputs/ClosingARRTable.tsx` -- Add display columns
+- `src/hooks/useClosingARR.ts` -- Add new fields to interfaces
+- `src/lib/payoutEngine.ts` -- Apply renewal multiplier in Closing ARR computation
+- `src/pages/PlanBuilder.tsx` -- Mount the new ClosingArrRenewalMultiplierEditor card
+- `src/hooks/useUserActuals.ts` -- Include renewal multiplier in dashboard actuals display
 
 #### Implementation Sequence
-1. Database migration (add 6 columns total)
-2. Update hooks with new fields
-3. Rewrite NRR Settings Card with table+dialog+payout split
-4. Update SPIFF Form Dialog and Editor with payout split
-5. Update payout engine to use configurable splits
+1. Database migration (add columns + new table)
+2. Create CRUD hook for renewal multipliers
+3. Build the Plan Builder UI card for managing multipliers
+4. Update Closing ARR data input form and bulk upload
+5. Update Closing ARR table display
+6. Update payout engine to apply multipliers
+7. Update dashboard actuals hook
