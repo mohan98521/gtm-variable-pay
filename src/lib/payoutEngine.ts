@@ -95,6 +95,7 @@ export interface EmployeePayoutResult {
   // Collection Releases
   collectionReleasesUsd: number;
   collectionReleasesLocal: number;
+  collectionReleaseNotes: string;
   
   // Year-End Releases (December only)
   yearEndReleasesUsd: number;
@@ -742,7 +743,7 @@ async function calculateCollectionReleases(
   employeeCode: string,
   monthYear: string,
   fiscalYear: number
-): Promise<{ vpReleaseUsd: number; commReleaseUsd: number }> {
+): Promise<{ vpReleaseUsd: number; commReleaseUsd: number; clawbackReversedDealIds: string[] }> {
   // Find deals collected this month
   const { data: collections } = await supabase
     .from('deal_collections')
@@ -751,20 +752,54 @@ async function calculateCollectionReleases(
     .eq('is_collected', true);
   
   if (!collections || collections.length === 0) {
-    return { vpReleaseUsd: 0, commReleaseUsd: 0 };
+    return { vpReleaseUsd: 0, commReleaseUsd: 0, clawbackReversedDealIds: [] };
   }
   
   const collectedDealIds = collections.map(c => c.deal_id);
   
-  // VP releases: sum payout_on_collection_usd from deal_variable_pay_attribution for this employee
+  // VP releases: check clawback status to determine release amount
+  // For clawback-triggered deals: release full variable_pay_split_usd (100%)
+  // For normal deals: release payout_on_collection_usd only
   const { data: vpAttrs } = await supabase
     .from('deal_variable_pay_attribution')
-    .select('payout_on_collection_usd')
+    .select('deal_id, payout_on_collection_usd, variable_pay_split_usd, is_clawback_triggered')
     .eq('employee_id', employeeId)
     .eq('fiscal_year', fiscalYear)
     .in('deal_id', collectedDealIds);
   
-  const vpReleaseUsd = (vpAttrs || []).reduce((sum, a) => sum + (a.payout_on_collection_usd || 0), 0);
+  const vpReleaseUsd = (vpAttrs || []).reduce((sum, a) => {
+    if (a.is_clawback_triggered) {
+      // Full release: deal becomes 100% payable upon collection after clawback
+      return sum + (a.variable_pay_split_usd || 0);
+    }
+    return sum + (a.payout_on_collection_usd || 0);
+  }, 0);
+  
+  // Resolve clawback ledger entries for clawback-triggered deals that are now collected
+  const clawbackTriggeredDealIds = (vpAttrs || [])
+    .filter(a => a.is_clawback_triggered)
+    .map(a => a.deal_id);
+  
+  if (clawbackTriggeredDealIds.length > 0) {
+    const { data: ledgerEntries } = await supabase
+      .from('clawback_ledger')
+      .select('id, original_amount_usd')
+      .eq('employee_id', employeeId)
+      .in('deal_id', clawbackTriggeredDealIds)
+      .in('status', ['pending', 'partial']);
+    
+    for (const entry of (ledgerEntries || [])) {
+      await supabase
+        .from('clawback_ledger')
+        .update({
+          status: 'recovered',
+          recovered_amount_usd: entry.original_amount_usd,
+          last_recovery_month: ensureFullDate(monthYear),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', entry.id);
+    }
+  }
   
   // Commission releases: sum collection_amount_usd from monthly_payouts for collected deals
   const { data: commPayouts } = await supabase
@@ -779,7 +814,7 @@ async function calculateCollectionReleases(
   
   const commReleaseUsd = (commPayouts || []).reduce((sum, p) => sum + (p.collection_amount_usd || 0), 0);
   
-  return { vpReleaseUsd, commReleaseUsd };
+  return { vpReleaseUsd, commReleaseUsd, clawbackReversedDealIds: clawbackTriggeredDealIds };
 }
 
 // ============= YEAR-END RELEASES (DECEMBER) =============
@@ -881,6 +916,9 @@ export async function calculateMonthlyPayout(
     employee.id, employee.employee_id, monthYear, fiscalYear
   );
   const collectionReleasesUsd = collReleases.vpReleaseUsd + collReleases.commReleaseUsd;
+  const collectionReleaseNotes = collReleases.clawbackReversedDealIds.length > 0
+    ? `Includes full release for clawback-reversed deal(s). Released upon collection of previously held amounts.`
+    : 'Released upon collection of previously held amounts';
   
   // Calculate Year-End Releases (December only)
   let yearEndReleasesUsd = 0;
@@ -1073,6 +1111,7 @@ export async function calculateMonthlyPayout(
     
     collectionReleasesUsd,
     collectionReleasesLocal,
+    collectionReleaseNotes,
     yearEndReleasesUsd,
     yearEndReleasesLocal,
     
@@ -1542,7 +1581,7 @@ async function persistPayoutResults(
         booking_amount_usd: emp.collectionReleasesUsd,
         booking_amount_local: emp.collectionReleasesLocal,
         status: 'calculated',
-        notes: 'Released upon collection of previously held amounts',
+        notes: emp.collectionReleaseNotes,
       });
     }
     
