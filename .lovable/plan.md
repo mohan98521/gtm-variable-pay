@@ -1,64 +1,81 @@
 
 
-## Fix: Full Deal Payout on Post-Clawback Collection
+## Broken Systems Identified in Payout Engine
 
-### Problem
+After a comprehensive audit of `payoutEngine.ts`, `useCollections.ts`, and related calculation modules, here are the issues found:
 
-The business rule states: "If we cannot collect within the clawback period, the entire amount due on this deal will become payable after collections, and whatever was paid will be clawed back."
+---
 
-The current implementation correctly claws back the booking portion. However, when a clawback-triggered deal is **eventually collected**, the system only releases the original `payout_on_collection_usd` (the held collection portion). It does NOT release the full deal amount.
+### Issue 1: NRR and SPIFF Payouts Are Double-Counted Every Month (CRITICAL)
 
-After clawback, the deal effectively becomes "100% payable upon collection." The collection release should pay out the **full variable pay split** for that deal, not just the collection holdback.
+**Problem**: Variable Pay correctly uses incremental logic -- it calculates YTD total, then subtracts the sum of prior finalized months to get the monthly increment. NRR Additional Pay and SPIFF payouts do NOT do this. They calculate the full YTD amount every month and persist it as the month's payout.
 
-### Current Flow (Broken)
+**Example**: If an employee's YTD SPIFF payout is $5,000 by March:
+- January run: $2,000 (correct)
+- February run: $3,500 YTD (should pay $1,500 incremental, currently pays $3,500)
+- March run: $5,000 YTD (should pay $1,500 incremental, currently pays $5,000)
+- Total paid: $10,500 instead of $5,000
 
-1. Deal booked -- employee receives `payout_on_booking_usd` (e.g., 70%)
-2. 180 days pass, not collected -- clawback triggers, -70% deducted
-3. Deal eventually collected -- system releases only `payout_on_collection_usd` (e.g., 25%)
-4. Result: Employee nets only 25% instead of the full 100%
-
-### Correct Flow (After Fix)
-
-1. Deal booked -- employee receives `payout_on_booking_usd` (e.g., 70%)
-2. 180 days pass, not collected -- clawback triggers, -70% deducted
-3. Deal eventually collected -- system releases the **full** `variable_pay_split_usd` (100%)
-4. Clawback ledger entry marked as `recovered`
-5. Result: Employee nets 100% (clawback reversed through full collection release)
-
-### Changes
-
-#### 1. Update `calculateCollectionReleases` in `src/lib/payoutEngine.ts`
-
-Modify the VP release query to check if each collected deal has `is_clawback_triggered = true` in its `deal_variable_pay_attribution` records:
-
-- If **not** clawback-triggered: release `payout_on_collection_usd` (current behavior)
-- If **clawback-triggered**: release the full `variable_pay_split_usd` (booking + collection + year-end)
-
-This ensures the employee receives the entire deal amount upon eventual collection, offsetting the earlier clawback.
-
-#### 2. Resolve Clawback Ledger on Collection
-
-When a clawback-triggered deal is collected and the full amount is released, update the corresponding `clawback_ledger` entry:
-
-- Set `status` to `recovered`
-- Set `recovered_amount_usd` to `original_amount_usd`
-- Set `last_recovery_month` to the current payout month
-
-This prevents the `applyClawbackRecoveries` function from double-deducting an already-resolved clawback.
-
-#### 3. Add Notes for Audit Trail
-
-When releasing a clawback-triggered deal's full amount, include a descriptive note on the Collection Release payout record (e.g., "Full release for clawback-reversed deal [Project ID]") so finance teams can trace the logic.
-
-### Technical Details
+**Fix**: Add `getPriorMonthsNrr` and `getPriorMonthsSpiff` functions (mirroring the existing `getPriorMonthsVp` pattern). Subtract prior months' NRR and SPIFF totals from the YTD calculation before persisting.
 
 **File**: `src/lib/payoutEngine.ts`
 
-**Function**: `calculateCollectionReleases` (lines 740-783)
+---
 
-- Expand the `deal_variable_pay_attribution` query to also select `variable_pay_split_usd` and `is_clawback_triggered`
-- After summing, for clawback-triggered deals: use `variable_pay_split_usd` instead of `payout_on_collection_usd`
-- After calculating releases, query `clawback_ledger` for matching `deal_id` entries with status `pending` or `partial`, and mark them `recovered`
+### Issue 2: Clawback Carry-Forward Recovery Is Never Applied (CRITICAL)
 
-No database migration is needed -- all required columns and tables already exist.
+**Problem**: The `applyClawbackRecoveries()` function was created to deduct outstanding clawback ledger balances from an employee's payable amount. However, it is **never called** anywhere in the calculation pipeline. The function exists but `calculateMonthlyPayout` and `executePayoutCalculation` both skip it entirely. The `payableThisMonthUsd` is calculated without any clawback ledger deduction.
+
+**Impact**: If a clawback exceeds the employee's earnings in the trigger month, the unrecovered balance sits in the ledger forever and is never deducted from future payouts.
+
+**Fix**: Call `applyClawbackRecoveries(employee.id, payableThisMonthUsd, monthYear)` inside `calculateMonthlyPayout` before returning the final result. Use the adjusted amount for `payableThisMonthUsd`. Store the recovery amount for audit trail purposes.
+
+**File**: `src/lib/payoutEngine.ts`
+
+---
+
+### Issue 3: Commission Collection Releases Are Always $0 (MAJOR)
+
+**Problem**: When a deal is collected, the engine tries to release commission holdbacks by querying `monthly_payouts` records filtered by `.in('deal_id', collectedDealIds)`. However, commission payout records are persisted **without a `deal_id`** -- they are aggregated by commission type (e.g., "Managed Services", "Implementation"). Since `deal_id` is never set on commission records, the filter `.in('deal_id', collectedDealIds)` matches nothing.
+
+**Result**: Commission holdbacks (the "Upon Collection" portion) are never released, even when the deal is collected and the employee is owed that money.
+
+**Fix**: Two options:
+- **Option A** (Recommended): Persist commission records per-deal (with `deal_id`) instead of aggregating by type. This enables correct collection release matching.
+- **Option B**: Change the commission release query to look up commission holdback amounts from `deal_variable_pay_attribution` or a dedicated commission holdback tracking table instead of relying on `deal_id` in `monthly_payouts`.
+
+**File**: `src/lib/payoutEngine.ts` (both `persistPayoutResults` and `calculateCollectionReleases`)
+
+---
+
+### Issue 4: Bulk Update Hook Missing `collection_month` (MINOR)
+
+**Problem**: The `useBulkUpdateCollections` mutation in `useCollections.ts` does not derive or set the `collection_month` field from `collection_date`. The single-record `useUpdateCollectionStatus` and `useBulkImportCollections` both correctly calculate `collection_month = format(parseISO(collection_date), "yyyy-MM-01")`, but the bulk update skips this.
+
+**Impact**: Deals updated via bulk operations may have no `collection_month`, causing the payout engine to miss them when calculating collection releases (since it queries by `collection_month`).
+
+**Fix**: Add `collection_month` derivation to `useBulkUpdateCollections`, matching the pattern already used in the other two mutations.
+
+**File**: `src/hooks/useCollections.ts`
+
+---
+
+### Summary
+
+| # | Issue | Severity | Impact |
+|---|---|---|---|
+| 1 | NRR/SPIFF double-counted monthly | Critical | Overpayment -- employees paid full YTD amount every month |
+| 2 | Clawback carry-forward never applied | Critical | Unrecovered clawbacks never deducted from future payouts |
+| 3 | Commission holdbacks never released | Major | Employees never receive commission collection portion |
+| 4 | Bulk update missing collection_month | Minor | Bulk-updated collections invisible to payout engine |
+
+### Implementation Plan
+
+1. Add `getPriorMonthsNrr()` and `getPriorMonthsSpiff()` helper functions
+2. Apply incremental logic to NRR and SPIFF in `calculateMonthlyPayout`
+3. Integrate `applyClawbackRecoveries()` call into the payable calculation flow
+4. Persist commission records per-deal with `deal_id` for correct collection release
+5. Add `collection_month` derivation to `useBulkUpdateCollections`
+
+All changes are in two files: `src/lib/payoutEngine.ts` and `src/hooks/useCollections.ts`.
 
