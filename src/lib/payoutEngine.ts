@@ -361,6 +361,7 @@ async function calculateEmployeeVariablePay(
     // Determine actuals based on metric type
     const isClosingArr = metric.metric_name.toLowerCase().includes('closing arr');
     const isTeamMetric = metric.metric_name.startsWith("Team ");
+    const isOrgMetric = metric.metric_name.startsWith("Org ");
 
     // Get payout split percentages from metric config
     const bookingPct = metric.payout_on_booking_pct ?? 0;
@@ -467,26 +468,38 @@ async function calculateEmployeeVariablePay(
         calculationMonth: ensureFullDate(ctx.monthYear),
       };
     } else {
-      // Deal-based metric (New Software Booking ARR or Team New Software Booking ARR)
-      // For "Team " metrics: fetch subordinates' deals instead of employee's own deals
-      let dealOrFilter: string;
-      if (isTeamMetric && teamReportIds.length > 0) {
-        // Build OR filter for all subordinate employee IDs
+      // Deal-based metric (New Software Booking ARR, Team, or Org)
+      let dealsQuery;
+
+      if (isOrgMetric) {
+        // "Org " metrics: fetch ALL deals without any participant filter
+        dealsQuery = supabase
+          .from('deals')
+          .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
+          .gte('month_year', `${ctx.fiscalYear}-01-01`)
+          .lte('month_year', ctx.monthYear);
+      } else if (isTeamMetric && teamReportIds.length > 0) {
+        // "Team " metrics: fetch subordinates' deals
         const parts: string[] = [];
         teamReportIds.forEach(rid => {
           parts.push(`sales_rep_employee_id.eq.${rid},sales_head_employee_id.eq.${rid},sales_engineering_employee_id.eq.${rid},sales_engineering_head_employee_id.eq.${rid},product_specialist_employee_id.eq.${rid},product_specialist_head_employee_id.eq.${rid},solution_manager_employee_id.eq.${rid},solution_manager_head_employee_id.eq.${rid}`);
         });
-        dealOrFilter = parts.join(',');
+        dealsQuery = supabase
+          .from('deals')
+          .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
+          .or(parts.join(','))
+          .gte('month_year', `${ctx.fiscalYear}-01-01`)
+          .lte('month_year', ctx.monthYear);
       } else {
-        dealOrFilter = participantOrFilter;
+        dealsQuery = supabase
+          .from('deals')
+          .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
+          .or(participantOrFilter)
+          .gte('month_year', `${ctx.fiscalYear}-01-01`)
+          .lte('month_year', ctx.monthYear);
       }
 
-      const { data: deals } = await supabase
-        .from('deals')
-        .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
-        .or(dealOrFilter)
-        .gte('month_year', `${ctx.fiscalYear}-01-01`)
-        .lte('month_year', ctx.monthYear);
+      const { data: deals } = await dealsQuery;
 
       const validDeals: DealForAttribution[] = (deals || []).map(d => ({
         id: d.id,

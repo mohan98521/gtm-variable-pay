@@ -255,6 +255,7 @@ const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
   "Farming": "Farmer",
   "Hunting": "Hunter",
   "Overlay": "Overlay",
+  "Executive": "Executive",
   "Team Lead": "Team Lead",
   "Team Lead - Farmer": "Team Lead",
   "Team Lead - Hunter": "Team Lead",
