@@ -61,6 +61,9 @@ export function SpiffEditor({ planId, metricNames }: SpiffEditorProps) {
     linked_metric_name: string;
     spiff_rate_pct: number;
     min_deal_value_usd?: number | null;
+    payout_on_booking_pct: number;
+    payout_on_collection_pct: number;
+    payout_on_year_end_pct: number;
     is_active: boolean;
   }) => {
     if (editingSpiff) {
@@ -155,6 +158,7 @@ export function SpiffEditor({ planId, metricNames }: SpiffEditorProps) {
                   <TableHead>Linked Metric</TableHead>
                   <TableHead className="text-center">Rate (%)</TableHead>
                   <TableHead className="text-center">Min Deal Value</TableHead>
+                   <TableHead className="text-center">Payout Split</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -178,6 +182,13 @@ export function SpiffEditor({ planId, metricNames }: SpiffEditorProps) {
                     </TableCell>
                     <TableCell className="text-center">
                       {formatCurrency(spiff.min_deal_value_usd)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex flex-col items-center text-xs">
+                        <span className="text-muted-foreground">{spiff.payout_on_booking_pct ?? 0}% Booking</span>
+                        <span className="text-muted-foreground">{spiff.payout_on_collection_pct ?? 100}% Collection</span>
+                        <span className="text-muted-foreground">{spiff.payout_on_year_end_pct ?? 0}% Year End</span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-center">
                       {spiff.is_active ? (
