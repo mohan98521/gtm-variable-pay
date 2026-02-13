@@ -670,7 +670,7 @@ export default function Reports() {
                 <div>
                   <CardTitle>Incentive Audit</CardTitle>
                   <CardDescription>
-                    Variable Pay: (Actual / Target) × Multiplier × Allocation = Payout | Commission: Deal Value × Rate (75% Paid / 25% Holdback)
+                    Variable Pay: (Actual / Target) × Multiplier × Allocation = Payout | Commission: Deal Value × Rate (Paid / Holdback)
                   </CardDescription>
                 </div>
                 <Button onClick={exportIncentiveAudit} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
@@ -775,8 +775,8 @@ export default function Reports() {
                               <TableHead className="text-white font-semibold text-right">Deal Value</TableHead>
                               <TableHead className="text-white font-semibold text-right">Rate</TableHead>
                               <TableHead className="text-white font-semibold text-right">Gross</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Paid (75%)</TableHead>
-                              <TableHead className="text-white font-semibold text-right">Holdback (25%)</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Paid</TableHead>
+                              <TableHead className="text-white font-semibold text-right">Holdback</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -840,6 +840,7 @@ export default function Reports() {
                             <TableHead className="text-white font-semibold text-right">Variable Pay</TableHead>
                             <TableHead className="text-white font-semibold text-right">Commission (Paid)</TableHead>
                             <TableHead className="text-white font-semibold text-right">Commission (Holdback)</TableHead>
+                            <TableHead className="text-white font-semibold text-right">Year-End Holdback</TableHead>
                             <TableHead className="text-white font-semibold text-right">Total Payout</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -855,6 +856,9 @@ export default function Reports() {
                               </TableCell>
                               <TableCell className="text-right text-warning">
                                 ${(row.totalCommissionHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">
+                                ${(row.totalCommissionYearEndHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </TableCell>
                               <TableCell className="text-right font-bold text-[hsl(var(--azentio-teal))]">
                                 ${(row.totalPayout + (row.totalCommissionPaid || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}

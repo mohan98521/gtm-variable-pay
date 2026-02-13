@@ -15,6 +15,7 @@ import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { exportToXLSX } from "@/lib/xlsxExport";
 import { format } from "date-fns";
 import { useCurrencies } from "@/hooks/useCurrencies";
+import { classifyPayoutType } from "@/lib/payoutTypes";
 
 interface CurrencyData {
   currency: string;
@@ -25,6 +26,8 @@ interface CurrencyData {
   vpUsd: number;
   commLocal: number;
   commUsd: number;
+  additionalPayLocal: number;
+  additionalPayUsd: number;
   totalLocal: number;
   totalUsd: number;
 }
@@ -81,6 +84,8 @@ export function CurrencyBreakdown() {
         vpUsd: number;
         commLocal: number;
         commUsd: number;
+        additionalPayLocal: number;
+        additionalPayUsd: number;
       }>();
 
       payouts?.forEach(payout => {
@@ -95,6 +100,8 @@ export function CurrencyBreakdown() {
             vpUsd: 0,
             commLocal: 0,
             commUsd: 0,
+            additionalPayLocal: 0,
+            additionalPayUsd: 0,
           });
         }
         
@@ -102,13 +109,25 @@ export function CurrencyBreakdown() {
         data.employees.add(payout.employee_id);
         if (emp?.compRate) data.compRates.push(emp.compRate);
         
-        const isVp = payout.payout_type?.toLowerCase().includes('variable');
-        if (isVp) {
-          data.vpLocal += payout.calculated_amount_local || 0;
-          data.vpUsd += payout.calculated_amount_usd || 0;
-        } else {
-          data.commLocal += payout.calculated_amount_local || 0;
-          data.commUsd += payout.calculated_amount_usd || 0;
+        const category = classifyPayoutType(payout.payout_type);
+        const amountLocal = payout.calculated_amount_local || 0;
+        const amountUsd = payout.calculated_amount_usd || 0;
+        
+        switch (category) {
+          case 'vp':
+            data.vpLocal += amountLocal;
+            data.vpUsd += amountUsd;
+            break;
+          case 'commission':
+          case 'release':
+            data.commLocal += amountLocal;
+            data.commUsd += amountUsd;
+            break;
+          case 'additional_pay':
+            data.additionalPayLocal += amountLocal;
+            data.additionalPayUsd += amountUsd;
+            break;
+          // deductions and unknown are not added to totals
         }
       });
 
@@ -123,8 +142,10 @@ export function CurrencyBreakdown() {
         vpUsd: data.vpUsd,
         commLocal: data.commLocal,
         commUsd: data.commUsd,
-        totalLocal: data.vpLocal + data.commLocal,
-        totalUsd: data.vpUsd + data.commUsd,
+        additionalPayLocal: data.additionalPayLocal,
+        additionalPayUsd: data.additionalPayUsd,
+        totalLocal: data.vpLocal + data.commLocal + data.additionalPayLocal,
+        totalUsd: data.vpUsd + data.commUsd + data.additionalPayUsd,
       })).sort((a, b) => b.totalUsd - a.totalUsd);
     },
   });
@@ -234,6 +255,15 @@ export function CurrencyBreakdown() {
                   <div className="text-sm text-muted-foreground">(${curr.commUsd.toLocaleString()} USD)</div>
                 </div>
               </div>
+              {(curr.additionalPayUsd > 0 || curr.additionalPayLocal > 0) && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">NRR/SPIFF</span>
+                  <div className="text-right">
+                    <div className="font-medium">{getCurrencySymbol(curr.currency)}{curr.additionalPayLocal.toLocaleString()}</div>
+                    <div className="text-sm text-muted-foreground">(${curr.additionalPayUsd.toLocaleString()} USD)</div>
+                  </div>
+                </div>
+              )}
               <div className="border-t pt-2 flex justify-between">
                 <span className="font-medium">Total</span>
                 <div className="text-right">

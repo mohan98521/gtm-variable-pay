@@ -6,6 +6,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isVpLikeForHoldback } from "@/lib/payoutTypes";
 
 export interface HoldbackSummary {
   totalHoldbackUsd: number;
@@ -54,8 +55,7 @@ export function useYearEndHoldbackSummary(year: number) {
       
       payouts?.forEach(payout => {
         const amount = payout.year_end_amount_usd || 0;
-        const isVp = payout.payout_type?.toLowerCase().includes('variable');
-        if (isVp) {
+        if (isVpLikeForHoldback(payout.payout_type)) {
           totalVpHoldback += amount;
         } else {
           totalCommHoldback += amount;
@@ -79,7 +79,6 @@ export function useEmployeeHoldbacks(year: number) {
   return useQuery({
     queryKey: ["employee_holdbacks", year],
     queryFn: async (): Promise<EmployeeHoldback[]> => {
-      // Get payouts with year-end amounts
       const { data: payouts, error: payoutsError } = await supabase
         .from("monthly_payouts")
         .select("employee_id, payout_type, year_end_amount_usd, year_end_amount_local, local_currency, exchange_rate_used")
@@ -88,7 +87,6 @@ export function useEmployeeHoldbacks(year: number) {
       
       if (payoutsError) throw payoutsError;
       
-      // Get employee names
       const { data: employees, error: empError } = await supabase
         .from("employees")
         .select("employee_id, full_name, local_currency, compensation_exchange_rate");
@@ -104,7 +102,6 @@ export function useEmployeeHoldbacks(year: number) {
         });
       });
       
-      // Aggregate by employee
       const holdbacks = new Map<string, {
         vpUsd: number;
         vpLocal: number;
@@ -128,9 +125,9 @@ export function useEmployeeHoldbacks(year: number) {
         }
         
         const data = holdbacks.get(payout.employee_id)!;
-        const isVp = payout.payout_type?.toLowerCase().includes('variable');
+        const isVpLike = isVpLikeForHoldback(payout.payout_type);
         
-        if (isVp) {
+        if (isVpLike) {
           data.vpUsd += payout.year_end_amount_usd || 0;
           data.vpLocal += payout.year_end_amount_local || 0;
         } else {
@@ -173,7 +170,6 @@ export function useMonthlyHoldbackAccrual(year: number) {
       
       if (error) throw error;
       
-      // Initialize months
       const monthlyData = new Map<string, { vp: number; comm: number }>();
       for (let m = 1; m <= 12; m++) {
         const key = `${year}-${m.toString().padStart(2, '0')}`;
@@ -184,8 +180,7 @@ export function useMonthlyHoldbackAccrual(year: number) {
         const monthKey = payout.month_year.substring(0, 7);
         const data = monthlyData.get(monthKey);
         if (data) {
-          const isVp = payout.payout_type?.toLowerCase().includes('variable');
-          if (isVp) {
+          if (isVpLikeForHoldback(payout.payout_type)) {
             data.vp += payout.year_end_amount_usd || 0;
           } else {
             data.comm += payout.year_end_amount_usd || 0;
