@@ -1,72 +1,64 @@
 
 
-## Fix Collection Locking, Date Display, Clawback Logic, and Carry-Forward Tracking
+## Fix: Full Deal Payout on Post-Clawback Collection
 
-### Issue 1: Collection Lock is Too Restrictive
+### Problem
 
-**Problem**: The database trigger `check_collection_month_lock` checks the `booking_month` of the collection record against locked payout runs. So if January payroll is finalized and locked, January-booked deals cannot have their collection status updated -- even in February. This is wrong because collections happen *after* booking.
+The business rule states: "If we cannot collect within the clawback period, the entire amount due on this deal will become payable after collections, and whatever was paid will be clawed back."
 
-**Fix**: Replace the trigger logic. Instead of checking if the *booking month* is locked, the trigger should allow updates to collection status at any time, *except* if the `collection_month` being set matches an already-locked payout run. In other words:
-- If the user is marking a deal as collected in February (setting `collection_month = 2026-02-01`), it should succeed as long as February is not locked.
-- If February is already locked/finalized, then the update is blocked.
-- The booking month lock should have no bearing on collection updates.
+The current implementation correctly claws back the booking portion. However, when a clawback-triggered deal is **eventually collected**, the system only releases the original `payout_on_collection_usd` (the held collection portion). It does NOT release the full deal amount.
 
-**Database migration**: Drop and recreate `check_collection_month_lock()` function to check `NEW.collection_month` against locked runs instead of `NEW.booking_month`.
+After clawback, the deal effectively becomes "100% payable upon collection." The collection release should pay out the **full variable pay split** for that deal, not just the collection holdback.
 
-### Issue 2: Add Collection Date Column to Pending Collections Table
+### Current Flow (Broken)
 
-**Problem**: The Pending Collections table does not show a "Collection Date" column. The `collection_date` field exists in the database schema but the user needs to see and set it for payout processing.
+1. Deal booked -- employee receives `payout_on_booking_usd` (e.g., 70%)
+2. 180 days pass, not collected -- clawback triggers, -70% deducted
+3. Deal eventually collected -- system releases only `payout_on_collection_usd` (e.g., 25%)
+4. Result: Employee nets only 25% instead of the full 100%
 
-**Fix**: The Collection Date is entered when marking a deal as collected (via the form dialog or bulk upload). The current flow already captures it. However, the payout engine uses `collection_month` (not `collection_date`) to determine which collections to release. The `collection_month` is set automatically in bulk upload but NOT in the single-record `useUpdateCollectionStatus` mutation.
+### Correct Flow (After Fix)
 
-**Changes**:
-- Update `useUpdateCollectionStatus` hook to also compute and set `collection_month` (first of month from `collection_date`) when marking as collected.
-- Update `handleQuickUpdate` in `PendingCollectionsTable` -- when quick-marking "Yes", prompt or default to today's date, and the hook will derive collection_month.
-- The payout engine's `calculateCollectionReleases` already correctly queries by `collection_month`, so deals collected by end of Feb (with `collection_month = 2026-02-01`) will be included in the Feb payout run. No engine changes needed for this part.
+1. Deal booked -- employee receives `payout_on_booking_usd` (e.g., 70%)
+2. 180 days pass, not collected -- clawback triggers, -70% deducted
+3. Deal eventually collected -- system releases the **full** `variable_pay_split_usd` (100%)
+4. Clawback ledger entry marked as `recovered`
+5. Result: Employee nets 100% (clawback reversed through full collection release)
 
-### Issue 3: Clawback Logic Verification
+### Changes
 
-**Problem**: User wants to confirm: "if we are not able to collect amount within the clawback period then entire amount due on this deal will become payable after collections and whatever amount paid will be clawed back."
+#### 1. Update `calculateCollectionReleases` in `src/lib/payoutEngine.ts`
 
-**Current logic review**:
-- `checkAndApplyClawbacks` finds deals where `is_collected = false` AND `first_milestone_due_date < today`.
-- It claws back `payout_on_booking_usd` (the amount paid upon booking) by inserting negative `monthly_payouts` entries.
-- After clawback, the deal is marked `is_clawback_triggered = true`.
+Modify the VP release query to check if each collected deal has `is_clawback_triggered = true` in its `deal_variable_pay_attribution` records:
 
-**Issue**: The clawback currently uses `first_milestone_due_date` as the trigger, not a 180-day calculation from booking. Per business rules, the clawback period is 180 days from booking month end. The trigger should compare `booking_month + 180 days` (or the configured clawback period from the plan) against the current date.
+- If **not** clawback-triggered: release `payout_on_collection_usd` (current behavior)
+- If **clawback-triggered**: release the full `variable_pay_split_usd` (booking + collection + year-end)
 
-**Fix**: Update `checkAndApplyClawbacks` to calculate the clawback deadline as `booking_month_end + clawback_period_days` from the employee's plan, rather than relying solely on `first_milestone_due_date`. If `first_milestone_due_date` is set, use the earlier of the two.
+This ensures the employee receives the entire deal amount upon eventual collection, offsetting the earlier clawback.
 
-### Issue 4: Clawback Carry-Forward Tracking
+#### 2. Resolve Clawback Ledger on Collection
 
-**Problem**: Currently, a clawback is inserted as a single negative `monthly_payouts` record in the detection month. But if the employee doesn't earn enough in that month to offset the clawback, the unrecovered balance needs to carry forward to future months.
+When a clawback-triggered deal is collected and the full amount is released, update the corresponding `clawback_ledger` entry:
 
-**Fix**: Create a `clawback_ledger` table to track outstanding clawback balances per employee per deal:
+- Set `status` to `recovered`
+- Set `recovered_amount_usd` to `original_amount_usd`
+- Set `last_recovery_month` to the current payout month
 
-| Column | Type | Description |
-|---|---|---|
-| id | uuid | Primary key |
-| employee_id | uuid | FK to employees |
-| deal_id | uuid | FK to deals |
-| deal_collection_id | uuid | FK to deal_collections |
-| original_amount_usd | numeric | Total clawback amount |
-| recovered_amount_usd | numeric | Amount recovered so far (default 0) |
-| remaining_amount_usd | numeric | Generated: original - recovered |
-| status | text | 'pending', 'partial', 'recovered', 'written_off' |
-| triggered_month | date | Month clawback was triggered |
-| last_recovery_month | date | Last month a recovery was applied |
-| created_at / updated_at | timestamps | |
+This prevents the `applyClawbackRecoveries` function from double-deducting an already-resolved clawback.
 
-**Payout engine changes**: After calculating an employee's payable amount for the month, check `clawback_ledger` for pending/partial entries. Deduct from the payable amount (up to the payable amount -- cannot go negative). Update `recovered_amount_usd` accordingly. This ensures carry-forward across months.
+#### 3. Add Notes for Audit Trail
 
-### Summary of Changes
+When releasing a clawback-triggered deal's full amount, include a descriptive note on the Collection Release payout record (e.g., "Full release for clawback-reversed deal [Project ID]") so finance teams can trace the logic.
 
-| Area | File/Location | Change |
-|---|---|---|
-| DB Trigger | Migration SQL | Rewrite `check_collection_month_lock()` to check `collection_month` instead of `booking_month` |
-| DB Table | Migration SQL | Create `clawback_ledger` table with RLS policies |
-| Hook | `src/hooks/useCollections.ts` | Set `collection_month` in `useUpdateCollectionStatus` mutation |
-| UI | `src/components/data-inputs/PendingCollectionsTable.tsx` | Update lock logic to not use `booking_month` lock for disabling controls |
-| Engine | `src/lib/payoutEngine.ts` | Update `checkAndApplyClawbacks` to use plan clawback period; add clawback ledger integration; add carry-forward deduction logic |
-| Engine | `src/lib/payoutEngine.ts` | Insert into `clawback_ledger` when clawback triggered; check ledger during payout calculation |
+### Technical Details
+
+**File**: `src/lib/payoutEngine.ts`
+
+**Function**: `calculateCollectionReleases` (lines 740-783)
+
+- Expand the `deal_variable_pay_attribution` query to also select `variable_pay_split_usd` and `is_clawback_triggered`
+- After summing, for clawback-triggered deals: use `variable_pay_split_usd` instead of `payout_on_collection_usd`
+- After calculating releases, query `clawback_ledger` for matching `deal_id` entries with status `pending` or `partial`, and mark them `recovered`
+
+No database migration is needed -- all required columns and tables already exist.
 
