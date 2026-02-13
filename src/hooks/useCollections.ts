@@ -146,12 +146,18 @@ export function useUpdateCollectionStatus() {
     }) => {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Derive collection_month from collection_date
+      const collectionMonth = is_collected && collection_date
+        ? format(parseISO(collection_date), "yyyy-MM-01")
+        : null;
+
       const { data, error } = await supabase
         .from("deal_collections")
         .update({
           is_collected,
           collection_date: is_collected ? collection_date : null,
           collection_amount_usd: is_collected ? collection_amount_usd : null,
+          collection_month: collectionMonth,
           notes,
           updated_by: user?.id,
         })

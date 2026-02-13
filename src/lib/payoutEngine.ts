@@ -1116,14 +1116,20 @@ interface ClawbackResult {
 }
 
 /**
- * Check and apply clawbacks for overdue deal collections (180-day rule)
+ * Check and apply clawbacks for overdue deal collections.
+ * Uses the plan's clawback_period_days (default 180) from booking_month end.
+ * If first_milestone_due_date is set, uses the earlier of the two deadlines.
+ * Also inserts into clawback_ledger for carry-forward tracking.
  */
 export async function checkAndApplyClawbacks(
   payoutRunId: string,
   monthYear: string
 ): Promise<ClawbackResult> {
-  // Find overdue collections that haven't been triggered yet
-  const { data: overdueCollections } = await supabase
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  // Find all uncollected, non-clawback-triggered collections
+  const { data: pendingCollections } = await supabase
     .from('deal_collections')
     .select(`
       id,
@@ -1135,29 +1141,70 @@ export async function checkAndApplyClawbacks(
       customer_name
     `)
     .eq('is_collected', false)
-    .lt('first_milestone_due_date', new Date().toISOString().split('T')[0])
     .or('is_clawback_triggered.is.null,is_clawback_triggered.eq.false');
   
-  if (!overdueCollections || overdueCollections.length === 0) {
+  if (!pendingCollections || pendingCollections.length === 0) {
     return { totalClawbacksUsd: 0, clawbackCount: 0 };
   }
   
   let totalClawbacksUsd = 0;
+  let clawbackCount = 0;
   
-  for (const collection of overdueCollections) {
-    // Find the VP attributions for this deal to calculate clawback amount
+  for (const collection of pendingCollections) {
+    // Determine clawback deadline based on plan's clawback_period_days
+    // First, find the employee(s) associated with this deal to get their plan
     const { data: attributions } = await supabase
       .from('deal_variable_pay_attribution')
-      .select('employee_id, payout_on_booking_usd, local_currency, compensation_exchange_rate')
+      .select('employee_id, payout_on_booking_usd, local_currency, compensation_exchange_rate, plan_id')
       .eq('deal_id', collection.deal_id);
     
     if (!attributions || attributions.length === 0) continue;
     
-    // Sum up the booking payouts that need to be clawed back
+    // Get the plan's clawback period (use first attribution's plan)
+    const planId = attributions[0].plan_id;
+    let clawbackPeriodDays = 180; // default
+    let isClawbackExempt = false;
+    
+    if (planId) {
+      const { data: plan } = await supabase
+        .from('comp_plans')
+        .select('clawback_period_days, is_clawback_exempt')
+        .eq('id', planId)
+        .maybeSingle();
+      
+      if (plan) {
+        clawbackPeriodDays = plan.clawback_period_days ?? 180;
+        isClawbackExempt = plan.is_clawback_exempt === true;
+      }
+    }
+    
+    // Skip clawback-exempt plans
+    if (isClawbackExempt) continue;
+    
+    // Calculate deadline: end of booking month + clawback_period_days
+    const bookingDate = new Date(collection.booking_month);
+    const bookingMonthEnd = new Date(bookingDate.getFullYear(), bookingDate.getMonth() + 1, 0); // last day of booking month
+    const clawbackDeadline = new Date(bookingMonthEnd);
+    clawbackDeadline.setDate(clawbackDeadline.getDate() + clawbackPeriodDays);
+    
+    // If first_milestone_due_date is set, use the earlier deadline
+    let effectiveDeadline = clawbackDeadline;
+    if (collection.first_milestone_due_date) {
+      const milestoneDate = new Date(collection.first_milestone_due_date);
+      if (milestoneDate < clawbackDeadline) {
+        effectiveDeadline = milestoneDate;
+      }
+    }
+    
+    // Check if past deadline
+    if (today <= effectiveDeadline) continue;
+    
+    // This deal is overdue — trigger clawback
     const clawbackAmount = attributions.reduce((sum, attr) => sum + attr.payout_on_booking_usd, 0);
     totalClawbacksUsd += clawbackAmount;
+    clawbackCount++;
     
-    // Create clawback payout records (negative amounts)
+    // Create clawback payout records (negative amounts) and clawback_ledger entries
     for (const attr of attributions) {
       const localAmount = attr.payout_on_booking_usd * (attr.compensation_exchange_rate || 1);
       
@@ -1174,7 +1221,18 @@ export async function checkAndApplyClawbacks(
         clawback_amount_usd: attr.payout_on_booking_usd,
         clawback_amount_local: localAmount,
         status: 'calculated',
-        notes: `Clawback for deal ${collection.project_id} - ${collection.customer_name || 'Unknown'}`,
+        notes: `Clawback for deal ${collection.project_id} - ${collection.customer_name || 'Unknown'} (${clawbackPeriodDays}-day period exceeded)`,
+      });
+      
+      // Insert into clawback_ledger for carry-forward tracking
+      await supabase.from('clawback_ledger' as any).insert({
+        employee_id: attr.employee_id,
+        deal_id: collection.deal_id,
+        deal_collection_id: collection.id,
+        original_amount_usd: attr.payout_on_booking_usd,
+        recovered_amount_usd: 0,
+        status: 'pending',
+        triggered_month: ensureFullDate(monthYear),
       });
     }
     
@@ -1183,7 +1241,7 @@ export async function checkAndApplyClawbacks(
       .from('deal_variable_pay_attribution')
       .update({
         is_clawback_triggered: true,
-        clawback_date: new Date().toISOString().split('T')[0],
+        clawback_date: todayStr,
         clawback_amount_usd: clawbackAmount,
         updated_at: new Date().toISOString(),
       })
@@ -1203,7 +1261,65 @@ export async function checkAndApplyClawbacks(
   
   return {
     totalClawbacksUsd,
-    clawbackCount: overdueCollections.length,
+    clawbackCount,
+  };
+}
+
+/**
+ * Apply clawback carry-forward deductions from an employee's payable amount.
+ * Checks the clawback_ledger for pending/partial entries and deducts from payable.
+ * Returns the adjusted payable amount after deductions.
+ */
+export async function applyClawbackRecoveries(
+  employeeId: string,
+  payableAmountUsd: number,
+  monthYear: string
+): Promise<{ adjustedPayableUsd: number; totalRecoveredUsd: number }> {
+  if (payableAmountUsd <= 0) {
+    return { adjustedPayableUsd: payableAmountUsd, totalRecoveredUsd: 0 };
+  }
+
+  // Fetch pending/partial clawback ledger entries for this employee
+  const { data: pendingClawbacks } = await supabase
+    .from('clawback_ledger' as any)
+    .select('id, remaining_amount_usd, recovered_amount_usd')
+    .eq('employee_id', employeeId)
+    .in('status', ['pending', 'partial'])
+    .order('triggered_month', { ascending: true });
+
+  if (!pendingClawbacks || pendingClawbacks.length === 0) {
+    return { adjustedPayableUsd: payableAmountUsd, totalRecoveredUsd: 0 };
+  }
+
+  let remainingPayable = payableAmountUsd;
+  let totalRecovered = 0;
+
+  for (const entry of pendingClawbacks as any[]) {
+    if (remainingPayable <= 0) break;
+
+    const canRecover = Math.min(remainingPayable, entry.remaining_amount_usd);
+    if (canRecover <= 0) continue;
+
+    const newRecovered = (entry.recovered_amount_usd || 0) + canRecover;
+    const newRemaining = entry.remaining_amount_usd - canRecover;
+    const newStatus = newRemaining <= 0 ? 'recovered' : 'partial';
+
+    await supabase
+      .from('clawback_ledger' as any)
+      .update({
+        recovered_amount_usd: newRecovered,
+        status: newStatus,
+        last_recovery_month: ensureFullDate(monthYear),
+      })
+      .eq('id', entry.id);
+
+    remainingPayable -= canRecover;
+    totalRecovered += canRecover;
+  }
+
+  return {
+    adjustedPayableUsd: remainingPayable,
+    totalRecoveredUsd: totalRecovered,
   };
 }
 
