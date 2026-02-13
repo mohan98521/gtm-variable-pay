@@ -1,43 +1,57 @@
 
 
-## Modify Deal Team SPIFF Allocation Dialog
+## Add Deal Team SPIFF Permission and Role-Based UI Controls
 
-### Changes Required
+### What Changes
 
-Two modifications to `src/components/admin/DealTeamSpiffManager.tsx`:
+Currently, the "Deal Team SPIFFs" tab piggybacks on the `tab:payout_runs` permission and has no granular action-level controls. This plan introduces a dedicated permission key and action permissions so Finance and GTM Ops roles can manage SPIFF allocations independently.
 
-### 1. Replace Auto-Populated Team Members with Manual Search-and-Add
+### 1. New Permission Keys
 
-**Current behavior**: The allocation dialog automatically extracts team members from the deal's participant fields and displays them all as rows.
+Add to `src/lib/permissions.ts`:
 
-**New behavior**: Start with an empty table. The admin uses a searchable employee dropdown (using the existing `SearchableSelect` component) to add team members one by one. Each added member gets a role selector, amount input, and notes field -- plus a remove button.
+| Key | Label | Category | Description |
+|---|---|---|---|
+| `tab:deal_team_spiffs` | Deal Team SPIFFs | tab | Access the Deal Team SPIFF management section |
+| `action:allocate_deal_spiff` | Allocate Deal SPIFF | action | Create/edit SPIFF allocations for deals |
+| `action:approve_deal_spiff` | Approve Deal SPIFF | action | Approve or reject pending allocations |
 
-**Implementation details**:
-- Import `SearchableSelect` and `useProfiles` hook
-- Remove the `useMemo` that auto-extracts `teamMembers` from deal fields (lines 385-395)
-- Replace with a `useState<TeamMember[]>` initialized from `existingAllocations` (matching back to profiles for names)
-- Add a row at the top of the table with a `SearchableSelect` for employee search and an "Add" button
-- Already-added employees are filtered out of the dropdown options
-- Each row gets a remove button (Trash2 icon) to delete a member before saving
+### 2. Database Migration
 
-### 2. Include Sales Head in Eligible Roles
+Insert default permission rows for the three new keys, granting access to `admin`, `finance`, and `gtm_ops` roles:
 
-**Current behavior**: `TEAM_PARTICIPANT_ROLES` array (line 44-52) excludes `sales_head`. The "no members" message also says "excluding Sales Rep & Sales Head".
+- `tab:deal_team_spiffs` -- allowed for admin, finance, gtm_ops
+- `action:allocate_deal_spiff` -- allowed for admin, finance, gtm_ops
+- `action:approve_deal_spiff` -- allowed for admin only (CSO approval flow)
 
-**New behavior**: Add `sales_head_employee_id` / `sales_head_name` with label "Sales Head" to `TEAM_PARTICIPANT_ROLES`. Update the empty-state message to say "excluding Sales Rep" only.
+### 3. Admin Navigation Update
 
-Note: Since we're switching to manual search-and-add, the `TEAM_PARTICIPANT_ROLES` constant is no longer used for auto-populating members. However, it can still be kept for reference or removed entirely. The key change is that **any employee** (including Sales Head) can be searched and added manually, so the exclusion list becomes irrelevant for the add flow. The `exclude_roles` config in the database only applies if we want to filter the dropdown -- but since the CSO decides who gets the SPIFF, we'll allow all employees to be selectable.
+In `src/pages/Admin.tsx`, change the Deal Team SPIFFs nav item from:
+```
+permissionCheck: (c) => c.canAccessTab("tab:payout_runs")
+```
+to:
+```
+permissionCheck: (c) => c.canAccessTab("tab:deal_team_spiffs")
+```
 
-### Technical Details
+### 4. UI Permission Guards in DealTeamSpiffManager
 
-**File**: `src/components/admin/DealTeamSpiffManager.tsx`
+In `src/components/admin/DealTeamSpiffManager.tsx`:
 
-| Section | Change |
+- Import `usePermissions` hook
+- Use `canPerformAction("action:allocate_deal_spiff")` to show/hide the "Allocate" button and the allocation dialog's save functionality
+- Use `canPerformAction("action:approve_deal_spiff")` to show/hide the "Approve" and "Reject" buttons on fully-allocated deals
+- Use `canPerformAction("action:allocate_deal_spiff")` to gate the "Settings" config button
+- Users without allocate permission see a read-only view (can open dialog in view mode but cannot edit)
+- Users without approve permission can allocate but not approve/reject
+
+### Summary of File Changes
+
+| File | Change |
 |---|---|
-| Imports | Add `SearchableSelect`, `useProfiles`, `Trash2` icon, `Plus` icon |
-| `TEAM_PARTICIPANT_ROLES` | Add `sales_head` entry (kept for reference but not used for auto-population) |
-| `AllocationDialog` component | Replace auto-extract logic with manual add via `SearchableSelect` |
-| Empty state message (line 441) | Update text to reflect new UX |
-| Team member rows | Add remove button per row; role becomes a text input or badge based on selection |
+| `src/lib/permissions.ts` | Add 3 new `PermissionKey` entries and their definitions |
+| Migration SQL | Insert default `role_permissions` rows for admin, finance, gtm_ops |
+| `src/pages/Admin.tsx` | Switch Deal Team SPIFFs to use `tab:deal_team_spiffs` |
+| `src/components/admin/DealTeamSpiffManager.tsx` | Add permission-gated UI for allocate, approve, settings actions |
 
-**No database changes needed** -- the `deal_team_spiff_allocations` table already stores arbitrary `employee_id` values, so any employee can be allocated regardless of their deal role.
