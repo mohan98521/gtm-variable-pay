@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Edit, Trash2, Info, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import {
   useClosingArrRenewalMultipliers,
   useCreateClosingArrRenewalMultiplier,
@@ -59,10 +60,28 @@ export function ClosingArrRenewalMultiplierEditor({ planId }: Props) {
   };
 
   const handleSubmit = () => {
+    const newMin = minYears;
+    const newMax = maxYears ? parseInt(maxYears) : null;
+
+    // Validate overlap against existing tiers (excluding the one being edited)
+    const otherTiers = multipliers.filter((m) => !editing || m.id !== editing.id);
+    const overlap = otherTiers.find((m) => {
+      const existingMax = m.max_years ?? Infinity;
+      const currentMax = newMax ?? Infinity;
+      return newMin <= existingMax && currentMax >= m.min_years;
+    });
+
+    if (overlap) {
+      toast.error(
+        `Range ${newMin}–${newMax ?? "∞"} overlaps with existing tier ${overlap.min_years}–${overlap.max_years ?? "∞"}. Adjust ranges to avoid overlap.`
+      );
+      return;
+    }
+
     const values = {
       plan_id: planId,
-      min_years: minYears,
-      max_years: maxYears ? parseInt(maxYears) : null,
+      min_years: newMin,
+      max_years: newMax,
       multiplier_value: multiplierValue,
     };
 
