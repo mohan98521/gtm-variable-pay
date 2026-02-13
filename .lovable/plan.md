@@ -1,29 +1,69 @@
 
 
-## Fix Renewal Multiplier Tier Overlap
+## Marginal Stepped Accelerator Model
 
-### Problem
+### What Changes
 
-The current multiplier tiers use inclusive ranges on both ends (`min_years` to `max_years`), causing overlaps at boundaries. For example, if Tier 1 is 1-2 years and Tier 2 is 2-3 years, a 2-year renewal matches both tiers.
+Currently, the Stepped Accelerator applies a **single multiplier to the entire achievement**. For example, at 110% achievement with a 1.4x tier, the payout is `$50k x 110% x 1.4 = $77,000`.
 
-### Solution
+The new model applies each tier's multiplier **only to the portion of achievement within that tier** (marginal/incremental approach):
 
-Two changes to ensure each renewal year maps to exactly one multiplier:
+```text
+Tier 1 (0-100%):   $50k x 100% x 1.0 = $50,000
+Tier 2 (100-120%): $50k x  10% x 1.4 =  $7,000
+                                Total = $57,000
+```
 
-**1. Update `findRenewalMultiplier` logic** (`src/hooks/useClosingArrRenewalMultipliers.ts`)
+### How It Works (Your Example)
 
-Sort multipliers by `min_years` descending so the **most specific (highest) matching tier wins**. This means a 2-year renewal will match the "2-3 years" tier (1.1x) instead of the "1-2 years" tier (1.0x), which is the correct business intent.
+Target: $1,000k | Bonus: $50k | Achievement: 110%
 
-**2. Add overlap validation in the editor** (`src/components/admin/ClosingArrRenewalMultiplierEditor.tsx`)
+```text
++-------------------+-------------------+-------------------+-------------------+
+| Tier              | Achievement Slice | Multiplier        | Payout            |
++-------------------+-------------------+-------------------+-------------------+
+| 0-100%            | 100%              | 1.0x              | $50k x 100% x 1.0 = $50,000 |
+| 100-120%          | 10% (of 20 range) | 1.4x              | $50k x 10% x 1.4  = $7,000  |
+| 120-999%          | 0% (not reached)  | 1.6x              | $0                 |
++-------------------+-------------------+-------------------+-------------------+
+| TOTAL             |                   |                   | $57,000            |
++-------------------+-------------------+-------------------+-------------------+
+```
 
-When adding or editing a tier, validate that the new range does not overlap with existing tiers. Show an error toast if overlap is detected and prevent the save.
+More examples with the same plan:
+
+- **80% Achievement**: Tier 1 only: `$50k x 80% x 1.0 = $40,000`
+- **120% Achievement**: Tier 1: `$50k x 100% x 1.0 = $50,000` + Tier 2: `$50k x 20% x 1.4 = $14,000` = **$64,000**
+- **150% Achievement**: Tier 1: `$50,000` + Tier 2: `$50k x 20% x 1.4 = $14,000` + Tier 3: `$50k x 30% x 1.6 = $24,000` = **$88,000**
+
+### Impact on Other Logic Types
+
+- **Linear**: No change (already uses 1.0x flat or no grid).
+- **Gated Threshold**: No change (gate check happens first, then the same marginal calculation applies to tiers above the gate).
 
 ### Technical Details
 
-**File: `src/hooks/useClosingArrRenewalMultipliers.ts`**
-- Change `findRenewalMultiplier` to sort multipliers by `min_years` descending before matching, so the narrowest/highest tier is checked first.
+**File: `src/lib/compensationEngine.ts`**
 
-**File: `src/components/admin/ClosingArrRenewalMultiplierEditor.tsx`**
-- Add a validation function in `handleSubmit` that checks for range overlaps against existing tiers (excluding the one being edited).
-- If overlap detected, show a toast error and block submission.
+1. Add a new function `calculateMarginalPayout` that iterates through sorted tiers, computing the achievement slice within each tier and multiplying by that tier's multiplier, then summing the results.
+
+2. Update `calculateMetricPayoutFromPlan` so that for `Stepped_Accelerator` logic, it calls `calculateMarginalPayout` instead of the current `(achievement% / 100) x bonusAllocation x singleMultiplier` formula.
+
+3. Update `generatePayoutProjections` to use the same marginal calculation for Stepped Accelerator metrics.
+
+4. The `getMultiplierFromGrid` function is kept for backward compatibility (used by other files for display/lookup purposes), but the payout formula itself changes.
+
+**Files consuming `compensationEngine.ts` (no formula changes needed, they call the updated functions):**
+- `src/hooks/useCurrentUserCompensation.ts` - Uses `getMultiplierFromGrid` for display; payout uses the engine
+- `src/hooks/useTeamCompensation.ts` - Same pattern
+- `src/hooks/useIncentiveAuditData.ts` - Calls `calculateVariablePayFromPlan`
+- `src/lib/dealVariablePayAttribution.ts` - Uses `getMultiplierFromGrid` and `calculateAchievementPercent`
+- `src/components/dashboard/PayoutSimulator.tsx` - Uses `getMultiplierFromGrid` for simulation display
+
+**Files that need review for direct payout formulas:**
+- `src/lib/payoutEngine.ts` - The main payout run engine; need to verify if it uses its own VP formula or delegates to compensationEngine
+- `src/lib/dealVariablePayAttribution.ts` - May have its own payout calculation that needs the same marginal logic
+
+**MetricPayoutResult update:**
+- The `multiplier` field will become a **weighted average multiplier** (total payout / (achievement% x bonusAllocation)) for display purposes, since there's no longer a single multiplier value.
 
