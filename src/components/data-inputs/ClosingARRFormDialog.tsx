@@ -29,6 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   ClosingARRActual,
   ClosingARRInsert,
@@ -67,6 +68,8 @@ const formSchema = z.object({
   sales_rep_name: z.string().optional(),
   sales_head_employee_id: z.string().optional(),
   sales_head_name: z.string().optional(),
+  is_multi_year: z.boolean().default(false),
+  renewal_years: z.coerce.number().min(1).default(1),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -121,6 +124,8 @@ export function ClosingARRFormDialog({
       sales_rep_name: "",
       sales_head_employee_id: "",
       sales_head_name: "",
+      is_multi_year: false,
+      renewal_years: 1,
     },
   });
 
@@ -154,6 +159,8 @@ export function ClosingARRFormDialog({
         sales_rep_name: record.sales_rep_name || "",
         sales_head_employee_id: record.sales_head_employee_id || "",
         sales_head_name: record.sales_head_name || "",
+        is_multi_year: (record as any).is_multi_year || false,
+        renewal_years: (record as any).renewal_years || 1,
       });
     } else {
       form.reset({
@@ -183,6 +190,8 @@ export function ClosingARRFormDialog({
         sales_rep_name: "",
         sales_head_employee_id: "",
         sales_head_name: "",
+        is_multi_year: false,
+        renewal_years: 1,
       });
     }
   }, [record, defaultMonth, form]);
@@ -267,7 +276,9 @@ export function ClosingARRFormDialog({
       sales_rep_name: values.sales_rep_name || null,
       sales_head_employee_id: values.sales_head_employee_id === "_none" ? null : values.sales_head_employee_id || null,
       sales_head_name: values.sales_head_name || null,
-    };
+      is_multi_year: values.is_multi_year,
+      renewal_years: values.is_multi_year ? values.renewal_years : 1,
+    } as any;
 
     try {
       if (isEditing && record) {
@@ -617,6 +628,50 @@ export function ClosingARRFormDialog({
                       </FormItem>
                     )}
                   />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Section: Multi-Year Renewal */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Multi-Year Renewal</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="is_multi_year"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Multi-Year Renewal</FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Is this a multi-year renewal contract?
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  {form.watch("is_multi_year") && (
+                    <FormField
+                      control={form.control}
+                      name="renewal_years"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>No. of Renewal Years</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={1} step={1} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
               </div>
 

@@ -63,6 +63,8 @@ const CSV_HEADERS = [
   "renewal_status",
   "sales_rep_id",
   "sales_head_id",
+  "is_multi_year",
+  "renewal_years",
 ];
 
 export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploadProps) {
@@ -168,6 +170,9 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
       return { rowNumber, data: null, errors, raw: row };
     }
 
+    const isMultiYear = row.is_multi_year ? ['yes', 'true', '1'].includes(row.is_multi_year.toLowerCase()) : false;
+    const renewalYears = row.renewal_years ? parseInt(row.renewal_years) || 1 : 1;
+
     const data: ClosingARRInsert = {
       month_year: monthYear!,
       bu: row.bu,
@@ -195,6 +200,8 @@ export function ClosingARRBulkUpload({ open, onOpenChange }: ClosingARRBulkUploa
       sales_rep_name: salesRep?.full_name || null,
       sales_head_employee_id: row.sales_head_id || null,
       sales_head_name: salesHead?.full_name || null,
+      is_multi_year: isMultiYear,
+      renewal_years: isMultiYear ? renewalYears : 1,
     };
 
     return { rowNumber, data, errors: [], raw: row };

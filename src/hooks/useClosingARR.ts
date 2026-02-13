@@ -47,11 +47,16 @@ export interface ClosingARRActual {
   sales_rep_name: string | null;
   sales_head_employee_id: string | null;
   sales_head_name: string | null;
+  is_multi_year: boolean;
+  renewal_years: number;
   created_at: string;
   updated_at: string;
 }
 
-export type ClosingARRInsert = Omit<ClosingARRActual, "id" | "closing_arr" | "created_at" | "updated_at">;
+export type ClosingARRInsert = Omit<ClosingARRActual, "id" | "closing_arr" | "created_at" | "updated_at"> & {
+  is_multi_year?: boolean;
+  renewal_years?: number;
+};
 export type ClosingARRUpdate = Partial<ClosingARRInsert>;
 
 // Fetch all records for a month

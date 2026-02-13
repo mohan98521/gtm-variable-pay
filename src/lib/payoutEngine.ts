@@ -370,17 +370,41 @@ async function calculateEmployeeVariablePay(
       // Closing ARR: fetch from closing_arr_actuals table (latest month snapshot, eligible only)
       const { data: closingArr } = await supabase
         .from('closing_arr_actuals')
-        .select('month_year, closing_arr, end_date')
+        .select('month_year, closing_arr, end_date, is_multi_year, renewal_years')
         .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId}`)
         .gte('month_year', `${ctx.fiscalYear}-01-01`)
         .lte('month_year', ctx.monthYear)
         .gt('end_date', `${ctx.fiscalYear}-12-31`);
 
-      // Group by month and use the latest month snapshot
+      // Fetch renewal multipliers for the current plan
+      const { data: renewalMultipliers } = await supabase
+        .from('closing_arr_renewal_multipliers' as any)
+        .select('*')
+        .eq('plan_id', ctx.planId)
+        .order('min_years');
+
+      const multiplierTiers = (renewalMultipliers || []) as any[];
+
+      // Helper to find matching multiplier
+      const findMultiplier = (years: number): number => {
+        for (const m of multiplierTiers) {
+          if (years >= m.min_years && (m.max_years === null || years <= m.max_years)) {
+            return m.multiplier_value;
+          }
+        }
+        return 1.0;
+      };
+
+      // Group by month and use the latest month snapshot, applying renewal multipliers
       const closingByMonth = new Map<string, number>();
-      (closingArr || []).forEach(arr => {
+      (closingArr || []).forEach((arr: any) => {
         const monthKey = arr.month_year?.substring(0, 7) || '';
-        closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + (arr.closing_arr || 0));
+        let value = arr.closing_arr || 0;
+        // Apply renewal multiplier if multi-year
+        if (arr.is_multi_year && arr.renewal_years > 0) {
+          value = value * findMultiplier(arr.renewal_years);
+        }
+        closingByMonth.set(monthKey, (closingByMonth.get(monthKey) || 0) + value);
       });
 
       const sortedMonths = Array.from(closingByMonth.keys()).sort();
