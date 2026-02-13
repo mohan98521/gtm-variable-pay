@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Settings2, DollarSign, CheckCircle2, XCircle, Edit, Trash2, Plus } from "lucide-react";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Participant role fields on the deals table (excluding sales_rep and sales_head)
 const TEAM_PARTICIPANT_ROLES = [
@@ -88,6 +89,9 @@ function getDealAllocationStatus(
 
 export function DealTeamSpiffManager() {
   const { selectedYear } = useFiscalYear();
+  const { canPerformAction } = usePermissions();
+  const canAllocate = canPerformAction("action:allocate_deal_spiff");
+  const canApprove = canPerformAction("action:approve_deal_spiff");
   const { data: config, isLoading: configLoading } = useDealTeamSpiffConfig();
   const { data: allAllocations, isLoading: allocsLoading } = useDealTeamSpiffAllocations();
   const updateConfig = useUpdateDealTeamSpiffConfig();
@@ -161,10 +165,12 @@ export function DealTeamSpiffManager() {
             Allocate {formatCurrency(poolAmount)} pool for eligible deals (ARR ≥ {formatCurrency(minArr)})
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
-          <Settings2 className="h-4 w-4 mr-1.5" />
-          Settings
-        </Button>
+        {canAllocate && (
+          <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
+            <Settings2 className="h-4 w-4 mr-1.5" />
+            Settings
+          </Button>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -286,9 +292,9 @@ export function DealTeamSpiffManager() {
                             variant="outline"
                             onClick={() => setSelectedDeal(deal)}
                           >
-                            {status.label === "Approved" ? "View" : "Allocate"}
+                            {status.label === "Approved" || !canAllocate ? "View" : "Allocate"}
                           </Button>
-                          {status.label === "Fully Allocated" && (
+                          {canApprove && status.label === "Fully Allocated" && (
                             <>
                               <Button
                                 size="sm"
@@ -333,6 +339,7 @@ export function DealTeamSpiffManager() {
           poolAmount={poolAmount}
           existingAllocations={(allAllocations || []).filter(a => a.deal_id === selectedDeal.id)}
           onClose={() => setSelectedDeal(null)}
+          readOnly={!canAllocate}
           onSave={(items) => {
             upsertAllocations.mutate({
               deal_id: selectedDeal.id,
@@ -371,6 +378,7 @@ function AllocationDialog({
   poolAmount,
   existingAllocations,
   onClose,
+  readOnly,
   onSave,
   isSaving,
 }: {
@@ -378,10 +386,12 @@ function AllocationDialog({
   poolAmount: number;
   existingAllocations: DealTeamSpiffAllocation[];
   onClose: () => void;
+  readOnly?: boolean;
   onSave: (items: { employee_id: string; allocated_amount_usd: number; allocated_amount_local: number; local_currency: string; exchange_rate_used: number; notes?: string }[]) => void;
   isSaving: boolean;
 }) {
   const isApproved = existingAllocations.some(a => a.status === "approved");
+  const isReadOnly = readOnly || isApproved;
   const { data: profiles } = useProfiles();
 
   // Manual team members list — initialized from existing allocations
@@ -467,7 +477,7 @@ function AllocationDialog({
           </div>
 
           {/* Add employee row */}
-          {!isApproved && (
+          {!isReadOnly && (
             <div className="flex items-end gap-2">
               <div className="flex-1">
                 <label className="text-sm font-medium mb-1 block">Add Team Member</label>
@@ -502,7 +512,7 @@ function AllocationDialog({
                   <TableHead>Team Member</TableHead>
                   <TableHead className="text-right w-[140px]">Amount (USD)</TableHead>
                   <TableHead className="w-[200px]">Notes</TableHead>
-                  {!isApproved && <TableHead className="w-[50px]" />}
+                  {!isReadOnly && <TableHead className="w-[50px]" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -510,7 +520,7 @@ function AllocationDialog({
                   <TableRow key={member.employee_id}>
                     <TableCell className="font-medium">{member.name}</TableCell>
                     <TableCell className="text-right">
-                      {isApproved ? (
+                      {isReadOnly ? (
                         formatCurrency(amounts[member.employee_id] || 0)
                       ) : (
                         <Input
@@ -529,7 +539,7 @@ function AllocationDialog({
                       )}
                     </TableCell>
                     <TableCell>
-                      {isApproved ? (
+                      {isReadOnly ? (
                         <span className="text-sm text-muted-foreground">{notes[member.employee_id] || "-"}</span>
                       ) : (
                         <Input
@@ -542,7 +552,7 @@ function AllocationDialog({
                         />
                       )}
                     </TableCell>
-                    {!isApproved && (
+                    {!isReadOnly && (
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -560,7 +570,7 @@ function AllocationDialog({
             </Table>
           )}
 
-          {!isApproved && (
+          {!isReadOnly && (
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>Cancel</Button>
               <Button

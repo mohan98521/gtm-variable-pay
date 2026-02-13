@@ -17,6 +17,7 @@ export type PermissionKey =
   | "tab:performance_targets"
   | "tab:payout_runs"
   | "tab:exchange_rates"
+  | "tab:deal_team_spiffs"
   // Actions
   | "action:create_comp_plan"
   | "action:edit_comp_plan"
@@ -29,7 +30,9 @@ export type PermissionKey =
   | "action:upload_data"
   | "action:edit_actuals"
   | "action:edit_exchange_rates"
-  | "action:export_reports";
+  | "action:export_reports"
+  | "action:allocate_deal_spiff"
+  | "action:approve_deal_spiff";
 
 export interface PermissionDefinition {
   key: PermissionKey;
@@ -57,6 +60,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "tab:roles", label: "Role Builder", description: "Create and manage custom roles", category: "tab" },
   { key: "tab:payout_runs", label: "Payout Runs", description: "Manage payout run lifecycle", category: "tab" },
   { key: "tab:exchange_rates", label: "Exchange Rates", description: "Manage exchange rates", category: "tab" },
+  { key: "tab:deal_team_spiffs", label: "Deal Team SPIFFs", description: "Access the Deal Team SPIFF management section", category: "tab" },
   
   // Actions
   { key: "action:create_comp_plan", label: "Create Comp Plan", description: "Create new compensation plans", category: "action" },
@@ -71,6 +75,8 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "action:edit_actuals", label: "Edit Actuals", description: "Modify monthly actuals", category: "action" },
   { key: "action:edit_exchange_rates", label: "Edit Exchange Rates", description: "Modify exchange rates", category: "action" },
   { key: "action:export_reports", label: "Export Reports", description: "Download report data", category: "action" },
+  { key: "action:allocate_deal_spiff", label: "Allocate Deal SPIFF", description: "Create/edit SPIFF allocations for deals", category: "action" },
+  { key: "action:approve_deal_spiff", label: "Approve Deal SPIFF", description: "Approve or reject pending allocations", category: "action" },
 ];
 
 // ALL_ROLES is now fetched dynamically from the `roles` table via useRoles hook.
