@@ -321,6 +321,46 @@ async function getPriorMonthsVp(
 }
 
 /**
+ * Get sum of prior months' NRR Additional Pay for incremental calculation
+ */
+async function getPriorMonthsNrr(
+  employeeId: string,
+  fiscalYear: number,
+  currentMonthYear: string
+): Promise<number> {
+  const { data } = await supabase
+    .from('monthly_payouts')
+    .select('calculated_amount_usd')
+    .eq('employee_id', employeeId)
+    .eq('payout_type', 'NRR Additional Pay')
+    .gte('month_year', `${fiscalYear}-01-01`)
+    .lt('month_year', ensureFullDate(currentMonthYear))
+    .not('payout_run_id', 'is', null);
+  
+  return (data || []).reduce((sum, p) => sum + (p.calculated_amount_usd || 0), 0);
+}
+
+/**
+ * Get sum of prior months' SPIFF payouts for incremental calculation
+ */
+async function getPriorMonthsSpiff(
+  employeeId: string,
+  fiscalYear: number,
+  currentMonthYear: string
+): Promise<number> {
+  const { data } = await supabase
+    .from('monthly_payouts')
+    .select('calculated_amount_usd')
+    .eq('employee_id', employeeId)
+    .eq('payout_type', 'SPIFF')
+    .gte('month_year', `${fiscalYear}-01-01`)
+    .lt('month_year', ensureFullDate(currentMonthYear))
+    .not('payout_run_id', 'is', null);
+  
+  return (data || []).reduce((sum, p) => sum + (p.calculated_amount_usd || 0), 0);
+}
+
+/**
  * Calculate Variable Pay for a single employee
  */
 async function calculateEmployeeVariablePay(
@@ -973,7 +1013,10 @@ export async function calculateMonthlyPayout(
       crErMinGp,
       implMinGp
     );
-    nrrPayoutUsd = nrrResult.payoutUsd;
+    
+    // Apply incremental logic: subtract prior months' NRR
+    const priorNrr = await getPriorMonthsNrr(employee.id, fiscalYear, monthYear);
+    nrrPayoutUsd = Math.max(0, nrrResult.payoutUsd - priorNrr);
   }
 
   // === SPIFF Calculations ===
@@ -1024,7 +1067,9 @@ export async function calculateMonthlyPayout(
       targetBonusUsd,
       targetsByMetric
     );
-    spiffPayoutUsd = spiffResult.totalSpiffUsd;
+    // Apply incremental logic: subtract prior months' SPIFF
+    const priorSpiff = await getPriorMonthsSpiff(employee.id, fiscalYear, monthYear);
+    spiffPayoutUsd = Math.max(0, spiffResult.totalSpiffUsd - priorSpiff);
     spiffBreakdowns = spiffResult.breakdowns;
   }
 
@@ -1080,8 +1125,15 @@ export async function calculateMonthlyPayout(
     }
   }
   
-  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrBookingUsd + spiffBookingUsd + dealTeamSpiffUsd;
-  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal + convertVPToLocal(nrrBookingUsd, compensationRate) + convertVPToLocal(spiffBookingUsd, compensationRate) + dealTeamSpiffLocal;
+  let payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrBookingUsd + spiffBookingUsd + dealTeamSpiffUsd;
+  
+  // Apply clawback carry-forward recoveries
+  let clawbackRecoveryUsd = 0;
+  const clawbackRecovery = await applyClawbackRecoveries(employee.id, payableThisMonthUsd, monthYear);
+  payableThisMonthUsd = clawbackRecovery.adjustedPayableUsd;
+  clawbackRecoveryUsd = clawbackRecovery.totalRecoveredUsd;
+  
+  const payableThisMonthLocal = convertVPToLocal(payableThisMonthUsd, compensationRate);
   
   return {
     employeeId: employee.id,
@@ -1530,37 +1582,27 @@ async function persistPayoutResults(
       });
     }
     
-    // Commission records by type
-    const commissionsByType = emp.commissionCalculations.reduce((acc, c) => {
-      if (!c.qualifies) return acc;
-      if (!acc[c.commissionType]) {
-        acc[c.commissionType] = { gross: 0, paid: 0, holdback: 0, yearEnd: 0 };
-      }
-      acc[c.commissionType].gross += c.grossCommission;
-      acc[c.commissionType].paid += c.paidAmount;
-      acc[c.commissionType].holdback += c.holdbackAmount;
-      acc[c.commissionType].yearEnd += c.yearEndHoldback;
-      return acc;
-    }, {} as Record<string, { gross: number; paid: number; holdback: number; yearEnd: number }>);
-    
-    for (const [commType, amounts] of Object.entries(commissionsByType)) {
+    // Commission records per-deal (with deal_id for correct collection release matching)
+    for (const c of emp.commissionCalculations) {
+      if (!c.qualifies) continue;
       records.push({
         payout_run_id: payoutRunId,
         employee_id: emp.employeeId,
         month_year: monthYear,
-        payout_type: commType,
+        payout_type: c.commissionType,
         plan_id: emp.planId,
-        calculated_amount_usd: amounts.gross,
-        calculated_amount_local: amounts.gross * emp.commissionMarketRate,
+        deal_id: c.dealId,
+        calculated_amount_usd: c.grossCommission,
+        calculated_amount_local: c.grossCommission * emp.commissionMarketRate,
         local_currency: emp.localCurrency,
         exchange_rate_used: emp.commissionMarketRate,
         exchange_rate_type: 'market',
-        booking_amount_usd: amounts.paid,
-        booking_amount_local: amounts.paid * emp.commissionMarketRate,
-        collection_amount_usd: amounts.holdback,
-        collection_amount_local: amounts.holdback * emp.commissionMarketRate,
-        year_end_amount_usd: amounts.yearEnd,
-        year_end_amount_local: amounts.yearEnd * emp.commissionMarketRate,
+        booking_amount_usd: c.paidAmount,
+        booking_amount_local: c.paidAmount * emp.commissionMarketRate,
+        collection_amount_usd: c.holdbackAmount,
+        collection_amount_local: c.holdbackAmount * emp.commissionMarketRate,
+        year_end_amount_usd: c.yearEndHoldback,
+        year_end_amount_local: c.yearEndHoldback * emp.commissionMarketRate,
         status: 'calculated',
       });
     }

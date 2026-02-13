@@ -251,12 +251,18 @@ export function useBulkUpdateCollections() {
       // Update each record
       const results = await Promise.all(
         updates.map(async (update) => {
+          // Derive collection_month from collection_date
+          const collectionMonth = update.is_collected && update.collection_date
+            ? format(parseISO(update.collection_date), "yyyy-MM-01")
+            : null;
+
           const { data, error } = await supabase
             .from("deal_collections")
             .update({
               is_collected: update.is_collected,
               collection_date: update.is_collected ? update.collection_date : null,
               collection_amount_usd: update.is_collected ? update.collection_amount_usd : null,
+              collection_month: collectionMonth,
               updated_by: user?.id,
             })
             .eq("id", update.id)
