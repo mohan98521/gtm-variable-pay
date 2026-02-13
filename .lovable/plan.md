@@ -1,126 +1,151 @@
 
-## Report Audit: Broken and Inconsistent Reports
 
-After a thorough review of all 10 report tabs and their underlying hooks, here are the issues found:
+## UI/UX Audit: Broken and Inconsistent Patterns
 
----
-
-### Issue 1: Management Summary Misclassifies NRR, SPIFF, and Collection Releases (CRITICAL)
-
-**Problem**: The Management Summary hook (`useManagementSummary.ts`) classifies payouts using simple string matching:
-- `payout_type.includes('variable')` for VP
-- `payout_type.includes('commission')` for commissions
-
-This means NRR Additional Pay, SPIFF, Deal Team SPIFF, Collection Release, and Year-End Release payout types are **completely ignored** in both VP and Commission totals. They fall through both checks and are only counted toward clawback totals (since `totalClawback += clawback` runs unconditionally but the amounts themselves are skipped).
-
-**Result**: The executive Management Summary report **understates total payouts** by the sum of all NRR, SPIFF, and release payouts. The quarterly and by-function breakdowns are similarly incomplete.
-
-**Fix**: Expand the classification logic to properly categorize all 8 payout types:
-- VP: 'Variable Pay'
-- Commission: 'Managed Services', 'Implementation', 'CR/ER', 'Perpetual License' (or any type not in the known non-commission set)
-- Separate line items for: 'NRR Additional Pay', 'SPIFF', 'Deal Team SPIFF'
-- Releases: 'Collection Release', 'Year-End Release' should be added to the appropriate category
-- Clawback: 'Clawback' type only
-
-**Files**: `src/hooks/useManagementSummary.ts`, `src/components/reports/ManagementSummary.tsx`
+After reviewing all pages, components, and layouts across the application, here are the issues found:
 
 ---
 
-### Issue 2: Currency Breakdown Has Same Classification Bug (MAJOR)
+### Issue 1: Inconsistent Currency Formatting Functions (MAJOR)
 
-**Problem**: `CurrencyBreakdown.tsx` uses the same flawed `payout_type.includes('variable')` check. NRR, SPIFF, and release types are silently dropped from VP totals and incorrectly added to commission totals (since the else branch catches everything non-VP).
+**Problem**: There are at least 4 different currency formatting approaches used across the codebase:
 
-**Result**: Currency-level reporting overstates commissions and understates/omits other payout categories.
+- **Dashboard/MetricsTable/CommissionTable/TeamView**: Uses abbreviated format (`$1.2M`, `$45.5K`, `$800`)
+- **DataInputs/DealsTable/ClosingARRTable**: Uses `Intl.NumberFormat` with full precision (`$1,200,000`)
+- **Reports/IncentiveAudit**: Uses `toLocaleString()` inline (`$1,200,000`)
+- **CurrencyBreakdown**: Has localization-aware formatting (Indian Lakhs for INR)
 
-**Fix**: Align payout type classification with the engine's actual types, matching the fix in Issue 1.
+The same deal value could display as `$1.2M` on the Dashboard, `$1,200,000` on Data Inputs, and `$12,00,000` on Currency Breakdown. Users seeing different representations of the same number across pages will lose trust in the data.
 
-**File**: `src/components/reports/CurrencyBreakdown.tsx`
+**Fix**: Create a shared `formatCurrencyUSD(value, options?)` utility in `src/lib/utils.ts` that all components import. Support two modes: `abbreviated` (for cards/summaries) and `full` (for tables/exports). Apply INR-specific grouping only when displaying local currency values.
 
----
-
-### Issue 3: Year-End Holdback Tracker Same Classification Bug (MAJOR)
-
-**Problem**: `useYearEndHoldbacks.ts` uses `payout_type.includes('variable')` to split VP vs commission holdbacks. NRR and SPIFF year-end holdback amounts are miscategorized as commission holdbacks.
-
-**Fix**: Use exact type matching consistent with Issue 1.
-
-**File**: `src/hooks/useYearEndHoldbacks.ts`
+**Files**: `src/lib/utils.ts` (new utility), then update imports in ~12 components
 
 ---
 
-### Issue 4: Payout Statement Missing NRR, SPIFF, and Release Types (MAJOR)
+### Issue 2: Summary Card Layout Inconsistency Between Pages (MODERATE)
 
-**Problem**: The `usePayoutStatement.ts` hook only recognizes three payout types: 'Variable Pay', 'Clawback', and everything else as "commission." This means:
-- NRR Additional Pay appears as a commission item (wrong category, no metric breakdown)
-- SPIFF and Deal Team SPIFF appear as commission items
-- Collection Release and Year-End Release appear as commission items
-- These types display without deal value or rate context, showing confusing $0 values
+**Problem**: The Dashboard, Data Inputs, and Team View all show summary cards but with different internal structures:
 
-**Fix**: Add dedicated sections or proper categorization for NRR, SPIFF, and release types in the payout statement. At minimum, group them correctly (NRR/SPIFF under VP-adjacent section, releases as a separate section).
+- **Dashboard** (5 cards): Uses `p-4` padding, icon in a `rounded-lg` div with `p-2`, horizontal layout with `gap-3`, text size `text-xl`
+- **Data Inputs** (4 cards): Uses `pt-6` padding via CardContent, icon in a `rounded-md` div with `h-12 w-12`, horizontal layout with `gap-4`, text size `text-2xl`
+- **Team View** (5 cards): Uses `pt-6` padding via CardContent, icon in a `rounded-md` div with `h-10 w-10`, horizontal layout with `gap-4`, text size `text-xl`, plus a sub-label
 
-**Files**: `src/hooks/usePayoutStatement.ts`, `src/components/reports/PayoutStatement.tsx`
+The visual weight, spacing, and icon sizes differ across pages, making the app feel inconsistent as users navigate.
 
----
+**Fix**: Create a shared `MetricCard` component (one already exists at `src/components/dashboard/MetricCard.tsx` but is not used by all pages). Standardize the card pattern with consistent padding, icon size, and text sizing. Update Dashboard, Data Inputs, and Team View to use it.
 
-### Issue 5: Incentive Audit Missing NRR, SPIFF, and Org-Level Actuals (MODERATE)
-
-**Problem**: The Incentive Audit report (`useIncentiveAuditData.ts`) calculates VP and commissions from live data (not payout runs), but:
-- Does not include NRR Additional Pay calculations
-- Does not include SPIFF or Deal Team SPIFF calculations
-- Does not handle "Org " prefixed metrics (organization-wide rollup actuals)
-- The commission table header says "Paid (75%) / Holdback (25%)" which is hardcoded but the actual splits come from the plan configuration and may differ
-
-**Fix**:
-- Add NRR and SPIFF sections to the audit report (or note their absence)
-- Fix hardcoded "75%/25%" column headers to show "Paid / Holdback" without percentages
-- Consider adding Org-level metric support for overlay/executive roles
-
-**Files**: `src/pages/Reports.tsx` (commission table headers), `src/hooks/useIncentiveAuditData.ts`
+**Files**: `src/components/dashboard/MetricCard.tsx`, `src/pages/Dashboard.tsx`, `src/pages/DataInputs.tsx`, `src/components/team/TeamSummaryCards.tsx`
 
 ---
 
-### Issue 6: Incentive Audit Grand Total Missing Year-End Holdback (MINOR)
+### Issue 3: Table Header Styling Inconsistency (MODERATE)
 
-**Problem**: The Grand Total table at the bottom of the Incentive Audit shows `Commission (Holdback)` but this only includes the collection holdback. The year-end holdback column (`totalCommissionYearEndHoldback`) is calculated but never displayed in the UI table, even though it's included in the CSV export.
+**Problem**: Tables across the application use two completely different header styles:
 
-**Fix**: Add a "Year-End Holdback" column to the Grand Total table, or combine it into a "Total Holdback" column.
+- **Dashboard/TeamView tables**: `bg-muted/50` with default text color (light gray background, dark text)
+- **Reports page tables**: `bg-[hsl(var(--azentio-navy))]` with `text-white` (dark navy background, white text)
 
-**File**: `src/pages/Reports.tsx`
+This creates a jarring visual contrast when users switch between Dashboard and Reports. The Reports page uses hardcoded brand colors (`azentio-navy`, `azentio-teal`) while the rest of the app uses semantic tokens (`bg-muted`, `text-foreground`).
 
----
+**Fix**: Standardize on one header style. Recommended: use the semantic `bg-muted/50` style for all data tables (consistent with the design system) and reserve the navy-branded style only for the Reports tab bar. Update Reports page tables to use `bg-muted/50` headers.
 
-### Issue 7: Compensation Snapshot Missing TVP Column (MINOR)
-
-**Problem**: The Compensation Snapshot table shows OTE, Target Bonus, and Pro-Ration but does not show TVP (Total Variable Pay) in either local currency or USD. The `user_targets` table has `target_bonus_usd` but TVP is on the employee record. The report derives `targetBonusLocal` with a formula `ote_local - tfp_local` which may not match the actual TVP field.
-
-**Fix**: Source TVP directly from the employee/target record rather than calculating it. Add TVP column to the table for completeness.
-
-**File**: `src/pages/Reports.tsx`
+**Files**: `src/pages/Reports.tsx` (all `bg-[hsl(var(--azentio-navy))]` table headers)
 
 ---
 
-### Summary of Changes
+### Issue 4: No Mobile Responsiveness for Sidebar Navigation (MAJOR)
 
-| # | Issue | Severity | Scope |
-|---|---|---|---|
-| 1 | Mgmt Summary ignores NRR/SPIFF/Releases | Critical | Hook + Component |
-| 2 | Currency Breakdown same classification bug | Major | Component |
-| 3 | Holdback Tracker same classification bug | Major | Hook |
-| 4 | Payout Statement miscategorizes non-VP/non-commission types | Major | Hook + Component |
-| 5 | Incentive Audit missing NRR/SPIFF, hardcoded split labels | Moderate | Hook + Page |
-| 6 | Incentive Audit Grand Total missing year-end holdback | Minor | Page |
-| 7 | Compensation Snapshot missing TVP, derived formula mismatch | Minor | Page |
+**Problem**: The `AppSidebar` renders a fixed `w-64` sidebar with no mobile breakpoint handling. On mobile screens:
+- The sidebar takes up the full width or overflows
+- There is no hamburger menu, drawer, or collapsible mechanism
+- The `AppLayout` uses `flex` with the sidebar always visible, so on small screens the main content gets squeezed
+- The Admin page has its own mobile-responsive nav (horizontal pills on mobile), but the main app layout does not
 
-### Implementation Approach
+**Fix**: Wrap the sidebar in a Sheet/Drawer component on mobile. Add a hamburger button to the header bar. Hide the sidebar on `< lg` breakpoints and show it in a slide-out drawer when toggled.
 
-Create a shared payout type classification utility (`src/lib/payoutTypes.ts`) to ensure consistent categorization across all reports:
+**Files**: `src/components/layout/AppLayout.tsx`, `src/components/layout/AppSidebar.tsx`
 
-```text
-VP_TYPES = ['Variable Pay']
-COMMISSION_TYPES = ['Managed Services', 'Implementation', 'CR/ER', 'Perpetual License']
-ADDITIONAL_PAY_TYPES = ['NRR Additional Pay', 'SPIFF', 'Deal Team SPIFF']
-RELEASE_TYPES = ['Collection Release', 'Year-End Release']
-DEDUCTION_TYPES = ['Clawback']
+---
+
+### Issue 5: Data Inputs Page Missing Access Control (MAJOR)
+
+**Problem**: Looking at `App.tsx`, the `/data-inputs` route has NO access control:
 ```
+<Route path="/data-inputs" element={<DataInputs />} />
+```
+Every other functional page is wrapped in `<ProtectedRoute>` with either `allowedRoles` or `permissionKey`, but Data Inputs is completely open. Any authenticated (or even unauthenticated) user can access deal-level financial data and modify records.
 
-All hooks and components will import from this shared module instead of using ad-hoc string matching. The Management Summary, Currency Breakdown, Holdback Tracker, and Payout Statement will be updated to properly handle all payout types with correct aggregation.
+The sidebar does check `page:data_inputs` permission before showing the nav link, but direct URL access bypasses this entirely.
+
+**Fix**: Wrap the Data Inputs route in a `ProtectedRoute` with `permissionKey="page:data_inputs"`.
+
+**File**: `src/App.tsx`
+
+---
+
+### Issue 6: Dashboard Page Missing Access Control (MODERATE)
+
+**Problem**: Similar to Issue 5, the `/dashboard` route has no `ProtectedRoute` wrapper:
+```
+<Route path="/dashboard" element={<Dashboard />} />
+```
+While the Dashboard gracefully handles missing compensation data by showing the StaffLandingPage, it still lacks authentication enforcement. An unauthenticated user could access `/dashboard` directly.
+
+**Fix**: Wrap in `<ProtectedRoute permissionKey="page:dashboard">`.
+
+**File**: `src/App.tsx`
+
+---
+
+### Issue 7: Reports Tab Bar Overflows on Smaller Screens (MODERATE)
+
+**Problem**: The Reports page has up to 10 tab triggers in a single `TabsList`. While the list has `flex-wrap h-auto gap-1`, on medium screens (tablet), the tabs wrap into 2-3 rows creating a tall, cluttered header. On narrower screens, the individual tab triggers with icons + text become cramped.
+
+Admin-only tabs (Mgmt Summary, Currency, Holdbacks, Audit Trail) conditionally render, so non-admin users see 6 tabs, but admin users see 10, which is excessive for a single horizontal bar.
+
+**Fix**: Group tabs into two tiers: "Personal Reports" (Employee Master, Compensation, Incentive Audit, My Deals, My Closing ARR, Payout Statement) and "Management Reports" (Mgmt Summary, Currency, Holdbacks, Audit Trail). Use a secondary TabsList or a Select dropdown for the management section.
+
+**File**: `src/pages/Reports.tsx`
+
+---
+
+### Issue 8: Empty State Patterns Are Inconsistent (MINOR)
+
+**Problem**: Empty states across the app use different visual treatments:
+- **DealsTable**: Icon + bold text + subtitle, centered
+- **ClosingARRTable**: Plain text paragraph, centered
+- **CommissionTable**: Renders a Card with only a header, no body
+- **MonthlyPerformanceTable**: TableRow with `colSpan` centered text
+- **TeamView**: Full-page centered with large icon, heading, and description
+
+There is no shared empty state component. Some empty states guide the user ("Add your first deal"), while others just say "No data found."
+
+**Fix**: Create a shared `EmptyState` component with standardized icon, heading, description, and optional action button. Apply across all tables and sections.
+
+**Files**: New `src/components/ui/empty-state.tsx`, then update ~8 components
+
+---
+
+### Summary
+
+| # | Issue | Severity | Category |
+|---|---|---|---|
+| 1 | Inconsistent currency formatting (4 patterns) | Major | Data Display |
+| 2 | Summary card layout differences across pages | Moderate | Visual Consistency |
+| 3 | Table header styling split (muted vs navy) | Moderate | Visual Consistency |
+| 4 | No mobile sidebar responsive behavior | Major | Responsiveness |
+| 5 | Data Inputs route missing ProtectedRoute | Major | Security/UX |
+| 6 | Dashboard route missing ProtectedRoute | Moderate | Security/UX |
+| 7 | Reports tab bar overflow on tablets | Moderate | Responsiveness |
+| 8 | Empty state patterns inconsistent | Minor | Visual Consistency |
+
+### Implementation Priority
+
+1. **Issues 5 and 6** (Access Control) -- quick wins, critical for security
+2. **Issue 4** (Mobile Sidebar) -- major UX gap
+3. **Issue 1** (Currency Formatting) -- affects data trust
+4. **Issues 2 and 3** (Card/Table Consistency) -- visual polish
+5. **Issue 7** (Reports Tabs) -- tablet UX
+6. **Issue 8** (Empty States) -- refinement
+
