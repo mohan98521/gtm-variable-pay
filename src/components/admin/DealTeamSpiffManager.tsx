@@ -1,5 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useProfiles } from "@/hooks/useProfiles";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useDealTeamSpiffConfig,
@@ -37,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Settings2, DollarSign, CheckCircle2, XCircle, Edit } from "lucide-react";
+import { Loader2, Settings2, DollarSign, CheckCircle2, XCircle, Edit, Trash2, Plus } from "lucide-react";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 
 // Participant role fields on the deals table (excluding sales_rep and sales_head)
@@ -380,42 +382,70 @@ function AllocationDialog({
   isSaving: boolean;
 }) {
   const isApproved = existingAllocations.some(a => a.status === "approved");
+  const { data: profiles } = useProfiles();
 
-  // Extract team members from the deal
-  const teamMembers: TeamMember[] = useMemo(() => {
-    const members: TeamMember[] = [];
-    for (const role of TEAM_PARTICIPANT_ROLES) {
-      const empId = deal[role.field];
-      const name = deal[role.nameField] || empId;
-      if (empId && !members.find(m => m.employee_id === empId)) {
-        members.push({ employee_id: empId, name, role: role.label });
-      }
-    }
-    return members;
-  }, [deal]);
+  // Manual team members list — initialized from existing allocations
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
+    return existingAllocations.map(a => {
+      const profile = profiles?.find(p => p.employee_id === a.employee_id);
+      return {
+        employee_id: a.employee_id,
+        name: profile?.full_name || a.employee_id,
+        role: "",
+      };
+    });
+  });
 
-  // Init amounts from existing allocations or zero
   const [amounts, setAmounts] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
-    teamMembers.forEach(m => {
-      const existing = existingAllocations.find(a => a.employee_id === m.employee_id);
-      init[m.employee_id] = existing?.allocated_amount_usd ?? 0;
+    existingAllocations.forEach(a => {
+      init[a.employee_id] = a.allocated_amount_usd;
     });
     return init;
   });
 
   const [notes, setNotes] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    teamMembers.forEach(m => {
-      const existing = existingAllocations.find(a => a.employee_id === m.employee_id);
-      init[m.employee_id] = existing?.notes ?? "";
+    existingAllocations.forEach(a => {
+      init[a.employee_id] = a.notes ?? "";
     });
     return init;
   });
 
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+
+  // Build dropdown options: all employees minus already-added ones
+  const employeeOptions = useMemo(() => {
+    if (!profiles) return [];
+    const addedIds = new Set(teamMembers.map(m => m.employee_id));
+    return profiles
+      .filter(p => p.employee_id && !addedIds.has(p.employee_id))
+      .map(p => ({ value: p.employee_id!, label: `${p.full_name} (${p.employee_id})` }));
+  }, [profiles, teamMembers]);
+
+  const handleAddMember = useCallback(() => {
+    if (!selectedEmployeeId || !profiles) return;
+    const profile = profiles.find(p => p.employee_id === selectedEmployeeId);
+    if (!profile) return;
+    setTeamMembers(prev => [...prev, {
+      employee_id: selectedEmployeeId,
+      name: profile.full_name,
+      role: profile.designation || "",
+    }]);
+    setAmounts(prev => ({ ...prev, [selectedEmployeeId]: 0 }));
+    setNotes(prev => ({ ...prev, [selectedEmployeeId]: "" }));
+    setSelectedEmployeeId("");
+  }, [selectedEmployeeId, profiles]);
+
+  const handleRemoveMember = useCallback((empId: string) => {
+    setTeamMembers(prev => prev.filter(m => m.employee_id !== empId));
+    setAmounts(prev => { const n = { ...prev }; delete n[empId]; return n; });
+    setNotes(prev => { const n = { ...prev }; delete n[empId]; return n; });
+  }, []);
+
   const totalAllocated = Object.values(amounts).reduce((s, v) => s + v, 0);
   const remaining = poolAmount - totalAllocated;
-  const isValid = Math.abs(remaining) < 0.01;
+  const isValid = Math.abs(remaining) < 0.01 && teamMembers.length > 0;
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
@@ -436,27 +466,49 @@ function AllocationDialog({
             </span>
           </div>
 
+          {/* Add employee row */}
+          {!isApproved && (
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="text-sm font-medium mb-1 block">Add Team Member</label>
+                <SearchableSelect
+                  value={selectedEmployeeId}
+                  onValueChange={setSelectedEmployeeId}
+                  options={employeeOptions}
+                  placeholder="Search employee..."
+                  searchPlaceholder="Type name or ID..."
+                  emptyMessage="No employees found."
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={handleAddMember}
+                disabled={!selectedEmployeeId}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+            </div>
+          )}
+
           {teamMembers.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
-              No eligible team members found on this deal (excluding Sales Rep & Sales Head).
+              No team members added yet. Use the search above to add employees.
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Team Member</TableHead>
-                  <TableHead>Role</TableHead>
                   <TableHead className="text-right w-[140px]">Amount (USD)</TableHead>
                   <TableHead className="w-[200px]">Notes</TableHead>
+                  {!isApproved && <TableHead className="w-[50px]" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {teamMembers.map(member => (
                   <TableRow key={member.employee_id}>
                     <TableCell className="font-medium">{member.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{member.role}</Badge>
-                    </TableCell>
                     <TableCell className="text-right">
                       {isApproved ? (
                         formatCurrency(amounts[member.employee_id] || 0)
@@ -490,13 +542,25 @@ function AllocationDialog({
                         />
                       )}
                     </TableCell>
+                    {!isApproved && (
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveMember(member.employee_id)}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           )}
 
-          {!isApproved && teamMembers.length > 0 && (
+          {!isApproved && (
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>Cancel</Button>
               <Button
