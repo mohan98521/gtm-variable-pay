@@ -107,6 +107,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
   const filteredTotals = filteredEmployees?.reduce((acc, emp) => ({
     variablePayUsd: acc.variablePayUsd + emp.variablePayUsd,
     commissionsUsd: acc.commissionsUsd + emp.commissionsUsd,
+    dealTeamSpiffUsd: acc.dealTeamSpiffUsd + emp.dealTeamSpiffUsd,
     totalEligibleUsd: acc.totalEligibleUsd + emp.totalEligibleUsd,
     totalBookingUsd: acc.totalBookingUsd + emp.totalBookingUsd,
     totalCollectionUsd: acc.totalCollectionUsd + emp.totalCollectionUsd,
@@ -114,7 +115,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
     collectionReleasesUsd: acc.collectionReleasesUsd + emp.collectionReleasesUsd,
     payableThisMonthUsd: acc.payableThisMonthUsd + emp.payableThisMonthUsd,
   }), { 
-    variablePayUsd: 0, commissionsUsd: 0, totalEligibleUsd: 0, 
+    variablePayUsd: 0, commissionsUsd: 0, dealTeamSpiffUsd: 0, totalEligibleUsd: 0, 
     totalBookingUsd: 0, totalCollectionUsd: 0, totalYearEndUsd: 0,
     collectionReleasesUsd: 0, payableThisMonthUsd: 0
   });
@@ -136,6 +137,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       'Currency',
       'VP (USD)',
       'Comm (USD)',
+      'DT SPIFF (USD)',
       'Total Eligible (USD)',
       'Upon Booking (USD)',
       'Upon Collection (USD)',
@@ -150,6 +152,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       emp.localCurrency,
       emp.variablePayUsd.toFixed(2),
       emp.commissionsUsd.toFixed(2),
+      emp.dealTeamSpiffUsd.toFixed(2),
       emp.totalEligibleUsd.toFixed(2),
       emp.totalBookingUsd.toFixed(2),
       emp.totalCollectionUsd.toFixed(2),
@@ -183,6 +186,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       { key: 'localCurrency', header: 'Currency' },
       { key: 'variablePayUsd', header: 'VP (USD)' },
       { key: 'commissionsUsd', header: 'Comm (USD)' },
+      { key: 'dealTeamSpiffUsd', header: 'DT SPIFF (USD)' },
       { key: 'totalEligibleUsd', header: 'Total Eligible (USD)' },
       { key: 'totalBookingUsd', header: 'Upon Booking (USD)' },
       { key: 'totalCollectionUsd', header: 'Upon Collection (USD)' },
@@ -441,6 +445,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                     <TableHead>Currency</TableHead>
                     <TableHead className="text-right">VP (USD)</TableHead>
                     <TableHead className="text-right">Comm (USD)</TableHead>
+                    <TableHead className="text-right">DT SPIFF</TableHead>
                     <TableHead className="text-right">Total Eligible</TableHead>
                     <TableHead className="text-right">Upon Booking</TableHead>
                     <TableHead className="text-right">Upon Collection</TableHead>
@@ -463,6 +468,9 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.variablePayUsd)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.commissionsUsd)}</TableCell>
+                      <TableCell className="text-right">
+                        {emp.dealTeamSpiffUsd > 0 ? formatCurrency(emp.dealTeamSpiffUsd) : '-'}
+                      </TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(emp.totalEligibleUsd)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.totalBookingUsd)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.totalCollectionUsd)}</TableCell>
@@ -488,6 +496,9 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(filteredTotals.commissionsUsd)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {filteredTotals.dealTeamSpiffUsd > 0 ? formatCurrency(filteredTotals.dealTeamSpiffUsd) : '-'}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(filteredTotals.totalEligibleUsd)}

@@ -227,6 +227,8 @@ export interface EmployeePayoutSummary {
   totalCollectionUsd: number;
   totalYearEndUsd: number;
   payableThisMonthUsd: number;
+  // Deal Team SPIFF
+  dealTeamSpiffUsd: number;
 }
 
 /**
@@ -308,6 +310,7 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
             totalCollectionUsd: 0,
             totalYearEndUsd: 0,
             payableThisMonthUsd: 0,
+            dealTeamSpiffUsd: 0,
           };
         }
         
@@ -326,6 +329,8 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
           summary.yearEndReleasesUsd += payout.calculated_amount_usd || 0;
         } else if (payout.payout_type === 'Clawback') {
           // Clawbacks are negative, tracked separately
+        } else if (payout.payout_type === 'Deal Team SPIFF') {
+          summary.dealTeamSpiffUsd += payout.calculated_amount_usd || 0;
         } else {
           // Commission types (Managed Services, Perpetual License, etc.)
           summary.commissionsUsd += payout.calculated_amount_usd || 0;
@@ -344,11 +349,11 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
       
       // Compute derived totals
       for (const summary of Object.values(byEmployee)) {
-        summary.totalEligibleUsd = summary.variablePayUsd + summary.commissionsUsd;
+        summary.totalEligibleUsd = summary.variablePayUsd + summary.commissionsUsd + summary.dealTeamSpiffUsd;
         summary.totalBookingUsd = summary.vpBookingUsd + summary.commBookingUsd;
         summary.totalCollectionUsd = summary.vpCollectionUsd + summary.commCollectionUsd;
         summary.totalYearEndUsd = summary.vpYearEndUsd + summary.commYearEndUsd;
-        summary.payableThisMonthUsd = summary.totalBookingUsd + summary.collectionReleasesUsd + summary.yearEndReleasesUsd;
+        summary.payableThisMonthUsd = summary.totalBookingUsd + summary.collectionReleasesUsd + summary.yearEndReleasesUsd + summary.dealTeamSpiffUsd;
       }
       
       return Object.values(byEmployee).sort((a, b) => 

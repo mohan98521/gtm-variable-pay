@@ -469,6 +469,99 @@ export type Database = {
           },
         ]
       }
+      deal_team_spiff_allocations: {
+        Row: {
+          allocated_amount_local: number
+          allocated_amount_usd: number
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          deal_id: string
+          employee_id: string
+          exchange_rate_used: number
+          id: string
+          local_currency: string
+          notes: string | null
+          payout_month: string
+          payout_run_id: string | null
+          status: string
+        }
+        Insert: {
+          allocated_amount_local?: number
+          allocated_amount_usd?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          deal_id: string
+          employee_id: string
+          exchange_rate_used?: number
+          id?: string
+          local_currency?: string
+          notes?: string | null
+          payout_month: string
+          payout_run_id?: string | null
+          status?: string
+        }
+        Update: {
+          allocated_amount_local?: number
+          allocated_amount_usd?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          deal_id?: string
+          employee_id?: string
+          exchange_rate_used?: number
+          id?: string
+          local_currency?: string
+          notes?: string | null
+          payout_month?: string
+          payout_run_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_team_spiff_allocations_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_team_spiff_allocations_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "payout_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_team_spiff_config: {
+        Row: {
+          created_at: string
+          exclude_roles: string[]
+          id: string
+          is_active: boolean
+          min_deal_arr_usd: number
+          spiff_pool_amount_usd: number
+        }
+        Insert: {
+          created_at?: string
+          exclude_roles?: string[]
+          id?: string
+          is_active?: boolean
+          min_deal_arr_usd?: number
+          spiff_pool_amount_usd?: number
+        }
+        Update: {
+          created_at?: string
+          exclude_roles?: string[]
+          id?: string
+          is_active?: boolean
+          min_deal_arr_usd?: number
+          spiff_pool_amount_usd?: number
+        }
+        Relationships: []
+      }
       deal_variable_pay_attribution: {
         Row: {
           achievement_pct: number
