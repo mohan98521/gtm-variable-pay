@@ -194,37 +194,46 @@ export type Database = {
       comp_plans: {
         Row: {
           clawback_period_days: number | null
+          cr_er_min_gp_margin_pct: number
           created_at: string
           description: string | null
           effective_year: number
           id: string
+          impl_min_gp_margin_pct: number
           is_active: boolean
           is_clawback_exempt: boolean
           name: string
+          nrr_ote_percent: number
           payout_frequency: string | null
           updated_at: string
         }
         Insert: {
           clawback_period_days?: number | null
+          cr_er_min_gp_margin_pct?: number
           created_at?: string
           description?: string | null
           effective_year?: number
           id?: string
+          impl_min_gp_margin_pct?: number
           is_active?: boolean
           is_clawback_exempt?: boolean
           name: string
+          nrr_ote_percent?: number
           payout_frequency?: string | null
           updated_at?: string
         }
         Update: {
           clawback_period_days?: number | null
+          cr_er_min_gp_margin_pct?: number
           created_at?: string
           description?: string | null
           effective_year?: number
           id?: string
+          impl_min_gp_margin_pct?: number
           is_active?: boolean
           is_clawback_exempt?: boolean
           name?: string
+          nrr_ote_percent?: number
           payout_frequency?: string | null
           updated_at?: string
         }
@@ -1448,6 +1457,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "plan_metrics_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "comp_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_spiffs: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          linked_metric_name: string
+          min_deal_value_usd: number | null
+          plan_id: string
+          spiff_name: string
+          spiff_rate_pct: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          linked_metric_name: string
+          min_deal_value_usd?: number | null
+          plan_id: string
+          spiff_name: string
+          spiff_rate_pct?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          linked_metric_name?: string
+          min_deal_value_usd?: number | null
+          plan_id?: string
+          spiff_name?: string
+          spiff_rate_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_spiffs_plan_id_fkey"
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "comp_plans"

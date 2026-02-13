@@ -50,6 +50,8 @@ import { PlanCommissionEditor } from "@/components/admin/PlanCommissionEditor";
 import { PayoutSettingsCard } from "@/components/admin/PayoutSettingsCard";
 import { usePlanCommissions } from "@/hooks/usePlanCommissions";
 import { AssignedEmployeesCard } from "@/components/admin/AssignedEmployeesCard";
+import { NrrSettingsCard } from "@/components/admin/NrrSettingsCard";
+import { SpiffEditor } from "@/components/admin/SpiffEditor";
 
 interface MultiplierGrid {
   id: string;
@@ -532,6 +534,20 @@ export default function PlanBuilder() {
 
         {/* Commission Structure Section */}
         <PlanCommissionEditor planId={planId!} />
+
+        {/* NRR Additional Pay Section */}
+        <NrrSettingsCard
+          planId={planId!}
+          nrrOtePercent={(plan as any).nrr_ote_percent ?? 0}
+          crErMinGpMarginPct={(plan as any).cr_er_min_gp_margin_pct ?? 0}
+          implMinGpMarginPct={(plan as any).impl_min_gp_margin_pct ?? 0}
+        />
+
+        {/* SPIFFs Section */}
+        <SpiffEditor
+          planId={planId!}
+          metricNames={metrics.map(m => m.metric_name)}
+        />
 
         {/* Assigned Employees Section */}
         <AssignedEmployeesCard planId={planId!} planName={plan.name} />
