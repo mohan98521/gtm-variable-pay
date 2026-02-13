@@ -41,6 +41,8 @@ import {
   type PayoutStatementData,
   type VariablePayItem,
   type CommissionItem,
+  type AdditionalPayItem,
+  type ReleaseItem,
   type ClawbackItem,
 } from "@/hooks/usePayoutStatement";
 
@@ -142,6 +144,18 @@ export function PayoutStatement({ employeeId }: PayoutStatementProps) {
         monthLabel={statement.monthLabel}
         expanded={commExpanded}
         onToggle={() => setCommExpanded(!commExpanded)}
+      />
+
+      {/* NRR / SPIFF Section */}
+      <AdditionalPaySection 
+        items={statement.additionalPayItems}
+        localCurrency={statement.localCurrency}
+      />
+
+      {/* Releases Section */}
+      <ReleasesSection 
+        items={statement.releaseItems}
+        localCurrency={statement.localCurrency}
       />
 
       {/* Clawbacks Section */}
@@ -504,7 +518,103 @@ function ClawbacksSection({
   );
 }
 
-function SummarySection({ 
+function AdditionalPaySection({ 
+  items, 
+  localCurrency 
+}: { 
+  items: AdditionalPayItem[];
+  localCurrency: string;
+}) {
+  if (items.length === 0) return null;
+
+  const totalGrossUsd = items.reduce((sum, a) => sum + a.grossUsd, 0);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">NRR / SPIFF</CardTitle>
+            <Badge variant="secondary">${totalGrossUsd.toLocaleString()}</Badge>
+          </div>
+        </div>
+        <CardDescription>Additional performance-based pay</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {items.map((item, index) => (
+          <div key={index} className="rounded-lg border bg-muted/30 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">{item.payoutType}</span>
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Gross Amount:</span>
+                <span className="font-semibold">
+                  {formatDualCurrency(item.grossUsd, item.grossLocal, localCurrency)}
+                </span>
+              </div>
+              <div className="ml-4 space-y-1 text-sm">
+                <div className="flex justify-between text-success">
+                  <span>├── Paid on Booking:</span>
+                  <span>{formatDualCurrency(item.paidOnBookingUsd, item.paidOnBookingLocal, localCurrency)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>├── Held for Collection:</span>
+                  <span>{formatDualCurrency(item.heldForCollectionUsd, item.heldForCollectionLocal, localCurrency)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>└── Held for Year-End:</span>
+                  <span>{formatDualCurrency(item.heldForYearEndUsd, item.heldForYearEndLocal, localCurrency)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReleasesSection({ 
+  items, 
+  localCurrency 
+}: { 
+  items: ReleaseItem[];
+  localCurrency: string;
+}) {
+  if (items.length === 0) return null;
+
+  const totalUsd = items.reduce((sum, r) => sum + r.grossUsd, 0);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-5 w-5 text-success" />
+          <CardTitle className="text-lg">Releases</CardTitle>
+          <Badge variant="secondary">${totalUsd.toLocaleString()}</Badge>
+        </div>
+        <CardDescription>Collection and year-end holdback releases</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {items.map((item, index) => (
+            <div key={index} className="flex justify-between items-center p-3 rounded-lg bg-success/10 border border-success/20">
+              <span className="text-sm font-medium">{item.releaseType}</span>
+              <span className="font-medium text-success">
+                +{formatDualCurrency(item.grossUsd, item.grossLocal, localCurrency)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SummarySection({
   summary, 
   compensationRate, 
   marketRate,
@@ -540,6 +650,22 @@ function SummarySection({
                 {formatDualCurrency(summary.commPaidUsd, summary.commPaidLocal, localCurrency)}
               </span>
             </div>
+            {(summary.additionalPayPaidUsd > 0 || summary.additionalPayPaidLocal > 0) && (
+              <div className="flex justify-between">
+                <span>NRR / SPIFF:</span>
+                <span className="font-medium">
+                  {formatDualCurrency(summary.additionalPayPaidUsd, summary.additionalPayPaidLocal, localCurrency)}
+                </span>
+              </div>
+            )}
+            {(summary.releaseUsd > 0 || summary.releaseLocal > 0) && (
+              <div className="flex justify-between">
+                <span>Releases:</span>
+                <span className="font-medium">
+                  {formatDualCurrency(summary.releaseUsd, summary.releaseLocal, localCurrency)}
+                </span>
+              </div>
+            )}
             <Separator />
             <div className="flex justify-between text-base font-semibold">
               <span>Total Paid:</span>

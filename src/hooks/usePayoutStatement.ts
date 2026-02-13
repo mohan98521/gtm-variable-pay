@@ -8,6 +8,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parse } from "date-fns";
+import { classifyPayoutType } from "@/lib/payoutTypes";
 
 // Currency symbols are now fetched dynamically.
 // This map is kept as a static fallback for server-side/non-React contexts.
@@ -45,6 +46,25 @@ export interface CommissionItem {
   heldForYearEndLocal: number;
 }
 
+export interface AdditionalPayItem {
+  payoutType: string;
+  grossUsd: number;
+  grossLocal: number;
+  paidOnBookingUsd: number;
+  paidOnBookingLocal: number;
+  heldForCollectionUsd: number;
+  heldForCollectionLocal: number;
+  heldForYearEndUsd: number;
+  heldForYearEndLocal: number;
+}
+
+export interface ReleaseItem {
+  releaseType: string;
+  grossUsd: number;
+  grossLocal: number;
+  description: string;
+}
+
 export interface ClawbackItem {
   dealId: string | null;
   description: string;
@@ -59,6 +79,10 @@ export interface PayoutSummary {
   vpPaidLocal: number;
   commPaidUsd: number;
   commPaidLocal: number;
+  additionalPayPaidUsd: number;
+  additionalPayPaidLocal: number;
+  releaseUsd: number;
+  releaseLocal: number;
   heldCollectionUsd: number;
   heldCollectionLocal: number;
   heldYearEndUsd: number;
@@ -76,6 +100,8 @@ export interface PayoutStatementData {
   marketRate: number;
   variablePayItems: VariablePayItem[];
   commissionItems: CommissionItem[];
+  additionalPayItems: AdditionalPayItem[];
+  releaseItems: ReleaseItem[];
   clawbackItems: ClawbackItem[];
   summary: PayoutSummary;
   runStatus: string | null;
@@ -245,6 +271,8 @@ async function fetchPayoutStatementData(
   // Initialize data
   let variablePayItems: VariablePayItem[] = [];
   let commissionItems: CommissionItem[] = [];
+  let additionalPayItems: AdditionalPayItem[] = [];
+  let releaseItems: ReleaseItem[] = [];
   let clawbackItems: ClawbackItem[] = [];
 
   if (payoutRun) {
@@ -256,52 +284,75 @@ async function fetchPayoutStatementData(
       .eq("employee_id", employeeUuid);
 
     (payouts || []).forEach(payout => {
-      if (payout.payout_type === 'Variable Pay') {
-        // This is aggregated VP - in real implementation, would need to get metric-level breakdown
-        variablePayItems.push({
-          metricName: 'Variable Pay',
-          target: 0,
-          actual: 0,
-          achievementPct: 0,
-          multiplier: 1,
-          grossUsd: payout.calculated_amount_usd || 0,
-          grossLocal: payout.calculated_amount_local || 0,
-          paidOnBookingUsd: payout.booking_amount_usd || 0,
-          paidOnBookingLocal: payout.booking_amount_local || 0,
-          heldForCollectionUsd: payout.collection_amount_usd || 0,
-          heldForCollectionLocal: payout.collection_amount_local || 0,
-          heldForYearEndUsd: payout.year_end_amount_usd || 0,
-          heldForYearEndLocal: payout.year_end_amount_local || 0,
-        });
-      } else if (payout.payout_type === 'Clawback') {
-        clawbackItems.push({
-          dealId: payout.deal_id,
-          description: payout.notes || 'Clawback - Collection not received within 180 days',
-          amountUsd: Math.abs(payout.calculated_amount_usd || 0),
-          amountLocal: Math.abs(payout.calculated_amount_local || 0),
-        });
-      } else {
-        // Commission types
-        commissionItems.push({
-          commissionType: payout.payout_type,
-          dealValue: 0, // Would need deal data
-          rate: 0,
-          grossUsd: payout.calculated_amount_usd || 0,
-          grossLocal: payout.calculated_amount_local || 0,
-          isLinkedToImpl: (payout.booking_amount_usd || 0) === 0 && (payout.collection_amount_usd || 0) > 0,
-          paidOnBookingUsd: payout.booking_amount_usd || 0,
-          paidOnBookingLocal: payout.booking_amount_local || 0,
-          heldForCollectionUsd: payout.collection_amount_usd || 0,
-          heldForCollectionLocal: payout.collection_amount_local || 0,
-          heldForYearEndUsd: payout.year_end_amount_usd || 0,
-          heldForYearEndLocal: payout.year_end_amount_local || 0,
-        });
+      const category = classifyPayoutType(payout.payout_type);
+      
+      switch (category) {
+        case 'vp':
+          variablePayItems.push({
+            metricName: 'Variable Pay',
+            target: 0,
+            actual: 0,
+            achievementPct: 0,
+            multiplier: 1,
+            grossUsd: payout.calculated_amount_usd || 0,
+            grossLocal: payout.calculated_amount_local || 0,
+            paidOnBookingUsd: payout.booking_amount_usd || 0,
+            paidOnBookingLocal: payout.booking_amount_local || 0,
+            heldForCollectionUsd: payout.collection_amount_usd || 0,
+            heldForCollectionLocal: payout.collection_amount_local || 0,
+            heldForYearEndUsd: payout.year_end_amount_usd || 0,
+            heldForYearEndLocal: payout.year_end_amount_local || 0,
+          });
+          break;
+        case 'deduction':
+          clawbackItems.push({
+            dealId: payout.deal_id,
+            description: payout.notes || 'Clawback - Collection not received within 180 days',
+            amountUsd: Math.abs(payout.calculated_amount_usd || 0),
+            amountLocal: Math.abs(payout.calculated_amount_local || 0),
+          });
+          break;
+        case 'commission':
+          commissionItems.push({
+            commissionType: payout.payout_type,
+            dealValue: 0,
+            rate: 0,
+            grossUsd: payout.calculated_amount_usd || 0,
+            grossLocal: payout.calculated_amount_local || 0,
+            isLinkedToImpl: (payout.booking_amount_usd || 0) === 0 && (payout.collection_amount_usd || 0) > 0,
+            paidOnBookingUsd: payout.booking_amount_usd || 0,
+            paidOnBookingLocal: payout.booking_amount_local || 0,
+            heldForCollectionUsd: payout.collection_amount_usd || 0,
+            heldForCollectionLocal: payout.collection_amount_local || 0,
+            heldForYearEndUsd: payout.year_end_amount_usd || 0,
+            heldForYearEndLocal: payout.year_end_amount_local || 0,
+          });
+          break;
+        case 'additional_pay':
+          additionalPayItems.push({
+            payoutType: payout.payout_type,
+            grossUsd: payout.calculated_amount_usd || 0,
+            grossLocal: payout.calculated_amount_local || 0,
+            paidOnBookingUsd: payout.booking_amount_usd || 0,
+            paidOnBookingLocal: payout.booking_amount_local || 0,
+            heldForCollectionUsd: payout.collection_amount_usd || 0,
+            heldForCollectionLocal: payout.collection_amount_local || 0,
+            heldForYearEndUsd: payout.year_end_amount_usd || 0,
+            heldForYearEndLocal: payout.year_end_amount_local || 0,
+          });
+          break;
+        case 'release':
+          releaseItems.push({
+            releaseType: payout.payout_type,
+            grossUsd: payout.calculated_amount_usd || 0,
+            grossLocal: payout.calculated_amount_local || 0,
+            description: payout.notes || payout.payout_type,
+          });
+          break;
       }
     });
   } else {
     // No payout run - show estimated based on current data
-    // This would use useCurrentUserCompensation logic
-    // For now, return empty with estimated flag
   }
 
   // Calculate summary
@@ -309,31 +360,43 @@ async function fetchPayoutStatementData(
   const vpPaidLocal = variablePayItems.reduce((sum, v) => sum + v.paidOnBookingLocal, 0);
   const commPaidUsd = commissionItems.reduce((sum, c) => sum + c.paidOnBookingUsd, 0);
   const commPaidLocal = commissionItems.reduce((sum, c) => sum + c.paidOnBookingLocal, 0);
+  const additionalPayPaidUsd = additionalPayItems.reduce((sum, a) => sum + a.paidOnBookingUsd, 0);
+  const additionalPayPaidLocal = additionalPayItems.reduce((sum, a) => sum + a.paidOnBookingLocal, 0);
+  const releaseUsd = releaseItems.reduce((sum, r) => sum + r.grossUsd, 0);
+  const releaseLocal = releaseItems.reduce((sum, r) => sum + r.grossLocal, 0);
   
   const heldCollectionUsd = 
     variablePayItems.reduce((sum, v) => sum + v.heldForCollectionUsd, 0) +
-    commissionItems.reduce((sum, c) => sum + c.heldForCollectionUsd, 0);
+    commissionItems.reduce((sum, c) => sum + c.heldForCollectionUsd, 0) +
+    additionalPayItems.reduce((sum, a) => sum + a.heldForCollectionUsd, 0);
   const heldCollectionLocal = 
     variablePayItems.reduce((sum, v) => sum + v.heldForCollectionLocal, 0) +
-    commissionItems.reduce((sum, c) => sum + c.heldForCollectionLocal, 0);
+    commissionItems.reduce((sum, c) => sum + c.heldForCollectionLocal, 0) +
+    additionalPayItems.reduce((sum, a) => sum + a.heldForCollectionLocal, 0);
   
   const heldYearEndUsd = 
     variablePayItems.reduce((sum, v) => sum + v.heldForYearEndUsd, 0) +
-    commissionItems.reduce((sum, c) => sum + c.heldForYearEndUsd, 0);
+    commissionItems.reduce((sum, c) => sum + c.heldForYearEndUsd, 0) +
+    additionalPayItems.reduce((sum, a) => sum + a.heldForYearEndUsd, 0);
   const heldYearEndLocal = 
     variablePayItems.reduce((sum, v) => sum + v.heldForYearEndLocal, 0) +
-    commissionItems.reduce((sum, c) => sum + c.heldForYearEndLocal, 0);
+    commissionItems.reduce((sum, c) => sum + c.heldForYearEndLocal, 0) +
+    additionalPayItems.reduce((sum, a) => sum + a.heldForYearEndLocal, 0);
 
   const clawbackTotalUsd = clawbackItems.reduce((sum, c) => sum + c.amountUsd, 0);
   const clawbackTotalLocal = clawbackItems.reduce((sum, c) => sum + c.amountLocal, 0);
 
   const summary: PayoutSummary = {
-    totalPaidUsd: vpPaidUsd + commPaidUsd - clawbackTotalUsd,
-    totalPaidLocal: vpPaidLocal + commPaidLocal - clawbackTotalLocal,
+    totalPaidUsd: vpPaidUsd + commPaidUsd + additionalPayPaidUsd + releaseUsd - clawbackTotalUsd,
+    totalPaidLocal: vpPaidLocal + commPaidLocal + additionalPayPaidLocal + releaseLocal - clawbackTotalLocal,
     vpPaidUsd,
     vpPaidLocal,
     commPaidUsd,
     commPaidLocal,
+    additionalPayPaidUsd,
+    additionalPayPaidLocal,
+    releaseUsd,
+    releaseLocal,
     heldCollectionUsd,
     heldCollectionLocal,
     heldYearEndUsd,
@@ -351,6 +414,8 @@ async function fetchPayoutStatementData(
     marketRate,
     variablePayItems,
     commissionItems,
+    additionalPayItems,
+    releaseItems,
     clawbackItems,
     summary,
     runStatus,
