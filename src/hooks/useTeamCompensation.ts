@@ -22,6 +22,8 @@ const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
   "Team Lead": "Team Lead",
   "Team Lead - Farmer": "Team Lead",
   "Team Lead - Hunter": "Team Lead",
+  "Overlay": "Overlay",
+  "Executive": "Executive",
 };
 
 const PARTICIPANT_ROLES = [
@@ -251,8 +253,9 @@ export function useTeamCompensation() {
           ? allPlanCommissions.filter(c => c.plan_id === planId)
           : [];
 
-        // Check for team metrics
+        // Check for team and org metrics
         const hasTeamMetrics = planMetrics.some(pm => pm.metric_name.startsWith("Team "));
+        const hasOrgMetrics = planMetrics.some(pm => pm.metric_name.startsWith("Org "));
         const isTeamLead = salesFunction.startsWith("Team Lead");
 
         // Fetch sub-reports if this employee is a Team Lead with team metrics
@@ -273,6 +276,7 @@ export function useTeamCompensation() {
         let crErYtd = 0;
         let implementationYtd = 0;
         let teamNewBookingYtd = 0;
+        let orgNewBookingYtd = 0;
 
         (deals || []).forEach((deal: any) => {
           const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
@@ -291,6 +295,10 @@ export function useTeamCompensation() {
             if (isSubordinateDeal) {
               teamNewBookingYtd += deal.new_software_booking_arr_usd || 0;
             }
+          }
+          // Org metrics: sum ALL deals without any filter
+          if (hasOrgMetrics) {
+            orgNewBookingYtd += deal.new_software_booking_arr_usd || 0;
           }
         });
 
@@ -313,11 +321,12 @@ export function useTeamCompensation() {
         const latestClosingMonth = sortedClosingMonths[sortedClosingMonths.length - 1];
         const closingYtd = latestClosingMonth ? closingByMonth.get(latestClosingMonth) || 0 : 0;
 
-        // Actuals map (includes team metrics)
+        // Actuals map (includes team and org metrics)
         const actualsMap = new Map<string, number>([
           ["New Software Booking ARR", newBookingYtd],
           ["Closing ARR", closingYtd],
           ["Team New Software Booking ARR", teamNewBookingYtd],
+          ["Org New Software Booking ARR", orgNewBookingYtd],
         ]);
 
         const targetBonusUsd = emp.tvp_usd || 0;

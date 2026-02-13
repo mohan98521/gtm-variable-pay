@@ -21,6 +21,8 @@ const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
   "Team Lead": "Team Lead",
   "Team Lead - Farmer": "Team Lead",
   "Team Lead - Hunter": "Team Lead",
+  "Overlay": "Overlay",
+  "Executive": "Executive",
 };
 
 // Participant roles for deal attribution
@@ -285,6 +287,16 @@ export function useCurrentUserCompensation() {
         }
       }
 
+      // 8c. Org actuals aggregation for "Org " prefix metrics
+      const hasOrgMetrics = planMetrics.some(pm => pm.metric_name.startsWith("Org "));
+      let orgNewBookingYtd = 0;
+
+      if (hasOrgMetrics) {
+        (deals || []).forEach((deal: any) => {
+          orgNewBookingYtd += deal.new_software_booking_arr_usd || 0;
+        });
+      }
+
       // 9. Get ELIGIBLE closing ARR actuals (only records with end_date > fiscal year end)
       // Attribution: Both sales_rep and sales_head receive credit
       // Logic: Use LATEST month's value (not cumulative) since uploads are portfolio snapshots
@@ -334,6 +346,7 @@ export function useCurrentUserCompensation() {
         ["New Software Booking ARR", newBookingYtd],
         ["Closing ARR", closingYtd],
         ["Team New Software Booking ARR", teamNewBookingYtd],
+        ["Org New Software Booking ARR", orgNewBookingYtd],
       ]);
 
       // Calculate metrics

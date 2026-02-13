@@ -193,12 +193,27 @@ export function useEmployeeActuals(employeeId: string | undefined, fiscalYear: n
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
 
-      // Filter and aggregate deals where employee is ANY participant
+      // Check if employee has "Org " prefix metrics
+      const { data: empData } = await supabase
+        .from("employees")
+        .select("sales_function")
+        .eq("employee_id", employeeId)
+        .maybeSingle();
+
+      const salesFunction = empData?.sales_function || "";
+      const isOrgRole = salesFunction === "Overlay" || salesFunction === "Executive";
+
+      // Filter and aggregate deals
       let newBookingYtd = 0;
+      let orgNewBookingYtd = 0;
       (deals || []).forEach((deal: any) => {
         const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
         if (isParticipant) {
           newBookingYtd += deal.new_software_booking_arr_usd || 0;
+        }
+        // Org-level: sum ALL deals without participant filter
+        if (isOrgRole) {
+          orgNewBookingYtd += deal.new_software_booking_arr_usd || 0;
         }
       });
 
@@ -223,7 +238,7 @@ export function useEmployeeActuals(employeeId: string | undefined, fiscalYear: n
       const closingYtd = latestClosingMonth ? closingByMonth.get(latestClosingMonth) || 0 : 0;
 
       return {
-        newSoftwareBookingArr: newBookingYtd,
+        newSoftwareBookingArr: isOrgRole ? orgNewBookingYtd : newBookingYtd,
         closingArr: closingYtd,
       };
     },
