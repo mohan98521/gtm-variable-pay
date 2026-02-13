@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { formatCurrencyValue } from "@/lib/utils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -106,14 +107,7 @@ export default function DataInputs() {
     {} as Record<string, number>
   );
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
+  const formatCurrency = (value: number) => formatCurrencyValue(value, { mode: "full" });
 
   // Filter deals by proposal type for tabs
   const getDealsForType = (proposalType: string) => {

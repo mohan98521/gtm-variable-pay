@@ -1,20 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { MonthlyMetricBreakdown } from "@/hooks/useCurrentUserCompensation";
-
+import { formatCurrencyValue } from "@/lib/utils";
 interface MonthlyPerformanceTableProps {
   monthlyBreakdown: MonthlyMetricBreakdown[];
 }
 
-const formatCurrency = (value: number) => {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}K`;
-  }
-  return `$${Math.round(value).toLocaleString()}`;
-};
+const formatCurrency = (value: number) => formatCurrencyValue(value);
 
 export function MonthlyPerformanceTable({ monthlyBreakdown }: MonthlyPerformanceTableProps) {
   // Calculate totals

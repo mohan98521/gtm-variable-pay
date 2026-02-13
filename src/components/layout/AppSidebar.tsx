@@ -47,7 +47,11 @@ const navigation: NavItem[] = [
   },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onNavigate?: () => void;
+}
+
+export function AppSidebar({ onNavigate }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { canAccessPage, isLoading } = usePermissions();
@@ -59,6 +63,10 @@ export function AppSidebar() {
     } else {
       navigate("/auth");
     }
+  };
+
+  const handleNavClick = () => {
+    onNavigate?.();
   };
 
   // Filter navigation items based on dynamic permissions from database
@@ -81,6 +89,7 @@ export function AppSidebar() {
             <NavLink
               key={item.name}
               to={item.href}
+              onClick={handleNavClick}
               className={`nav-item ${isActive ? "active bg-sidebar-accent" : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
             >
               <item.icon className={`h-5 w-5 ${isActive ? "text-sidebar-primary" : ""}`} />

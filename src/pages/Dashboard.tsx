@@ -4,12 +4,13 @@ import { MonthlyPerformanceTable } from "@/components/dashboard/MonthlyPerforman
 import { CommissionTable } from "@/components/dashboard/CommissionTable";
 import { PayoutSimulator } from "@/components/dashboard/PayoutSimulator";
 import { StaffLandingPage } from "@/components/dashboard/StaffLandingPage";
-import { Calendar, Loader2, UserCircle, Target, DollarSign, Briefcase, Info } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { MetricCard } from "@/components/dashboard/MetricCard";
+import { Calendar, Loader2, Target, DollarSign, Briefcase, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCurrentUserCompensation } from "@/hooks/useCurrentUserCompensation";
 import { useDashboardPayoutSummary } from "@/hooks/useDashboardPayoutSummary";
+import { formatCurrencyValue } from "@/lib/utils";
 
 export default function Dashboard() {
   const { data: compensation, isLoading, error } = useCurrentUserCompensation();
@@ -46,15 +47,7 @@ export default function Dashboard() {
     );
   }
 
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(2)}M`;
-    }
-    if (value >= 1000) {
-      return `$${(value / 1000).toFixed(1)}K`;
-    }
-    return `$${Math.round(value).toLocaleString()}`;
-  };
+  const formatCurrency = (value: number) => formatCurrencyValue(value);
 
   // Use payout run data when available, otherwise fall back to calculated values
   const usePayoutData = payoutSummary?.isFromPayoutRun === true;
@@ -122,85 +115,33 @@ export default function Dashboard() {
 
         {/* Summary Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Card className="border-border/50 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Target className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Target Bonus</p>
-                  <p className="text-xl font-semibold text-foreground">
-                    {formatCurrency(compensation.targetBonusUsd)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-success/10">
-                  <DollarSign className="h-5 w-5 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Eligible</p>
-                  <p className="text-xl font-semibold text-success">
-                    {formatCurrency(grandTotalEligible)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-accent/10">
-                  <DollarSign className="h-5 w-5 text-accent" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Amount Paid</p>
-                  <p className="text-xl font-semibold text-foreground">
-                    {formatCurrency(grandTotalPaid)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-muted">
-                  <DollarSign className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Holding</p>
-                  <p className="text-xl font-semibold text-muted-foreground">
-                    {formatCurrency(grandTotalHoldback)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-secondary">
-                  <Briefcase className="h-5 w-5 text-secondary-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Commission</p>
-                  <p className="text-xl font-semibold text-foreground">
-                    {formatCurrency(commissionTotal)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <MetricCard
+            title="Target Bonus"
+            value={formatCurrency(compensation.targetBonusUsd)}
+            icon={<Target className="h-5 w-5" />}
+          />
+          <MetricCard
+            title="Total Eligible"
+            value={formatCurrency(grandTotalEligible)}
+            icon={<DollarSign className="h-5 w-5" />}
+            variant="success"
+          />
+          <MetricCard
+            title="Amount Paid"
+            value={formatCurrency(grandTotalPaid)}
+            icon={<DollarSign className="h-5 w-5" />}
+            variant="accent"
+          />
+          <MetricCard
+            title="Holding"
+            value={formatCurrency(grandTotalHoldback)}
+            icon={<DollarSign className="h-5 w-5" />}
+          />
+          <MetricCard
+            title="Commission"
+            value={formatCurrency(commissionTotal)}
+            icon={<Briefcase className="h-5 w-5" />}
+          />
         </div>
 
         {/* Table 1: Variable Pay Metrics Summary */}
