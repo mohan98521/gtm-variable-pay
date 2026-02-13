@@ -23,6 +23,8 @@ import {
   AggregateVariablePayContext 
 } from "./dealVariablePayAttribution";
 import { calculateDealCommission, calculateTotalCommission, CommissionCalculation } from "./commissions";
+import { calculateNRRPayout, NRRDeal, NRRCalculationResult } from "./nrrCalculation";
+import { calculateAllSpiffs, SpiffConfig, SpiffDeal, SpiffMetric, SpiffDealBreakdown } from "./spiffCalculation";
 
 // ============= HELPERS =============
 
@@ -97,6 +99,16 @@ export interface EmployeePayoutResult {
   // Year-End Releases (December only)
   yearEndReleasesUsd: number;
   yearEndReleasesLocal: number;
+
+  // NRR Additional Pay
+  nrrPayoutUsd: number;
+  nrrPayoutLocal: number;
+  nrrResult: NRRCalculationResult | null;
+  
+  // SPIFFs
+  spiffPayoutUsd: number;
+  spiffPayoutLocal: number;
+  spiffBreakdowns: SpiffDealBreakdown[];
   
   // Totals
   totalPayoutUsd: number;
@@ -716,7 +728,7 @@ export async function calculateMonthlyPayout(
     .select(`
       plan_id,
       target_bonus_usd,
-      comp_plans (id, name, is_clawback_exempt)
+      comp_plans (id, name, is_clawback_exempt, nrr_ote_percent, cr_er_min_gp_margin_pct, impl_min_gp_margin_pct)
     `)
     .eq('user_id', employee.id)
     .lte('effective_start_date', ensureFullDate(monthYear))
@@ -782,6 +794,105 @@ export async function calculateMonthlyPayout(
   if (isDecember) {
     yearEndReleasesUsd = await calculateYearEndReleases(employee.id, fiscalYear);
   }
+
+  // === NRR Additional Pay ===
+  let nrrPayoutUsd = 0;
+  let nrrResult: NRRCalculationResult | null = null;
+  const nrrOtePct = (planData as any)?.nrr_ote_percent ?? 0;
+  const crErMinGp = (planData as any)?.cr_er_min_gp_margin_pct ?? 0;
+  const implMinGp = (planData as any)?.impl_min_gp_margin_pct ?? 0;
+  
+  if (nrrOtePct > 0) {
+    const empId = employee.employee_id;
+    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`;
+    
+    const { data: nrrDeals } = await supabase
+      .from('deals')
+      .select('id, cr_usd, er_usd, implementation_usd, gp_margin_percent')
+      .or(participantOrFilter)
+      .gte('month_year', `${fiscalYear}-01-01`)
+      .lte('month_year', monthYear);
+    
+    // Get CR/ER and Implementation targets
+    const { data: crErTarget } = await supabase
+      .from('performance_targets')
+      .select('target_value_usd')
+      .eq('employee_id', empId)
+      .eq('effective_year', fiscalYear)
+      .eq('metric_type', 'CR/ER')
+      .maybeSingle();
+    
+    const { data: implTarget } = await supabase
+      .from('performance_targets')
+      .select('target_value_usd')
+      .eq('employee_id', empId)
+      .eq('effective_year', fiscalYear)
+      .eq('metric_type', 'Implementation')
+      .maybeSingle();
+    
+    nrrResult = calculateNRRPayout(
+      (nrrDeals || []) as NRRDeal[],
+      crErTarget?.target_value_usd ?? 0,
+      implTarget?.target_value_usd ?? 0,
+      nrrOtePct,
+      targetBonusUsd,
+      crErMinGp,
+      implMinGp
+    );
+    nrrPayoutUsd = nrrResult.payoutUsd;
+  }
+
+  // === SPIFF Calculations ===
+  let spiffPayoutUsd = 0;
+  let spiffBreakdowns: SpiffDealBreakdown[] = [];
+  
+  const { data: planSpiffs } = await supabase
+    .from('plan_spiffs')
+    .select('*')
+    .eq('plan_id', planId)
+    .eq('is_active', true);
+  
+  if (planSpiffs && planSpiffs.length > 0) {
+    const empId = employee.employee_id;
+    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`;
+    
+    const { data: spiffDeals } = await supabase
+      .from('deals')
+      .select('id, new_software_booking_arr_usd, project_id, customer_name')
+      .or(participantOrFilter)
+      .gte('month_year', `${fiscalYear}-01-01`)
+      .lte('month_year', monthYear);
+    
+    // Build targets by metric
+    const spiffMetrics: SpiffMetric[] = ((metrics || []) as any[]).map(m => ({
+      metric_name: m.metric_name,
+      weightage_percent: m.weightage_percent,
+    }));
+    
+    const targetsByMetric: Record<string, number> = {};
+    for (const spiff of planSpiffs) {
+      if (!targetsByMetric[spiff.linked_metric_name]) {
+        const { data: perfTarget } = await supabase
+          .from('performance_targets')
+          .select('target_value_usd')
+          .eq('employee_id', employee.employee_id)
+          .eq('effective_year', fiscalYear)
+          .eq('metric_type', spiff.linked_metric_name)
+          .maybeSingle();
+        targetsByMetric[spiff.linked_metric_name] = perfTarget?.target_value_usd ?? 0;
+      }
+    }
+    
+    const spiffResult = calculateAllSpiffs(
+      planSpiffs as SpiffConfig[],
+      (spiffDeals || []) as SpiffDeal[],
+      spiffMetrics,
+      targetBonusUsd,
+      targetsByMetric
+    );
+    spiffPayoutUsd = spiffResult.totalSpiffUsd;
+    spiffBreakdowns = spiffResult.breakdowns;
+  }
   
   // Convert to local currency
   const vpLocal = convertVPToLocal(vpResult.totalVpUsd, compensationRate);
@@ -797,9 +908,12 @@ export async function calculateMonthlyPayout(
   const collectionReleasesLocal = convertVPToLocal(collectionReleasesUsd, compensationRate);
   const yearEndReleasesLocal = convertVPToLocal(yearEndReleasesUsd, compensationRate);
   
-  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases (Dec)
-  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd;
-  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal;
+  const nrrPayoutLocal = convertVPToLocal(nrrPayoutUsd, compensationRate);
+  const spiffPayoutLocal = convertVPToLocal(spiffPayoutUsd, compensationRate);
+  
+  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases + NRR + SPIFFs
+  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrPayoutUsd + spiffPayoutUsd;
+  const payableThisMonthLocal = vpBookingLocal + commBookingLocal + collectionReleasesLocal + yearEndReleasesLocal + nrrPayoutLocal + spiffPayoutLocal;
   
   return {
     employeeId: employee.id,
@@ -832,8 +946,15 @@ export async function calculateMonthlyPayout(
     yearEndReleasesUsd,
     yearEndReleasesLocal,
     
-    totalPayoutUsd: vpResult.totalVpUsd + commResult.totalCommUsd,
-    totalPayoutLocal: vpLocal + commLocal,
+    nrrPayoutUsd,
+    nrrPayoutLocal,
+    nrrResult,
+    spiffPayoutUsd,
+    spiffPayoutLocal,
+    spiffBreakdowns,
+    
+    totalPayoutUsd: vpResult.totalVpUsd + commResult.totalCommUsd + nrrPayoutUsd + spiffPayoutUsd,
+    totalPayoutLocal: vpLocal + commLocal + nrrPayoutLocal + spiffPayoutLocal,
     totalBookingUsd: vpResult.bookingUsd + commResult.bookingUsd,
     totalBookingLocal: vpBookingLocal + commBookingLocal,
     payableThisMonthUsd,
@@ -1187,6 +1308,48 @@ async function persistPayoutResults(
         booking_amount_local: emp.yearEndReleasesLocal,
         status: 'calculated',
         notes: 'Year-end release of accumulated reserves',
+      });
+    }
+
+    // NRR Additional Pay record
+    if (emp.nrrPayoutUsd > 0) {
+      records.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        month_year: monthYear,
+        payout_type: 'NRR Additional Pay',
+        plan_id: emp.planId,
+        calculated_amount_usd: emp.nrrPayoutUsd,
+        calculated_amount_local: emp.nrrPayoutLocal,
+        local_currency: emp.localCurrency,
+        exchange_rate_used: emp.vpCompensationRate,
+        exchange_rate_type: 'compensation',
+        booking_amount_usd: emp.nrrPayoutUsd,
+        booking_amount_local: emp.nrrPayoutLocal,
+        status: 'calculated',
+        notes: emp.nrrResult
+          ? `NRR Achievement: ${emp.nrrResult.achievementPct}% (Actuals: $${emp.nrrResult.nrrActuals.toLocaleString()} / Target: $${emp.nrrResult.nrrTarget.toLocaleString()})`
+          : 'NRR Additional Pay',
+      });
+    }
+
+    // SPIFF records
+    if (emp.spiffPayoutUsd > 0) {
+      records.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        month_year: monthYear,
+        payout_type: 'SPIFF',
+        plan_id: emp.planId,
+        calculated_amount_usd: emp.spiffPayoutUsd,
+        calculated_amount_local: emp.spiffPayoutLocal,
+        local_currency: emp.localCurrency,
+        exchange_rate_used: emp.vpCompensationRate,
+        exchange_rate_type: 'compensation',
+        booking_amount_usd: emp.spiffPayoutUsd,
+        booking_amount_local: emp.spiffPayoutLocal,
+        status: 'calculated',
+        notes: emp.spiffBreakdowns.map(b => `${b.spiffName}: $${b.spiffPayoutUsd.toLocaleString()} (${b.customerName || b.projectId})`).join('; '),
       });
     }
     

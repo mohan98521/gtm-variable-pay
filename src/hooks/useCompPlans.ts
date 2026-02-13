@@ -10,6 +10,9 @@ export interface CompPlan {
   payout_frequency: string | null;
   clawback_period_days: number | null;
   is_clawback_exempt: boolean;
+  nrr_ote_percent: number;
+  cr_er_min_gp_margin_pct: number;
+  impl_min_gp_margin_pct: number;
   created_at: string;
   updated_at: string;
 }
