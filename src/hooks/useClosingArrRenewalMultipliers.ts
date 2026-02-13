@@ -122,7 +122,9 @@ export function findRenewalMultiplier(
   multipliers: ClosingArrRenewalMultiplier[],
   renewalYears: number
 ): number {
-  for (const m of multipliers) {
+  // Sort descending by min_years so the most specific (highest) tier matches first
+  const sorted = [...multipliers].sort((a, b) => b.min_years - a.min_years);
+  for (const m of sorted) {
     if (renewalYears >= m.min_years && (m.max_years === null || renewalYears <= m.max_years)) {
       return m.multiplier_value;
     }
