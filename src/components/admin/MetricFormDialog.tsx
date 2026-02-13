@@ -82,9 +82,7 @@ export function MetricFormDialog({
   existingWeightage,
 }: MetricFormDialogProps) {
   const isEditing = !!metric;
-  const maxWeightage = isEditing 
-    ? 100 - existingWeightage + (metric?.weightage_percent || 0)
-    : 100 - existingWeightage;
+  const maxWeightage = 100 - existingWeightage;
 
   const form = useForm<MetricFormValues>({
     resolver: zodResolver(metricSchema),
