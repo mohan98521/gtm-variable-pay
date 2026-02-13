@@ -14,6 +14,73 @@ export type Database = {
   }
   public: {
     Tables: {
+      clawback_ledger: {
+        Row: {
+          created_at: string
+          deal_collection_id: string
+          deal_id: string
+          employee_id: string
+          id: string
+          last_recovery_month: string | null
+          original_amount_usd: number
+          recovered_amount_usd: number
+          remaining_amount_usd: number | null
+          status: string
+          triggered_month: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deal_collection_id: string
+          deal_id: string
+          employee_id: string
+          id?: string
+          last_recovery_month?: string | null
+          original_amount_usd?: number
+          recovered_amount_usd?: number
+          remaining_amount_usd?: number | null
+          status?: string
+          triggered_month: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deal_collection_id?: string
+          deal_id?: string
+          employee_id?: string
+          id?: string
+          last_recovery_month?: string | null
+          original_amount_usd?: number
+          recovered_amount_usd?: number
+          remaining_amount_usd?: number | null
+          status?: string
+          triggered_month?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clawback_ledger_deal_collection_id_fkey"
+            columns: ["deal_collection_id"]
+            isOneToOne: false
+            referencedRelation: "deal_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clawback_ledger_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clawback_ledger_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       closing_arr_actuals: {
         Row: {
           adjustment: number | null

@@ -41,7 +41,6 @@ import {
   Lock,
 } from "lucide-react";
 import { DealCollection, useUpdateCollectionStatus } from "@/hooks/useCollections";
-import { useMonthLockStatuses } from "@/hooks/useMonthLockStatus";
 import { CollectionFormDialog } from "./CollectionFormDialog";
 import { CollectionsBulkUpload } from "./CollectionsBulkUpload";
 import { generateXLSX, downloadXLSX } from "@/lib/xlsxExport";
@@ -57,12 +56,10 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const updateMutation = useUpdateCollectionStatus();
 
-  // Get all unique booking months and check their lock status
-  const bookingMonths = useMemo(
-    () => collections.map((c) => c.booking_month),
-    [collections]
-  );
-  const { lockStatusMap } = useMonthLockStatuses(bookingMonths);
+  // Collection locking: we no longer lock based on booking_month.
+  // Collections are only locked if the collection_month they'd be assigned to is locked.
+  // Since pending collections don't have a collection_month yet (they're not collected),
+  // they should never be locked. The DB trigger handles enforcement at write time.
 
   const formatCurrency = (value: number | null | undefined) => {
     if (value == null) return "-";
@@ -286,7 +283,7 @@ export function PendingCollectionsTable({ collections, isLoading }: PendingColle
               const status = getCollectionStatus(collection);
               const monthsPending = getMonthsPending(collection.booking_month);
               const isLinkedToImpl = collection.deal?.linked_to_impl;
-              const isMonthLocked = lockStatusMap.get(collection.booking_month) ?? false;
+              const isMonthLocked = false; // Pending collections are never locked - DB trigger enforces at write time
               
               return (
                 <TableRow key={collection.id}>
