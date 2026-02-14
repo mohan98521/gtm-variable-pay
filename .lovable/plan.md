@@ -1,151 +1,148 @@
+## Support Team Attribution: Multi-Employee Credit for GTM Support Roles
 
+### Problem Statement
 
-## UI/UX Audit: Broken and Inconsistent Patterns
+Currently, each deal role column (e.g., `sales_engineering_employee_id`) holds exactly ONE employee. But for GTM support functions like Sales Engineering, a team of employees may collectively support a region/BU. When any deal closes in that region, ALL team members should receive 100% credit -- not just the one individual tagged on the deal.
 
-After reviewing all pages, components, and layouts across the application, here are the issues found:
+Today there are two gaps:
 
----
+1. No way to define "Support Teams" (e.g., "APAC SE Team = Emp A + Emp B")
+2. The `deal_participants` table exists but is completely ignored by the payout engine, dashboard actuals, and reports
 
-### Issue 1: Inconsistent Currency Formatting Functions (MAJOR)
+### Solution Design
 
-**Problem**: There are at least 4 different currency formatting approaches used across the codebase:
+Introduce a **Support Teams** concept with two new database tables, an admin UI for team management, and engine updates to resolve team memberships at calculation time.
 
-- **Dashboard/MetricsTable/CommissionTable/TeamView**: Uses abbreviated format (`$1.2M`, `$45.5K`, `$800`)
-- **DataInputs/DealsTable/ClosingARRTable**: Uses `Intl.NumberFormat` with full precision (`$1,200,000`)
-- **Reports/IncentiveAudit**: Uses `toLocaleString()` inline (`$1,200,000`)
-- **CurrencyBreakdown**: Has localization-aware formatting (Indian Lakhs for INR)
-
-The same deal value could display as `$1.2M` on the Dashboard, `$1,200,000` on Data Inputs, and `$12,00,000` on Currency Breakdown. Users seeing different representations of the same number across pages will lose trust in the data.
-
-**Fix**: Create a shared `formatCurrencyUSD(value, options?)` utility in `src/lib/utils.ts` that all components import. Support two modes: `abbreviated` (for cards/summaries) and `full` (for tables/exports). Apply INR-specific grouping only when displaying local currency values.
-
-**Files**: `src/lib/utils.ts` (new utility), then update imports in ~12 components
-
----
-
-### Issue 2: Summary Card Layout Inconsistency Between Pages (MODERATE)
-
-**Problem**: The Dashboard, Data Inputs, and Team View all show summary cards but with different internal structures:
-
-- **Dashboard** (5 cards): Uses `p-4` padding, icon in a `rounded-lg` div with `p-2`, horizontal layout with `gap-3`, text size `text-xl`
-- **Data Inputs** (4 cards): Uses `pt-6` padding via CardContent, icon in a `rounded-md` div with `h-12 w-12`, horizontal layout with `gap-4`, text size `text-2xl`
-- **Team View** (5 cards): Uses `pt-6` padding via CardContent, icon in a `rounded-md` div with `h-10 w-10`, horizontal layout with `gap-4`, text size `text-xl`, plus a sub-label
-
-The visual weight, spacing, and icon sizes differ across pages, making the app feel inconsistent as users navigate.
-
-**Fix**: Create a shared `MetricCard` component (one already exists at `src/components/dashboard/MetricCard.tsx` but is not used by all pages). Standardize the card pattern with consistent padding, icon size, and text sizing. Update Dashboard, Data Inputs, and Team View to use it.
-
-**Files**: `src/components/dashboard/MetricCard.tsx`, `src/pages/Dashboard.tsx`, `src/pages/DataInputs.tsx`, `src/components/team/TeamSummaryCards.tsx`
-
----
-
-### Issue 3: Table Header Styling Inconsistency (MODERATE)
-
-**Problem**: Tables across the application use two completely different header styles:
-
-- **Dashboard/TeamView tables**: `bg-muted/50` with default text color (light gray background, dark text)
-- **Reports page tables**: `bg-[hsl(var(--azentio-navy))]` with `text-white` (dark navy background, white text)
-
-This creates a jarring visual contrast when users switch between Dashboard and Reports. The Reports page uses hardcoded brand colors (`azentio-navy`, `azentio-teal`) while the rest of the app uses semantic tokens (`bg-muted`, `text-foreground`).
-
-**Fix**: Standardize on one header style. Recommended: use the semantic `bg-muted/50` style for all data tables (consistent with the design system) and reserve the navy-branded style only for the Reports tab bar. Update Reports page tables to use `bg-muted/50` headers.
-
-**Files**: `src/pages/Reports.tsx` (all `bg-[hsl(var(--azentio-navy))]` table headers)
-
----
-
-### Issue 4: No Mobile Responsiveness for Sidebar Navigation (MAJOR)
-
-**Problem**: The `AppSidebar` renders a fixed `w-64` sidebar with no mobile breakpoint handling. On mobile screens:
-- The sidebar takes up the full width or overflows
-- There is no hamburger menu, drawer, or collapsible mechanism
-- The `AppLayout` uses `flex` with the sidebar always visible, so on small screens the main content gets squeezed
-- The Admin page has its own mobile-responsive nav (horizontal pills on mobile), but the main app layout does not
-
-**Fix**: Wrap the sidebar in a Sheet/Drawer component on mobile. Add a hamburger button to the header bar. Hide the sidebar on `< lg` breakpoints and show it in a slide-out drawer when toggled.
-
-**Files**: `src/components/layout/AppLayout.tsx`, `src/components/layout/AppSidebar.tsx`
-
----
-
-### Issue 5: Data Inputs Page Missing Access Control (MAJOR)
-
-**Problem**: Looking at `App.tsx`, the `/data-inputs` route has NO access control:
+```text
++-------------------+       +------------------------+
+| support_teams     |       | support_team_members   |
+|-------------------|       |------------------------|
+| id (uuid PK)     |<------| team_id (FK)           |
+| team_name         |       | employee_id (text)     |
+| team_role         |       | is_active (bool)       |
+| region (nullable) |       | effective_from (date)  |
+| bu (nullable)     |       | effective_to (date)    |
+| is_active (bool)  |       +------------------------+
+| created_at        |
++-------------------+
 ```
-<Route path="/data-inputs" element={<DataInputs />} />
-```
-Every other functional page is wrapped in `<ProtectedRoute>` with either `allowedRoles` or `permissionKey`, but Data Inputs is completely open. Any authenticated (or even unauthenticated) user can access deal-level financial data and modify records.
 
-The sidebar does check `page:data_inputs` permission before showing the nav link, but direct URL access bypasses this entirely.
+**How it works:**
 
-**Fix**: Wrap the Data Inputs route in a `ProtectedRoute` with `permissionKey="page:data_inputs"`.
+- **Admin creates a team**: "APAC SE Team" with role = "sales_engineering", region = "APAC"
+- **Admin adds members**: Emp A and Emp B, with effective dates
+- **At deal entry**: User can either:
+  - Assign a single employee to `sales_engineering_employee_id` (existing flow, unchanged)
+  - OR assign a support team name to a new `sales_engineering_team_id` column
+- **At payout calculation**: The engine checks if a role has a team assignment. If yes, it resolves all active team members and credits each one with 100% of the deal value (matching existing full-credit attribution policy)
 
-**File**: `src/App.tsx`
+### Detailed Changes
 
----
+#### 1. Database: Two New Tables
 
-### Issue 6: Dashboard Page Missing Access Control (MODERATE)
+`**support_teams**` -- defines named teams with a role type and optional region/BU scope
 
-**Problem**: Similar to Issue 5, the `/dashboard` route has no `ProtectedRoute` wrapper:
-```
-<Route path="/dashboard" element={<Dashboard />} />
-```
-While the Dashboard gracefully handles missing compensation data by showing the StaffLandingPage, it still lacks authentication enforcement. An unauthenticated user could access `/dashboard` directly.
 
-**Fix**: Wrap in `<ProtectedRoute permissionKey="page:dashboard">`.
+| Column     | Type            | Description                                                |
+| ---------- | --------------- | ---------------------------------------------------------- |
+| id         | uuid PK         | Auto-generated                                             |
+| team_name  | text            | e.g., "APAC SE Team"                                       |
+| team_role  | text            | One of the 8 participant roles (e.g., "sales_engineering") |
+| region     | text (nullable) | Optional scope filter                                      |
+| bu         | text (nullable) | Optional scope filter                                      |
+| is_active  | boolean         | Default true                                               |
+| created_at | timestamptz     | Auto                                                       |
 
-**File**: `src/App.tsx`
 
----
+`**support_team_members**` -- links employees to teams with date ranges
 
-### Issue 7: Reports Tab Bar Overflows on Smaller Screens (MODERATE)
 
-**Problem**: The Reports page has up to 10 tab triggers in a single `TabsList`. While the list has `flex-wrap h-auto gap-1`, on medium screens (tablet), the tabs wrap into 2-3 rows creating a tall, cluttered header. On narrower screens, the individual tab triggers with icons + text become cramped.
+| Column         | Type            | Description                           |
+| -------------- | --------------- | ------------------------------------- |
+| id             | uuid PK         | Auto-generated                        |
+| team_id        | uuid FK         | References support_teams              |
+| employee_id    | text            | Employee ID from employees table      |
+| is_active      | boolean         | Default true                          |
+| effective_from | date            | When membership starts                |
+| effective_to   | date (nullable) | When membership ends (null = ongoing) |
+| created_at     | timestamptz     | Auto                                  |
 
-Admin-only tabs (Mgmt Summary, Currency, Holdbacks, Audit Trail) conditionally render, so non-admin users see 6 tabs, but admin users see 10, which is excessive for a single horizontal bar.
 
-**Fix**: Group tabs into two tiers: "Personal Reports" (Employee Master, Compensation, Incentive Audit, My Deals, My Closing ARR, Payout Statement) and "Management Reports" (Mgmt Summary, Currency, Holdbacks, Audit Trail). Use a secondary TabsList or a Select dropdown for the management section.
+Both tables get RLS policies requiring authenticated access.
 
-**File**: `src/pages/Reports.tsx`
+#### 2. Deal Table: Add Team Assignment Columns
 
----
+Add 2 optional team reference columns to the `deals` table (one per role):
 
-### Issue 8: Empty State Patterns Are Inconsistent (MINOR)
+- `sales_engineering_team_id` (uuid, nullable, FK to support_teams)
+- `solution_manager_team_id`
 
-**Problem**: Empty states across the app use different visual treatments:
-- **DealsTable**: Icon + bold text + subtitle, centered
-- **ClosingARRTable**: Plain text paragraph, centered
-- **CommissionTable**: Renders a Card with only a header, no body
-- **MonthlyPerformanceTable**: TableRow with `colSpan` centered text
-- **TeamView**: Full-page centered with large icon, heading, and description
+These are optional -- if NULL, existing individual assignment is used. If set, the team is resolved to individual members at calculation time.
 
-There is no shared empty state component. Some empty states guide the user ("Add your first deal"), while others just say "No data found."
+#### 3. Admin UI: Support Team Management
 
-**Fix**: Create a shared `EmptyState` component with standardized icon, heading, description, and optional action button. Apply across all tables and sections.
+New tab in Admin page: **"Support Teams"**
 
-**Files**: New `src/components/ui/empty-state.tsx`, then update ~8 components
+- Create/edit teams with name, role type, region, BU
+- Add/remove team members with effective dates
+- View all teams and their current members
+- Search and filter by role type or region
 
----
+**File**: New `src/components/admin/SupportTeamManagement.tsx`
+**Hook**: New `src/hooks/useSupportTeams.ts`
 
-### Summary
+#### 4. Deal Form: Team-or-Individual Toggle
 
-| # | Issue | Severity | Category |
-|---|---|---|---|
-| 1 | Inconsistent currency formatting (4 patterns) | Major | Data Display |
-| 2 | Summary card layout differences across pages | Moderate | Visual Consistency |
-| 3 | Table header styling split (muted vs navy) | Moderate | Visual Consistency |
-| 4 | No mobile sidebar responsive behavior | Major | Responsiveness |
-| 5 | Data Inputs route missing ProtectedRoute | Major | Security/UX |
-| 6 | Dashboard route missing ProtectedRoute | Moderate | Security/UX |
-| 7 | Reports tab bar overflow on tablets | Moderate | Responsiveness |
-| 8 | Empty state patterns inconsistent | Minor | Visual Consistency |
+For each support role in the Deal Form, add a toggle:
 
-### Implementation Priority
+- **Individual** (default): Shows existing employee dropdown
+- **Team**: Shows a dropdown of support teams filtered by role type
 
-1. **Issues 5 and 6** (Access Control) -- quick wins, critical for security
-2. **Issue 4** (Mobile Sidebar) -- major UX gap
-3. **Issue 1** (Currency Formatting) -- affects data trust
-4. **Issues 2 and 3** (Card/Table Consistency) -- visual polish
-5. **Issue 7** (Reports Tabs) -- tablet UX
-6. **Issue 8** (Empty States) -- refinement
+When "Team" is selected, the team_id is saved to the deal. The individual employee_id for that role is left empty.
 
+**File**: `src/components/data-inputs/DealFormDialog.tsx`
+
+#### 5. Payout Engine: Team Resolution
+
+Update the deal query logic in `payoutEngine.ts` to:
+
+1. After fetching deals, check if any deal has team assignments
+2. For deals with team assignments, resolve team members via `support_team_members` (filtered by `is_active = true` and effective dates covering the deal month)
+3. Credit each resolved team member as if they were individually assigned to the role
+4. Individual assignments continue to work exactly as before
+
+This is a "resolution at calculation time" approach -- teams are expanded into individual credits during payout runs.
+
+**File**: `src/lib/payoutEngine.ts` (functions: `calculateEmployeeVariablePay`, `calculateEmployeeCommissions`)
+
+#### 6. Dashboard Actuals: Team Resolution
+
+Update `useUserActuals.ts` and `useEmployeeActuals` to also check `deal_participants` and team memberships when determining if an employee should be credited for a deal.
+
+**File**: `src/hooks/useUserActuals.ts`
+
+#### 7. Existing `deal_participants` Integration
+
+The existing `deal_participants` table (with split percentages) continues to serve its purpose for ad-hoc additional participants with custom splits. Support Teams are a separate concept for "everyone gets 100% credit." Both coexist:
+
+- **Support Teams**: All members get 100% credit (team-wide attribution)
+- **deal_participants**: Individual additions with custom split % (deal-specific overrides)
+
+### Implementation Sequence
+
+1. Create `support_teams` and `support_team_members` tables with RLS
+2. Add team_id columns to `deals` table
+3. Build `useSupportTeams` hook (CRUD operations)
+4. Build `SupportTeamManagement.tsx` admin UI
+5. Update `DealFormDialog.tsx` with team-or-individual toggle per role
+6. Update `payoutEngine.ts` with team resolution logic
+7. Update `useUserActuals.ts` to include team-based credit
+8. Add "Support Teams" tab to Admin page with permission key
+
+### What Stays Unchanged
+
+- Individual employee assignment (single employee per role) works exactly as before
+- The `deal_participants` table and editor remain for custom split scenarios
+- All 8 participant role columns on deals remain and work as-is
+- Multi-participant attribution policy (100% credit to all roles) is unchanged
+- Existing deals without team assignments are unaffected
