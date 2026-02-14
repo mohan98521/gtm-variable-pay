@@ -28,7 +28,6 @@ import {
   Download,
   Search,
   Users,
-  DollarSign,
   UserX,
   Edit,
   Trash2,
@@ -62,55 +61,34 @@ export function PerformanceTargetsManagement() {
   const { data: metricTypes } = useMetricTypes();
   const deleteMutation = useDeletePerformanceTarget();
 
-  // Fetch total active employees for stats
-  const { data: totalEmployees } = useQuery({
-    queryKey: ["total_active_employees"],
+  // Fetch active employee records for stats and "without targets" export
+  const { data: activeEmployees } = useQuery({
+    queryKey: ["active_employees_list"],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from("employees")
-        .select("*", { count: "exact", head: true })
+        .select("employee_id, full_name")
         .eq("is_active", true);
 
       if (error) throw error;
-      return count || 0;
+      return data || [];
     },
   });
 
   // Calculate stats
   const stats = useMemo(() => {
     if (!targets) {
-      return { employeesWithTargets: 0, totalAnnualValue: 0, employeesWithoutTargets: 0, nrrEmployeeCount: 0, nrrTotalValue: 0 };
+      return { employeesWithTargets: 0, employeesWithoutTargets: 0 };
     }
 
     const uniqueEmployees = new Set(targets.map((t) => t.employee_id));
-    const totalAnnual = targets.reduce((sum, t) => sum + t.annual, 0);
-    const withoutTargets = (totalEmployees || 0) - uniqueEmployees.size;
-
-    // NRR computation: employees who have BOTH CR/ER and Implementation targets
-    const crErByEmployee = new Map<string, number>();
-    const implByEmployee = new Map<string, number>();
-    targets.forEach((t) => {
-      if (t.metric_type === "CR/ER") crErByEmployee.set(t.employee_id, t.annual);
-      if (t.metric_type === "Implementation") implByEmployee.set(t.employee_id, t.annual);
-    });
-    let nrrEmployeeCount = 0;
-    let nrrTotalValue = 0;
-    crErByEmployee.forEach((crErAnnual, empId) => {
-      const implAnnual = implByEmployee.get(empId);
-      if (implAnnual !== undefined) {
-        nrrEmployeeCount++;
-        nrrTotalValue += crErAnnual + implAnnual;
-      }
-    });
+    const withoutTargets = (activeEmployees?.length || 0) - uniqueEmployees.size;
 
     return {
       employeesWithTargets: uniqueEmployees.size,
-      totalAnnualValue: totalAnnual,
       employeesWithoutTargets: Math.max(0, withoutTargets),
-      nrrEmployeeCount,
-      nrrTotalValue,
     };
-  }, [targets, totalEmployees]);
+  }, [targets, activeEmployees]);
 
   // Filter targets
   const filteredTargets = useMemo(() => {
@@ -191,75 +169,80 @@ export function PerformanceTargetsManagement() {
     downloadXLSX(blob, `performance_targets_${selectedYear}.xlsx`);
   };
 
+  const handleExportWithTargets = () => {
+    if (!targets?.length) return;
+    const columns: ColumnDef<PerformanceTargetRow>[] = [
+      { key: "full_name", header: "Employee Name" },
+      { key: "employee_id", header: "Employee ID" },
+      { key: "metric_type", header: "Metric Type" },
+      { key: "q1", header: "Q1 (USD)" },
+      { key: "q2", header: "Q2 (USD)" },
+      { key: "q3", header: "Q3 (USD)" },
+      { key: "q4", header: "Q4 (USD)" },
+      { key: "annual", header: "Annual (USD)" },
+    ];
+    const blob = generateXLSX(targets, columns, "Employees With Targets");
+    downloadXLSX(blob, `employees_with_targets_${selectedYear}.xlsx`);
+  };
+
+  const handleExportWithoutTargets = () => {
+    if (!activeEmployees?.length || !targets) return;
+    const employeesWithTargetIds = new Set(targets.map((t) => t.employee_id));
+    const withoutTargets = activeEmployees.filter(
+      (emp) => !employeesWithTargetIds.has(emp.employee_id)
+    );
+    if (!withoutTargets.length) {
+      toast({ title: "All employees have targets assigned." });
+      return;
+    }
+    const columns: ColumnDef<{ full_name: string; employee_id: string }>[] = [
+      { key: "full_name", header: "Employee Name" },
+      { key: "employee_id", header: "Employee ID" },
+    ];
+    const blob = generateXLSX(withoutTargets, columns, "Employees Without Targets");
+    downloadXLSX(blob, `employees_without_targets_${selectedYear}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card
+          className="cursor-pointer transition-shadow hover:shadow-md"
+          onClick={handleExportWithTargets}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <Users className="h-6 w-6" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Employees with Targets</p>
                 <p className="text-2xl font-semibold text-foreground">
                   {isLoading ? "-" : stats.employeesWithTargets}
                 </p>
               </div>
+              <Download className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-md bg-success/10 text-success">
-                <DollarSign className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Annual Value</p>
-                <p className="text-2xl font-semibold text-foreground">
-                  {isLoading ? "-" : formatCurrency(stats.totalAnnualValue)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
+        <Card
+          className="cursor-pointer transition-shadow hover:shadow-md"
+          onClick={handleExportWithoutTargets}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-md bg-warning/10 text-warning">
                 <UserX className="h-6 w-6" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Without Targets</p>
                 <p className="text-2xl font-semibold text-foreground">
                   {isLoading ? "-" : stats.employeesWithoutTargets}
                 </p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent/10 text-accent-foreground">
-                <Target className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">NRR Targets</p>
-                <p className="text-2xl font-semibold text-foreground">
-                  {isLoading ? "-" : stats.nrrEmployeeCount}
-                </p>
-                {!isLoading && stats.nrrTotalValue > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(stats.nrrTotalValue)} total
-                  </p>
-                )}
-              </div>
+              <Download className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
