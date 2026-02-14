@@ -1,44 +1,18 @@
 
 
-## Fix: Add Missing Sales Functions (Overlay, Team Lead, Executive)
+## Add Performance Targets Export
 
-### Problem
-The `SALES_FUNCTIONS` list in `src/components/admin/EmployeeFormDialog.tsx` is missing several roles required for proper computation:
-- **Overlay** -- needed for "Org " metric aggregation (org-wide rollup)
-- **Team Lead** -- needed for "Team " metric aggregation (direct reports rollup)
-- **Team Lead - Farmer** -- variant for farming team leads
-- **Team Lead - Hunter** -- variant for hunting team leads
-- **Executive** -- needed for "Org " metric aggregation (org-wide rollup)
-
-Without these options, admins cannot tag employees correctly, and the compensation engine cannot apply the right aggregation logic.
+### Overview
+Add an "Export" button to the Performance Targets header (next to "Bulk Upload" and "Add Target") that downloads the currently filtered targets as an Excel (.xlsx) file.
 
 ### Change
 
-**File: `src/components/admin/EmployeeFormDialog.tsx`**
+**File: `src/components/admin/PerformanceTargetsManagement.tsx`**
 
-Update the `SALES_FUNCTIONS` array (line 45-59) to include the missing entries:
+1. Import `Download` icon from lucide-react and `generateXLSX`/`downloadXLSX` from `src/lib/xlsxExport.ts`
+2. Add an `handleExport` function that maps `filteredTargets` to columns: Employee Name, Employee ID, Metric Type, Q1 (USD), Q2 (USD), Q3 (USD), Q4 (USD), Annual (USD)
+3. Add an "Export" button (outline variant with Download icon) in the header row, before the "Bulk Upload" button
+4. File named `performance_targets_{selectedYear}.xlsx`
 
-```typescript
-const SALES_FUNCTIONS = [
-  "Farmer",
-  "Hunter",
-  "CSM",
-  "Channel Sales",
-  "Sales Engineering",
-  "Sales Head - Farmer",
-  "Sales Head - Hunter",
-  "Farmer - Retain",
-  "IMAL Product SE",
-  "Insurance Product SE",
-  "APAC Regional SE",
-  "MEA Regional SE",
-  "Sales Engineering - Head",
-  "Team Lead",
-  "Team Lead - Farmer",
-  "Team Lead - Hunter",
-  "Overlay",
-  "Executive",
-] as const;
-```
+No database or backend changes required -- purely a frontend addition reusing existing export utilities.
 
-No database or backend changes required -- this is a frontend-only fix.
