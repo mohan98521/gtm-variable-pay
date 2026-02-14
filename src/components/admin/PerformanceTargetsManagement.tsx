@@ -61,14 +61,15 @@ export function PerformanceTargetsManagement() {
   const { data: metricTypes } = useMetricTypes();
   const deleteMutation = useDeletePerformanceTarget();
 
-  // Fetch active employee records for stats and "without targets" export
+  // Fetch active non-staff employee records (those with a sales_function) for stats and exports
   const { data: activeEmployees } = useQuery({
-    queryKey: ["active_employees_list"],
+    queryKey: ["active_sales_employees_list"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("employees")
         .select("employee_id, full_name")
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .not("sales_function", "is", null);
 
       if (error) throw error;
       return data || [];
