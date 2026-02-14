@@ -5,12 +5,14 @@ import { CommissionTable } from "@/components/dashboard/CommissionTable";
 import { PayoutSimulator } from "@/components/dashboard/PayoutSimulator";
 import { StaffLandingPage } from "@/components/dashboard/StaffLandingPage";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import { Calendar, Loader2, Target, DollarSign, Briefcase, Info } from "lucide-react";
+import { Calendar, Loader2, Target, DollarSign, Briefcase, Info, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCurrentUserCompensation } from "@/hooks/useCurrentUserCompensation";
 import { useDashboardPayoutSummary } from "@/hooks/useDashboardPayoutSummary";
 import { formatCurrencyValue } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { format, parseISO } from "date-fns";
 
 export default function Dashboard() {
   const { data: compensation, isLoading, error } = useCurrentUserCompensation();
@@ -143,6 +145,35 @@ export default function Dashboard() {
             icon={<Briefcase className="h-5 w-5" />}
           />
         </div>
+
+        {/* Blended Target Info for Multi-Assignment Years */}
+        {payoutSummary?.assignmentSegments && payoutSummary.assignmentSegments.length > 1 && (
+          <Card className="border-primary/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Layers className="h-4 w-4 text-primary" />
+                Assignment Periods
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-1.5">
+                {payoutSummary.assignmentSegments.map((seg, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {format(parseISO(seg.startDate), 'MMM yyyy')} – {format(parseISO(seg.endDate), 'MMM yyyy')}:
+                      <span className="ml-1.5 font-medium text-foreground">{seg.planName}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      {seg.oteUsd != null && <>OTE {formatCurrency(seg.oteUsd)}</>}
+                      {seg.oteUsd != null && seg.targetBonusUsd != null && <> | </>}
+                      {seg.targetBonusUsd != null && <>Target Bonus {formatCurrency(seg.targetBonusUsd)}</>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Table 1: Variable Pay Metrics Summary */}
         <MetricsTable

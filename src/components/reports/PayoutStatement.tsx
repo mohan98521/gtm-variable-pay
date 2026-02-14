@@ -189,6 +189,14 @@ function StatementHeader({ statement }: { statement: PayoutStatementData }) {
               <Badge variant="outline">{statement.employeeCode}</Badge>
             </div>
             <p className="text-muted-foreground">Period: {statement.monthLabel}</p>
+            {statement.planName && (
+              <p className="text-sm text-muted-foreground">
+                Plan: <span className="font-medium text-foreground">{statement.planName}</span>
+                {statement.targetBonusUsd != null && (
+                  <> | Target Bonus: <span className="font-medium text-foreground">${statement.targetBonusUsd.toLocaleString()}</span></>
+                )}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <Badge variant="secondary" className="text-base px-3 py-1">

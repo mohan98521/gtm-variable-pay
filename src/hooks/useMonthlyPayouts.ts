@@ -201,6 +201,7 @@ export interface EmployeePayoutSummary {
   employeeCode: string;
   employeeName: string;
   localCurrency: string;
+  planName: string | null;
   variablePayUsd: number;
   variablePayLocal: number;
   vpCompRate: number;
@@ -260,6 +261,17 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
       
       if (empError) throw empError;
       
+      // Batch-fetch plan names for all unique plan_ids
+      const planIds = [...new Set(payouts.map(p => p.plan_id).filter(Boolean))] as string[];
+      const planNameMap = new Map<string, string>();
+      if (planIds.length > 0) {
+        const { data: plans } = await supabase
+          .from("comp_plans")
+          .select("id, name")
+          .in("id", planIds);
+        (plans || []).forEach(p => planNameMap.set(p.id, p.name));
+      }
+      
       // Map employees by ID
       const employeeMap = new Map(employees?.map(e => [e.id, e]) || []);
       
@@ -282,11 +294,18 @@ export function useEmployeePayoutBreakdown(payoutRunId: string | undefined) {
         if (!emp) continue;
         
         if (!byEmployee[emp.id]) {
+          // Find the plan name from the first VP payout for this employee
+          const empVpPayout = dedupedPayouts.find(
+            p => p.employee_id === emp.id && p.payout_type === 'Variable Pay' && p.plan_id
+          );
+          const empPlanName = empVpPayout?.plan_id ? (planNameMap.get(empVpPayout.plan_id) || null) : null;
+
           byEmployee[emp.id] = {
             employeeId: emp.id,
             employeeCode: emp.employee_id,
             employeeName: emp.full_name,
             localCurrency: payout.local_currency || 'USD',
+            planName: empPlanName,
             variablePayUsd: 0,
             variablePayLocal: 0,
             vpCompRate: 1,
