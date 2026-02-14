@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Layers, Users, UserCog, Shield, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, UsersRound, type LucideIcon } from "lucide-react";
+import { Layers, Users, UserCog, Shield, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, UsersRound, UserMinus, type LucideIcon } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { CompensationPlansTab } from "@/components/admin/CompensationPlansTab";
@@ -16,6 +16,7 @@ import { PayoutRunManagement } from "@/components/admin/PayoutRunManagement";
 import { RoleBuilder } from "@/components/admin/RoleBuilder";
 import { DealTeamSpiffManager } from "@/components/admin/DealTeamSpiffManager";
 import { SupportTeamManagement } from "@/components/admin/SupportTeamManagement";
+import { FnFSettlementManagement } from "@/components/admin/FnFSettlementManagement";
 
 // --- Section / Item types ---
 interface NavItem {
@@ -56,6 +57,7 @@ const sections: NavSection[] = [
       { id: "accounts", label: "Employee Accounts", icon: UserCog, permissionCheck: (c) => c.canAccessTab("tab:employee_accounts") },
       { id: "roles", label: "Role Management", icon: Shield, permissionCheck: (c) => c.canAccessTab("tab:role_management") },
       { id: "support-teams", label: "Support Teams", icon: UsersRound, permissionCheck: (c) => c.canAccessTab("tab:support_teams") },
+      { id: "fnf-settlements", label: "F&F Settlements", icon: UserMinus, permissionCheck: (c) => c.canAccessTab("tab:fnf_settlements") },
     ],
   },
   {
@@ -86,6 +88,7 @@ const contentMap: Record<string, React.ComponentType> = {
   "accounts": EmployeeAccounts,
   "roles": RoleManagement,
   "support-teams": SupportTeamManagement,
+  "fnf-settlements": FnFSettlementManagement,
   
   "exchange-rates": ExchangeRateManagement,
   "payout-runs": PayoutRunManagement,
