@@ -33,7 +33,8 @@ export type PermissionKey =
   | "action:edit_exchange_rates"
   | "action:export_reports"
   | "action:allocate_deal_spiff"
-  | "action:approve_deal_spiff";
+  | "action:approve_deal_spiff"
+  | "tab:fnf_settlements";
 
 export interface PermissionDefinition {
   key: PermissionKey;
@@ -63,6 +64,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "tab:exchange_rates", label: "Exchange Rates", description: "Manage exchange rates", category: "tab" },
   { key: "tab:deal_team_spiffs", label: "Deal Team SPIFFs", description: "Access the Deal Team SPIFF management section", category: "tab" },
   { key: "tab:support_teams", label: "Support Teams", description: "Manage support team attribution for GTM roles", category: "tab" },
+  { key: "tab:fnf_settlements", label: "F&F Settlements", description: "Manage Full & Final settlements for departed employees", category: "tab" },
   
   // Actions
   { key: "action:create_comp_plan", label: "Create Comp Plan", description: "Create new compensation plans", category: "action" },

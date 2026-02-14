@@ -1041,6 +1041,128 @@ export type Database = {
         }
         Relationships: []
       }
+      fnf_settlement_lines: {
+        Row: {
+          amount_local: number | null
+          amount_usd: number
+          created_at: string
+          deal_id: string | null
+          exchange_rate_used: number | null
+          id: string
+          line_type: string
+          local_currency: string | null
+          notes: string | null
+          payout_type: string | null
+          settlement_id: string
+          source_payout_id: string | null
+          tranche: number
+        }
+        Insert: {
+          amount_local?: number | null
+          amount_usd?: number
+          created_at?: string
+          deal_id?: string | null
+          exchange_rate_used?: number | null
+          id?: string
+          line_type: string
+          local_currency?: string | null
+          notes?: string | null
+          payout_type?: string | null
+          settlement_id: string
+          source_payout_id?: string | null
+          tranche: number
+        }
+        Update: {
+          amount_local?: number | null
+          amount_usd?: number
+          created_at?: string
+          deal_id?: string | null
+          exchange_rate_used?: number | null
+          id?: string
+          line_type?: string
+          local_currency?: string | null
+          notes?: string | null
+          payout_type?: string | null
+          settlement_id?: string
+          source_payout_id?: string | null
+          tranche?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fnf_settlement_lines_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "fnf_settlements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fnf_settlements: {
+        Row: {
+          clawback_carryforward_usd: number | null
+          collection_grace_days: number
+          created_at: string
+          created_by: string | null
+          departure_date: string
+          employee_id: string
+          fiscal_year: number
+          id: string
+          notes: string | null
+          tranche1_calculated_at: string | null
+          tranche1_finalized_at: string | null
+          tranche1_status: string
+          tranche1_total_usd: number | null
+          tranche2_calculated_at: string | null
+          tranche2_eligible_date: string | null
+          tranche2_finalized_at: string | null
+          tranche2_status: string
+          tranche2_total_usd: number | null
+          updated_at: string
+        }
+        Insert: {
+          clawback_carryforward_usd?: number | null
+          collection_grace_days?: number
+          created_at?: string
+          created_by?: string | null
+          departure_date: string
+          employee_id: string
+          fiscal_year: number
+          id?: string
+          notes?: string | null
+          tranche1_calculated_at?: string | null
+          tranche1_finalized_at?: string | null
+          tranche1_status?: string
+          tranche1_total_usd?: number | null
+          tranche2_calculated_at?: string | null
+          tranche2_eligible_date?: string | null
+          tranche2_finalized_at?: string | null
+          tranche2_status?: string
+          tranche2_total_usd?: number | null
+          updated_at?: string
+        }
+        Update: {
+          clawback_carryforward_usd?: number | null
+          collection_grace_days?: number
+          created_at?: string
+          created_by?: string | null
+          departure_date?: string
+          employee_id?: string
+          fiscal_year?: number
+          id?: string
+          notes?: string | null
+          tranche1_calculated_at?: string | null
+          tranche1_finalized_at?: string | null
+          tranche1_status?: string
+          tranche1_total_usd?: number | null
+          tranche2_calculated_at?: string | null
+          tranche2_eligible_date?: string | null
+          tranche2_finalized_at?: string | null
+          tranche2_status?: string
+          tranche2_total_usd?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       monthly_actuals: {
         Row: {
           achieved_value_local_currency: number
