@@ -57,7 +57,6 @@ const sections: NavSection[] = [
       { id: "accounts", label: "Employee Accounts", icon: UserCog, permissionCheck: (c) => c.canAccessTab("tab:employee_accounts") },
       { id: "roles", label: "Role Management", icon: Shield, permissionCheck: (c) => c.canAccessTab("tab:role_management") },
       { id: "support-teams", label: "Support Teams", icon: UsersRound, permissionCheck: (c) => c.canAccessTab("tab:support_teams") },
-      { id: "fnf-settlements", label: "F&F Settlements", icon: UserMinus, permissionCheck: (c) => c.canAccessTab("tab:fnf_settlements") },
     ],
   },
   {
@@ -67,6 +66,7 @@ const sections: NavSection[] = [
     items: [
       { id: "exchange-rates", label: "Exchange Rates", icon: DollarSign, permissionCheck: (c) => c.canAccessTab("tab:exchange_rates") },
       { id: "payout-runs", label: "Payout Runs", icon: Calculator, permissionCheck: (c) => c.canAccessTab("tab:payout_runs") },
+      { id: "fnf-settlements", label: "F&F Settlements", icon: UserMinus, permissionCheck: (c) => c.canAccessTab("tab:fnf_settlements") },
       { id: "deal-team-spiffs", label: "Deal Team SPIFFs", icon: Gift, permissionCheck: (c) => c.canAccessTab("tab:deal_team_spiffs") },
     ],
   },
