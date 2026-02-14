@@ -1,42 +1,96 @@
 
 
-## Add Support Team Columns to Deals Bulk Upload
+## Changes to Deal Form and Bulk Upload
 
-### Overview
-Add two new optional columns (`sales_engineering_team_name` and `solution_manager_team_name`) to the bulk upload template. Users can specify either an individual employee ID **or** a team name for Sales Engineering and Solution Manager roles -- if both are provided, the team takes priority (matching the UI form behavior).
+### Summary
+Three changes: (1) Remove "Sales Engineering Head ID" from the deal form and bulk upload, (2) Add a new "Solution Architect ID" field, and (3) Add a warning system in bulk upload when both an individual ID and a team name are provided for the same role, with the ability to download warnings.
 
-### Changes
+---
+
+### 1. Remove "Sales Engineering Head ID" from Deal Form and Bulk Upload
+
+Since SE Heads are on overlay and get credited via their overlay comp plan, they do not need per-deal attribution.
+
+**Files to change:**
+
+- **`src/components/data-inputs/DealFormDialog.tsx`**
+  - Remove the `sales_engineering_head_employee_id` schema field and form field (lines 72, 170, 210, 265, 286, 313, 345-346, 819-843)
+  - Remove the SE Head name resolution in `onSubmit`
+
+- **`src/components/data-inputs/DealsBulkUpload.tsx`**
+  - Remove `sales_engineering_head_id` from `ParsedDeal` interface, `CSV_TEMPLATE_HEADERS`, template example row, `buildDealFromRow`, `validateDeals` participant fields, and `uploadMutation` dealData
+
+- **`src/hooks/useDeals.ts`**
+  - Remove `sales_engineering_head` from `PARTICIPANT_ROLES`
+
+- **`src/hooks/useSupportTeams.ts`**
+  - Remove `sales_engineering_head` from `TEAM_ROLES`
+
+**Note:** The database columns (`sales_engineering_head_employee_id`, `sales_engineering_head_name`) will remain untouched. Existing attribution logic in `payoutEngine.ts`, `useUserActuals.ts`, `useMyDealsWithIncentives.ts`, `useDealVariablePayAttribution.ts`, `useTeamCompensation.ts`, and `useCurrentUserCompensation.ts` will continue to work for historical deals that have this field populated. New deals simply won't have it set.
+
+---
+
+### 2. Add "Solution Architect ID" field
+
+**Database migration:**
+- Add two new columns to the `deals` table:
+  - `solution_architect_employee_id` (text, nullable)
+  - `solution_architect_name` (text, nullable)
+
+**Files to change:**
+
+- **`src/components/data-inputs/DealFormDialog.tsx`**
+  - Add `solution_architect_employee_id` to the form schema, default values, and reset logic
+  - Add a new employee dropdown field labeled "Solution Architect ID" in the Participants section
+  - Include name resolution in `onSubmit`
+
+- **`src/components/data-inputs/DealsBulkUpload.tsx`**
+  - Add `solution_architect_id` to `ParsedDeal`, `CSV_TEMPLATE_HEADERS`, template row, `buildDealFromRow`, validation, and `uploadMutation`
+
+- **`src/hooks/useDeals.ts`**
+  - Add `solution_architect_employee_id` and `solution_architect_name` to the `Deal` interface
+  - Add `solution_architect` to `PARTICIPANT_ROLES`
+
+---
+
+### 3. Validation warnings for individual + team conflicts in Bulk Upload
+
+Currently, when both an individual ID and a team name are provided for the same role (SE or Solution Manager), the system treats it as an error. The plan changes this to a **warning** (not blocking) and adds a "Download Warnings" button.
 
 **File: `src/components/data-inputs/DealsBulkUpload.tsx`**
 
-1. **Add a query to fetch support teams** -- similar to the existing employees query, fetch all active support teams to build a lookup map of `team_name -> { id, team_role }`.
+- Add a new `ValidationWarning` interface (same shape as `ValidationError`)
+- Add a `validationWarnings` state alongside `validationErrors`
+- In `validateDeals`, return both `errors` and `warnings`:
+  - The "Both individual ID and team name provided" messages become warnings instead of errors
+  - Actual problems (team not found, role mismatch) remain errors
+- Add a warnings display section in the UI (yellow/amber styled, separate from errors)
+- Add a "Download Warnings" button that exports warnings as CSV
+- Allow upload to proceed when there are warnings but no errors
+- The warning message will read: "Row X: Both SE individual ID and SE team name provided -- team will take priority, individual ID will be ignored"
 
-2. **Update `ParsedDeal` interface** -- add two new optional fields:
-   - `sales_engineering_team_name?: string`
-   - `solution_manager_team_name?: string`
-   - `sales_engineering_team_id?: string` (resolved from name)
-   - `solution_manager_team_id?: string` (resolved from name)
-
-3. **Update `CSV_TEMPLATE_HEADERS`** -- add `sales_engineering_team_name` and `solution_manager_team_name` after their respective individual ID columns.
-
-4. **Update `generateCSVTemplate`** -- add empty values for the two new columns in the example row, with a comment row or note that users should fill either the individual ID or team name, not both.
-
-5. **Update `parseCSV` and `rowsToParsedDeals`** -- read the two new columns from the raw data.
-
-6. **Update `validateDeals`** -- add validation logic:
-   - If `sales_engineering_team_name` is provided, look it up in the support teams list; error if not found or if the team's `team_role` is not `sales_engineering`.
-   - Same for `solution_manager_team_name` with role `solution_manager`.
-   - If both an individual ID and a team name are provided for the same role, show a warning (team will take priority).
-   - Resolve the validated team name to its UUID (`sales_engineering_team_id` / `solution_manager_team_id`).
-
-7. **Update `uploadMutation`** -- when building `dealData` for insert:
-   - If a team name was provided and resolved, set `sales_engineering_team_id` and clear the individual `sales_engineering_employee_id` / `sales_engineering_name`.
-   - Same logic for `solution_manager_team_id`.
+---
 
 ### Technical Details
 
-- Support teams are fetched once via `useQuery` with key `["support-teams-validation"]`, selecting `id, team_name, team_role, is_active` where `is_active = true`.
-- Team name matching is case-insensitive (`toLowerCase()` comparison).
-- The template example row will show: individual columns empty + team column = `"APAC SE Team"` to demonstrate usage.
-- No database or schema changes required -- the `deals` table already has `sales_engineering_team_id` and `solution_manager_team_id` columns.
+**Database migration SQL:**
+```sql
+ALTER TABLE public.deals
+  ADD COLUMN solution_architect_employee_id text,
+  ADD COLUMN solution_architect_name text;
+```
 
+**Attribution note:** The new `solution_architect` role will need to be added to the attribution filter queries in `payoutEngine.ts`, `useUserActuals.ts`, `useMyDealsWithIncentives.ts`, `useDealVariablePayAttribution.ts`, `useTeamCompensation.ts`, and `useCurrentUserCompensation.ts` so that Solution Architects receive credit for deals they are tagged on. This will be included in this implementation.
+
+**Files modified (total):**
+- `src/components/data-inputs/DealFormDialog.tsx`
+- `src/components/data-inputs/DealsBulkUpload.tsx`
+- `src/hooks/useDeals.ts`
+- `src/hooks/useSupportTeams.ts`
+- `src/hooks/useUserActuals.ts`
+- `src/hooks/useMyDealsWithIncentives.ts`
+- `src/hooks/useDealVariablePayAttribution.ts`
+- `src/hooks/useTeamCompensation.ts`
+- `src/hooks/useCurrentUserCompensation.ts`
+- `src/lib/payoutEngine.ts`
+- Database migration (new columns)
