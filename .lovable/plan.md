@@ -1,44 +1,74 @@
 
-## Update Test Case 3.2: Sales Head Hunter (Now Stepped_Accelerator)
 
-### What Changed in the Database
+## Commission Eligibility Modifications
 
-The Sales Head Hunter plan was updated from `Linear` to `Stepped_Accelerator` logic. The multiplier grid remains the same:
+### Overview
+Two changes to how commission eligibility is determined:
+1. **Managed Services**: Add a GP Margin threshold filter -- only deals with GP margin >= configured % qualify
+2. **Perpetual License**: Replace TCV threshold with the existing "Eligible for Perpetual Incentive" flag from the deal record
 
-| Tier | Range | Multiplier |
-|------|-------|-----------|
-| 1 | 0-100% | 1.0x |
-| 2 | 100-120% | 1.6x |
-| 3 | 120-999% | 2.0x |
+---
 
-### Impact on Calculations
+### Change 1: Managed Services GP Margin Filter
 
-**Old behavior (Linear):** A single multiplier from the matching tier is applied to the entire achievement.
-- 115% achievement: $25,000 x 1.15 x 1.6 = $46,000
-- 120% achievement: $25,000 x 1.20 x 2.0 = $60,000
+**Database Migration**
+- Add `min_gp_margin_pct` column (numeric, default NULL) to the `plan_commissions` table
+- This allows each plan's commission entry to optionally require a minimum GP margin
 
-**New behavior (Stepped_Accelerator / Marginal):** Each tier's multiplier applies only to the achievement slice within that range.
+**Payout Engine** (`src/lib/payoutEngine.ts`)
+- Update the deal query in `calculateEmployeeCommissions` to also fetch `gp_margin_percent`
+- In the Managed Services commission block (~line 747), add a check: if `min_gp_margin_pct` is set on the commission config and `deal.gp_margin_percent < min_gp_margin_pct`, skip the deal
 
-### Updated Test Case 3.2: SH Hunter 115%
+**Commission Form UI** (`src/components/admin/CommissionFormDialog.tsx`)
+- Add a new form field "Min GP Margin (%)" that appears for all commission types (but is most relevant for Managed Services)
+- Wire it through `PlanCommissionEditor` and `usePlanCommissions` hook
+
+**Commission Interface** (`src/lib/commissions.ts`)
+- Add `min_gp_margin_pct` to the `PlanCommission` interface
+
+---
+
+### Change 2: Perpetual License Uses Deal Flag
+
+**Payout Engine** (`src/lib/payoutEngine.ts`)
+- Update the deal query to also fetch `eligible_for_perpetual_incentive`
+- In the Perpetual License commission block (~line 718), replace the TCV threshold check with: if `deal.eligible_for_perpetual_incentive !== true`, skip the deal
+- The `min_threshold_usd` on the Perpetual License commission config will be ignored in favor of this flag
+
+---
+
+### Technical Details
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| Database migration | Add `min_gp_margin_pct` to `plan_commissions` |
+| `src/lib/commissions.ts` | Add `min_gp_margin_pct` to `PlanCommission` interface |
+| `src/lib/payoutEngine.ts` | Fetch `gp_margin_percent` and `eligible_for_perpetual_incentive` in commission deal query; add GP margin check for Managed Services; replace threshold check with flag check for Perpetual License |
+| `src/hooks/usePlanCommissions.ts` | Include `min_gp_margin_pct` in select/create/update |
+| `src/components/admin/CommissionFormDialog.tsx` | Add "Min GP Margin (%)" field |
+| `src/components/admin/PlanCommissionEditor.tsx` | Display GP margin column in the table |
+
+**Calculation logic changes:**
 
 ```text
-Tier 1: 0-100% at 1.0x = $25,000 x (100/100) x 1.0 = $25,000
-Tier 2: 100-115% at 1.6x = $25,000 x (15/100) x 1.6 =  $6,000
-Total VP = $31,000
+MANAGED SERVICES (before):
+  if deal.managed_services_usd > 0 AND deal.tcv_usd >= min_threshold_usd
+    -> commission = managed_services_usd * rate%
+
+MANAGED SERVICES (after):
+  if deal.managed_services_usd > 0
+    AND (min_gp_margin_pct is NULL OR deal.gp_margin_percent >= min_gp_margin_pct)
+    -> commission = managed_services_usd * rate%
+
+PERPETUAL LICENSE (before):
+  if deal.perpetual_license_usd > 0 AND deal.tcv_usd >= min_threshold_usd
+    -> commission = perpetual_license_usd * rate%
+
+PERPETUAL LICENSE (after):
+  if deal.perpetual_license_usd > 0 AND deal.eligible_for_perpetual_incentive = true
+    -> commission = perpetual_license_usd * rate%
+    (min_threshold_usd ignored for this type)
 ```
 
-### Updated Test Case 3.2b: SH Hunter 120%
-
-```text
-Tier 1: 0-100% at 1.0x = $25,000 x (100/100) x 1.0 = $25,000
-Tier 2: 100-120% at 1.6x = $25,000 x (20/100) x 1.6 =  $8,000
-Total VP = $33,000
-```
-
-### Changes
-
-**File: `src/lib/__tests__/compensationEngine.test.ts`** (lines 120-142)
-
-1. Update test 3.2 to use `Stepped_Accelerator` logic type with `calculateMarginalPayout` instead of `calculateMetricPayoutFromPlan` with Linear, and expect **$31,000**
-2. Update test 3.2b to use `Stepped_Accelerator` logic type with `calculateMarginalPayout`, and expect **$33,000**
-3. Update test descriptions to reflect the new plan type
