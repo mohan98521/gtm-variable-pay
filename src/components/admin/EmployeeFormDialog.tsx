@@ -293,6 +293,16 @@ export function EmployeeFormDialog({
       await autoEndAssignments(employee.id, data.departure_date);
     }
 
+    // If joining date moved later, auto-adjust assignment start dates
+    const joiningDateChanged = employee.date_of_hire !== (data.date_of_hire || null);
+    if (joiningDateChanged && data.date_of_hire) {
+      const oldJoining = employee.date_of_hire;
+      const newJoining = data.date_of_hire;
+      if (!oldJoining || newJoining > oldJoining) {
+        await autoAdjustAssignmentStartDates(employee.id, newJoining);
+      }
+    }
+
     await onSubmit(data);
   };
 
@@ -311,6 +321,24 @@ export function EmployeeFormDialog({
           .eq("id", a.id);
       }
       toast.info(`${assignments.length} plan assignment(s) end date adjusted to departure date`);
+    }
+  };
+
+  const autoAdjustAssignmentStartDates = async (employeeId: string, newJoiningDate: string) => {
+    const { data: assignments } = await supabase
+      .from("user_targets")
+      .select("id, effective_start_date")
+      .eq("user_id", employeeId)
+      .lt("effective_start_date", newJoiningDate);
+
+    if (assignments && assignments.length > 0) {
+      for (const a of assignments) {
+        await supabase
+          .from("user_targets")
+          .update({ effective_start_date: newJoiningDate })
+          .eq("id", a.id);
+      }
+      toast.info(`${assignments.length} plan assignment(s) start date adjusted to new joining date`);
     }
   };
 
@@ -358,6 +386,16 @@ export function EmployeeFormDialog({
       // 4. Check departure auto-end
       if (!employee.departure_date && pendingFormData.departure_date) {
         await autoEndAssignments(employee.id, pendingFormData.departure_date);
+      }
+
+      // 4b. Check joining date auto-adjust
+      const joiningDateChanged = employee.date_of_hire !== (pendingFormData.date_of_hire || null);
+      if (joiningDateChanged && pendingFormData.date_of_hire) {
+        const oldJoining = employee.date_of_hire;
+        const newJoining = pendingFormData.date_of_hire;
+        if (!oldJoining || newJoining > oldJoining) {
+          await autoAdjustAssignmentStartDates(employee.id, newJoining);
+        }
       }
 
       // 5. Save the employee update
