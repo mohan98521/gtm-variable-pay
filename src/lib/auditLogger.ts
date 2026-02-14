@@ -7,7 +7,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
-export type AuditCategory = 'run_lifecycle' | 'calculation' | 'rate_usage' | 'adjustment';
+export type AuditCategory = 'run_lifecycle' | 'calculation' | 'rate_usage' | 'adjustment' | 'fnf_settlement';
 
 export type AuditAction = 
   | 'run_calculated'
@@ -15,7 +15,9 @@ export type AuditAction =
   | 'rate_used_compensation'
   | 'rate_used_market'
   | 'rate_mismatch'
-  | 'clawback_applied';
+  | 'clawback_applied'
+  | 'fnf_tranche_calculated'
+  | 'fnf_status_changed';
 
 interface BaseAuditEntry {
   payoutRunId?: string;
@@ -51,6 +53,45 @@ interface ClawbackEntry extends BaseAuditEntry {
   amountUsd: number;
   amountLocal: number;
   localCurrency: string;
+}
+
+interface FnFAuditEntry {
+  settlementId: string;
+  employeeId?: string;
+  tranche?: number;
+  action: 'fnf_tranche_calculated' | 'fnf_status_changed';
+  oldStatus?: string;
+  newStatus?: string;
+  totalUsd?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Log F&F settlement events (tranche calculation, status changes)
+ */
+export async function logFnfEvent(entry: FnFAuditEntry): Promise<void> {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    await supabase.from('payout_audit_log').insert([{
+      action: entry.action,
+      entity_type: 'fnf_settlement',
+      audit_category: 'fnf_settlement',
+      employee_id: entry.employeeId || null,
+      amount_usd: entry.totalUsd || null,
+      reason: entry.action === 'fnf_status_changed'
+        ? `Tranche ${entry.tranche} status: ${entry.oldStatus} → ${entry.newStatus}`
+        : `Tranche ${entry.tranche} calculated, total $${(entry.totalUsd || 0).toFixed(2)}`,
+      changed_by: userData?.user?.id || null,
+      metadata: {
+        settlement_id: entry.settlementId,
+        tranche: entry.tranche,
+        ...(entry.oldStatus ? { old_status: entry.oldStatus, new_status: entry.newStatus } : {}),
+        ...(entry.metadata || {}),
+      },
+    }]);
+  } catch (error) {
+    console.error('Failed to log F&F event:', error);
+  }
 }
 
 /**

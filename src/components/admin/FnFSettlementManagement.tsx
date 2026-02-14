@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -9,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, FileText } from "lucide-react";
-import { useProfiles } from "@/hooks/useProfiles";
+import { supabase } from "@/integrations/supabase/client";
 import { useFnfSettlements, useCreateFnfSettlement, FnFSettlement } from "@/hooks/useFnfSettlements";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { FnFSettlementDetail } from "./FnFSettlementDetail";
@@ -23,10 +24,25 @@ const STATUS_COLORS: Record<string, string> = {
   paid: "bg-emerald-100 text-emerald-800",
 };
 
+/** Fetch employees from the employees table (not profiles) */
+function useEmployeesForFnf() {
+  return useQuery({
+    queryKey: ["employees_for_fnf"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, employee_id, full_name, is_active, departure_date")
+        .order("full_name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+}
+
 export function FnFSettlementManagement() {
   const { selectedYear } = useFiscalYear();
   const { data: settlements = [], isLoading } = useFnfSettlements(selectedYear);
-  const { data: employees = [] } = useProfiles();
+  const { data: employees = [] } = useEmployeesForFnf();
   const createMutation = useCreateFnfSettlement();
 
   const [showInitiate, setShowInitiate] = useState(false);
@@ -37,9 +53,9 @@ export function FnFSettlementManagement() {
     notes: "",
   });
 
-  // Only inactive employees with departure_date
+  // Only inactive employees with departure_date (from employees table)
   const departedEmployees = useMemo(
-    () => (employees as any[]).filter((e: any) => !e.is_active && e.departure_date),
+    () => employees.filter((e) => !e.is_active && e.departure_date),
     [employees]
   );
 
@@ -50,26 +66,26 @@ export function FnFSettlementManagement() {
   );
 
   const eligibleEmployees = useMemo(
-    () => departedEmployees.filter((e) => !existingEmployeeIds.has(e.employee_id)),
+    () => departedEmployees.filter((e) => !existingEmployeeIds.has(e.id)),
     [departedEmployees, existingEmployeeIds]
   );
 
   const selectedEmp = useMemo(
-    () => departedEmployees.find((e) => e.employee_id === form.employee_id),
+    () => departedEmployees.find((e) => e.id === form.employee_id),
     [departedEmployees, form.employee_id]
   );
 
   const employeeNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    (employees as any[]).forEach((e: any) => map.set(e.employee_id, e.full_name));
+    employees.forEach((e) => map.set(e.id, e.full_name));
     return map;
   }, [employees]);
 
   const handleInitiate = async () => {
     if (!selectedEmp) return;
     await createMutation.mutateAsync({
-      employee_id: form.employee_id,
-      departure_date: selectedEmp.departure_date,
+      employee_id: selectedEmp.id,
+      departure_date: selectedEmp.departure_date!,
       fiscal_year: selectedYear,
       collection_grace_days: form.collection_grace_days,
       notes: form.notes || undefined,
@@ -181,8 +197,8 @@ export function FnFSettlementManagement() {
                   <SelectValue placeholder="Select employee…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {eligibleEmployees.map((e: any) => (
-                    <SelectItem key={e.employee_id} value={e.employee_id}>
+                  {eligibleEmployees.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
                       {e.full_name} ({e.employee_id})
                     </SelectItem>
                   ))}

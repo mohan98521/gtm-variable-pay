@@ -2,6 +2,8 @@
  * F&F Settlements Hooks
  * 
  * React Query hooks for managing Full & Final settlement lifecycle.
+ * Includes status guards to prevent recalculation of approved/finalized tranches,
+ * and audit logging for all status transitions.
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +15,7 @@ import {
   saveTrancheLines,
   clearTrancheLines,
 } from "@/lib/fnfEngine";
+import { logFnfEvent } from "@/lib/auditLogger";
 
 export interface FnFSettlement {
   id: string;
@@ -54,6 +57,9 @@ export interface FnFSettlementLine {
 
 const QUERY_KEY = "fnf_settlements";
 const LINES_KEY = "fnf_settlement_lines";
+
+/** Statuses that allow recalculation */
+const RECALCULABLE_STATUSES = ['draft', 'review'];
 
 export function useFnfSettlements(fiscalYear?: number) {
   return useQuery({
@@ -158,6 +164,11 @@ export function useCalculateTranche1() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (settlement: FnFSettlement) => {
+      // Status guard: prevent recalculation of approved/finalized/paid tranches
+      if (!RECALCULABLE_STATUSES.includes(settlement.tranche1_status)) {
+        throw new Error(`Cannot recalculate Tranche 1: status is "${settlement.tranche1_status}". Only draft or review tranches can be recalculated.`);
+      }
+
       // Clear existing lines
       await clearTrancheLines(settlement.id, 1);
 
@@ -184,6 +195,20 @@ export function useCalculateTranche1() {
         .eq('id', settlement.id);
 
       if (error) throw error;
+
+      // Audit log
+      await logFnfEvent({
+        settlementId: settlement.id,
+        employeeId: settlement.employee_id,
+        tranche: 1,
+        action: 'fnf_tranche_calculated',
+        totalUsd: result.totalUsd,
+        metadata: {
+          lines_count: result.lines.length,
+          clawback_carryforward_usd: result.clawbackCarryforwardUsd,
+        },
+      });
+
       return result;
     },
     onSuccess: () => {
@@ -201,6 +226,11 @@ export function useCalculateTranche2() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (settlement: FnFSettlement) => {
+      // Status guard
+      if (!RECALCULABLE_STATUSES.includes(settlement.tranche2_status)) {
+        throw new Error(`Cannot recalculate Tranche 2: status is "${settlement.tranche2_status}". Only draft or review tranches can be recalculated.`);
+      }
+
       await clearTrancheLines(settlement.id, 2);
 
       const result = await calculateTranche2(
@@ -224,6 +254,17 @@ export function useCalculateTranche2() {
         .eq('id', settlement.id);
 
       if (error) throw error;
+
+      // Audit log
+      await logFnfEvent({
+        settlementId: settlement.id,
+        employeeId: settlement.employee_id,
+        tranche: 2,
+        action: 'fnf_tranche_calculated',
+        totalUsd: result.totalUsd,
+        metadata: { lines_count: result.lines.length },
+      });
+
       return result;
     },
     onSuccess: () => {
@@ -246,7 +287,19 @@ export function useUpdateTrancheStatus() {
       settlementId: string;
       tranche: 1 | 2;
       newStatus: string;
+      employeeId?: string;
     }) => {
+      // Fetch current status for audit logging
+      const { data: current } = await supabase
+        .from('fnf_settlements' as any)
+        .select('tranche1_status, tranche2_status')
+        .eq('id', params.settlementId)
+        .single();
+
+      const oldStatus = current
+        ? (params.tranche === 1 ? (current as any).tranche1_status : (current as any).tranche2_status)
+        : 'unknown';
+
       const statusKey: TrancheKey = params.tranche === 1 ? 'tranche1_status' : 'tranche2_status';
       const finalizedKey = params.tranche === 1 ? 'tranche1_finalized_at' : 'tranche2_finalized_at';
 
@@ -264,6 +317,16 @@ export function useUpdateTrancheStatus() {
         .eq('id', params.settlementId);
 
       if (error) throw error;
+
+      // Audit log
+      await logFnfEvent({
+        settlementId: params.settlementId,
+        employeeId: params.employeeId,
+        tranche: params.tranche,
+        action: 'fnf_status_changed',
+        oldStatus,
+        newStatus: params.newStatus,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [QUERY_KEY] });
