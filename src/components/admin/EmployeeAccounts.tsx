@@ -420,59 +420,115 @@ export function EmployeeAccounts() {
   const withAccounts = activeEmployees?.filter(e => e.auth_user_id).length || 0;
   const withoutAccounts = totalActive - withAccounts;
 
+  // Shared column definition for exports
+  const employeeExportColumns: ColumnDef<Employee>[] = [
+    { key: "employee_id", header: "Employee ID" },
+    { key: "full_name", header: "Name" },
+    { key: "email", header: "Email" },
+    { key: "designation", header: "Designation" },
+    { key: "sales_function", header: "Sales Function" },
+    { key: "department", header: "Department" },
+    { key: "region", header: "Region" },
+    { key: "business_unit", header: "Business Unit" },
+    { key: "group_name", header: "Group" },
+    { key: "country", header: "Country" },
+    { key: "city", header: "City" },
+    { key: "date_of_hire", header: "Date of Joining" },
+    { key: "departure_date", header: "Last Working Day" },
+    { key: "local_currency", header: "Local Currency" },
+    { key: "manager_employee_id", header: "Manager ID" },
+    { key: "employee_role", header: "Employee Role" },
+    { key: "incentive_type", header: "Incentive Type" },
+    { key: "target_bonus_percent", header: "Target Bonus %" },
+    { key: "tfp_local_currency", header: "TFP (Local)" },
+    { key: "tvp_local_currency", header: "TVP (Local)" },
+    { key: "ote_local_currency", header: "OTE (Local)" },
+    { key: "tfp_usd", header: "TFP (USD)" },
+    { key: "tvp_usd", header: "TVP (USD)" },
+    { key: "ote_usd", header: "OTE (USD)" },
+    { key: "auth_user_id", header: "Account Status", getValue: (row) => row.auth_user_id ? "Active" : "Pending" },
+    { key: "is_active", header: "Active Status", getValue: (row) => row.is_active ? "Active" : "Inactive" },
+  ];
+
+  const handleCardExport = (list: Employee[], filename: string, label: string) => {
+    if (!list.length) {
+      toast.info(`No employees in this category`);
+      return;
+    }
+    const blob = generateXLSX(list, employeeExportColumns, "Employees");
+    downloadXLSX(blob, `${filename}.xlsx`);
+    toast.success(`${label} exported (${list.length} records)`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-4">
-        <Card>
+        <Card
+          className="cursor-pointer transition-shadow hover:shadow-md"
+          onClick={() => handleCardExport(activeEmployees, "active_employees", "Active employees")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <Users className="h-6 w-6" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Active Employees</p>
                 <p className="text-2xl font-semibold text-foreground">{totalActive}</p>
               </div>
+              <Download className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer transition-shadow hover:shadow-md"
+          onClick={() => handleCardExport(activeEmployees.filter(e => e.auth_user_id), "employees_with_accounts", "Employees with accounts")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-md bg-success/10 text-success">
                 <CheckCircle className="h-6 w-6" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">With Accounts</p>
                 <p className="text-2xl font-semibold text-foreground">{withAccounts}</p>
               </div>
+              <Download className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer transition-shadow hover:shadow-md"
+          onClick={() => handleCardExport(activeEmployees.filter(e => !e.auth_user_id), "employees_pending_accounts", "Pending accounts")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-md bg-warning/10 text-warning">
                 <Clock className="h-6 w-6" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Pending Accounts</p>
                 <p className="text-2xl font-semibold text-foreground">{withoutAccounts}</p>
               </div>
+              <Download className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer transition-shadow hover:shadow-md"
+          onClick={() => handleCardExport(inactiveEmployees, "inactive_employees", "Inactive employees")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted text-muted-foreground">
                 <UserX className="h-6 w-6" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Inactive</p>
                 <p className="text-2xl font-semibold text-foreground">{totalInactive}</p>
               </div>
+              <Download className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -492,35 +548,7 @@ export function EmployeeAccounts() {
                   toast.info("No employees to export");
                   return;
                 }
-                const columns: ColumnDef<Employee>[] = [
-                  { key: "employee_id", header: "Employee ID" },
-                  { key: "full_name", header: "Name" },
-                  { key: "email", header: "Email" },
-                  { key: "designation", header: "Designation" },
-                  { key: "sales_function", header: "Sales Function" },
-                  { key: "department", header: "Department" },
-                  { key: "region", header: "Region" },
-                  { key: "business_unit", header: "Business Unit" },
-                  { key: "group_name", header: "Group" },
-                  { key: "country", header: "Country" },
-                  { key: "city", header: "City" },
-                  { key: "date_of_hire", header: "Date of Joining" },
-                  { key: "departure_date", header: "Last Working Day" },
-                  { key: "local_currency", header: "Local Currency" },
-                  { key: "manager_employee_id", header: "Manager ID" },
-                  { key: "employee_role", header: "Employee Role" },
-                  { key: "incentive_type", header: "Incentive Type" },
-                  { key: "target_bonus_percent", header: "Target Bonus %" },
-                  { key: "tfp_local_currency", header: "TFP (Local)" },
-                  { key: "tvp_local_currency", header: "TVP (Local)" },
-                  { key: "ote_local_currency", header: "OTE (Local)" },
-                  { key: "tfp_usd", header: "TFP (USD)" },
-                  { key: "tvp_usd", header: "TVP (USD)" },
-                  { key: "ote_usd", header: "OTE (USD)" },
-                  { key: "auth_user_id", header: "Account Status", getValue: (row) => row.auth_user_id ? "Active" : "Pending" },
-                  { key: "is_active", header: "Active Status", getValue: (row) => row.is_active ? "Active" : "Inactive" },
-                ];
-                const blob = generateXLSX(filteredEmployees, columns, "Employees");
+                const blob = generateXLSX(filteredEmployees, employeeExportColumns, "Employees");
                 downloadXLSX(blob, `employees_${activeTab}.xlsx`);
                 toast.success("Employee list exported");
               }}>
