@@ -1,81 +1,92 @@
 
 
-## Add Plan Assignment Visibility to Payout Statements and Payout Run Details
+## Blended Pro-Rata Target Bonus for Mid-Year Compensation Changes
 
 ### Problem
 
-When an employee has mid-year compensation changes (split assignments), the Payout Statement and Payout Run Detail views show generic labels like "Variable Pay" without indicating which plan or target bonus was used for the calculation. This makes it impossible to verify that the correct plan was applied for a given month.
+Currently, the payout engine uses the **active assignment's** `target_bonus_usd` directly for each month. For mid-year changes, this means:
+- Jan-May: uses $20,000 (Assignment A's annual target)
+- Jun-Dec: uses $24,000 (Assignment B's annual target)
 
-### Gaps to Fix
+The user's requirement is different: after a mid-year change, the engine should compute a **blended pro-rata annual target** based on the number of days each assignment covers in the calendar year, and use that blended figure from the change date onward.
 
-| Component | Gap | Fix |
-|-----------|-----|-----|
-| Payout Statement (hook) | VP items show hardcoded `metricName: 'Variable Pay'` with no plan context | Join `monthly_payouts.plan_id` to `comp_plans.name` and include plan name + target bonus |
-| Payout Statement (UI) | Statement header shows no plan info | Add "Plan: [Plan Name]" and "Target Bonus: $X" to the header card |
-| Payout Run Detail (hook) | `EmployeePayoutSummary` has no plan name field | Add `planName` field by joining `plan_id` to `comp_plans` |
-| Payout Run Detail (UI) | Employee table has no Plan column | Add a "Plan" column showing which plan was active for that month |
-| Dashboard | No blended target summary for multi-assignment years | Add a small info section when multiple assignments exist, showing each period and its OTE |
+### Required Logic
 
----
+Given two assignments in a year:
+- Assignment A: $20,000 target, Jan 1 - May 31 (151 days)
+- Assignment B: $24,000 target, Jun 1 - Dec 31 (214 days)
+
+```text
+Blended Target = (20000 x 151/365) + (24000 x 214/365)
+               = 8,274 + 14,071
+               = 22,345 (approx)
+```
+
+- **Before the change (Jan-May)**: Use $20,000 (original annual target, unchanged)
+- **After the change (Jun-Dec)**: Use $22,345 (blended pro-rata target)
+
+This ensures that the YTD VP calculation after a mid-year hike reflects the weighted combination of both assignment periods.
 
 ### Changes
 
-#### 1. `src/hooks/usePayoutStatement.ts` -- Add plan context to statement data
+#### 1. `src/lib/payoutEngine.ts` -- Add blended target bonus calculation
 
-- Add `planName` and `targetBonusUsd` fields to the `PayoutStatementData` interface
-- In `fetchPayoutStatementData()`, after fetching `monthly_payouts`, extract the `plan_id` from the first payout record
-- Join to `comp_plans` to get the plan name
-- Join to `user_targets` to get the `target_bonus_usd` for the active assignment in that month
-- Set `metricName` on VP items to the actual plan metric name (or plan name) instead of hardcoded `'Variable Pay'`
+In `calculateMonthlyPayout()`, after fetching the active `user_targets` assignment (line 968-978):
 
-#### 2. `src/components/reports/PayoutStatement.tsx` -- Show plan in header
+- **Fetch ALL assignments** for this employee in the fiscal year (not just the active one)
+- If there is only one assignment, use its `target_bonus_usd` as-is (no change to current behavior)
+- If there are multiple assignments:
+  - For each assignment, compute `days = daysInPeriod(max(startDate, Jan1) to min(endDate, Dec31))`
+  - Compute `blendedTarget = sum(assignment.target_bonus_usd x days / 365)` across all assignments
+  - Determine if the current month falls within the **first** assignment or a later one
+  - If current month is in the first assignment: use that assignment's original `target_bonus_usd`
+  - If current month is in a subsequent assignment: use the `blendedTarget`
 
-- In `StatementHeader`, display the plan name and target bonus below the employee name/period line
-- Example: "Plan: Hunter FY2026 | Target Bonus: $25,000"
+This will be implemented as a new helper function `calculateBlendedTargetBonus()`.
 
-#### 3. `src/hooks/useMonthlyPayouts.ts` -- Add plan name to employee breakdown
+#### 2. `src/lib/compensation.ts` -- Add blended pro-rata utility
 
-- In `useEmployeePayoutBreakdown()`, after fetching payouts, collect unique `plan_id` values
-- Batch-fetch plan names from `comp_plans`
-- Add `planName` to `EmployeePayoutSummary` interface, populated from the first VP payout's `plan_id`
+Add a new exported function `calculateBlendedProRata()` that:
+- Takes an array of `{ targetBonusUsd, startDate, endDate }` segments
+- Takes the current month being calculated
+- Returns the appropriate target bonus to use (original or blended)
+- Uses actual calendar days for precision (not months/12)
 
-#### 4. `src/components/admin/PayoutRunDetail.tsx` -- Add Plan column
+This utility can also be reused by the Dashboard and Payout Statement views.
 
-- Add a "Plan" column to the Employee Payouts table between Employee and Currency
-- Display the plan name from the enriched `EmployeePayoutSummary`
-- Add `planName` to CSV and XLSX exports
+#### 3. `src/hooks/useCurrentUserCompensation.ts` -- Use blended target in dashboard
 
-#### 5. `src/hooks/useDashboardPayoutSummary.ts` -- Add blended target info
+Update the dashboard calculation hook to use the same blended logic when computing live VP estimates, so the Dashboard preview matches finalized payout run results.
 
-- When fetching YTD payout summary, also query `user_targets` for the current employee in the fiscal year
-- If multiple assignments exist, return an array of `{ planName, startDate, endDate, targetBonusUsd }` segments
+#### 4. `src/hooks/useDashboardPayoutSummary.ts` -- Show blended target in segments
 
-#### 6. `src/pages/Dashboard.tsx` -- Show blended target info
+Update the `AssignmentSegment` interface to include a `blendedTargetBonusUsd` field so the Dashboard can display both the original assignment target and the effective blended target.
 
-- When `payoutSummary` contains multiple assignment segments, render a small info card below the summary cards showing:
+#### 5. `src/components/reports/PayoutStatement.tsx` -- Show blended target
 
-```text
-Assignment Periods:
-  Jan - Jun 2026: Hunter FY2026 (OTE $100,000 | Target Bonus $20,000)
-  Jul - Dec 2026: Hunter FY2026 (OTE $120,000 | Target Bonus $24,000)
-```
-
----
+When displaying the target bonus in the statement header, show the blended pro-rata target when applicable (with a note explaining it is blended).
 
 ### Technical Details
 
-**Data flow**: `monthly_payouts.plan_id` (UUID) already stores which plan was used for each payout line. The fix is purely about joining this to `comp_plans.name` and surfacing it in the UI.
+**New helper function** in `src/lib/compensation.ts`:
+
+```text
+calculateBlendedProRata(segments, currentMonth, fiscalYear)
+  -> For each segment, clamp dates to fiscal year boundaries
+  -> Compute days per segment
+  -> blended = sum(target x days / totalDaysInYear)
+  -> If currentMonth is in first segment: return segment's original target
+  -> Else: return blended target
+```
 
 **Files to modify**:
 
-| File | Action |
+| File | Change |
 |------|--------|
-| `src/hooks/usePayoutStatement.ts` | Add plan_id lookup, enrich VP items with plan name |
-| `src/components/reports/PayoutStatement.tsx` | Show plan name + target bonus in header |
-| `src/hooks/useMonthlyPayouts.ts` | Add planName to EmployeePayoutSummary |
-| `src/components/admin/PayoutRunDetail.tsx` | Add Plan column to table + exports |
-| `src/hooks/useDashboardPayoutSummary.ts` | Add multi-assignment segment data |
-| `src/pages/Dashboard.tsx` | Render blended target info card |
+| `src/lib/compensation.ts` | Add `calculateBlendedProRata()` utility function |
+| `src/lib/payoutEngine.ts` | Fetch all assignments in fiscal year, compute blended target, use it for VP calculation |
+| `src/hooks/useCurrentUserCompensation.ts` | Apply blended logic for live dashboard estimates |
+| `src/hooks/useDashboardPayoutSummary.ts` | Add `blendedTargetBonusUsd` to `AssignmentSegment` |
+| `src/components/reports/PayoutStatement.tsx` | Display blended target when applicable |
 
-No database changes are needed -- all required data (`plan_id` on `monthly_payouts`, plan names on `comp_plans`, assignments on `user_targets`) already exists.
-
+**No database changes required** -- all data already exists in `user_targets`.
