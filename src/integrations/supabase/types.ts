@@ -1771,6 +1771,7 @@ export type Database = {
           created_at: string | null
           id: string
           is_active: boolean | null
+          min_gp_margin_pct: number | null
           min_threshold_usd: number | null
           payout_on_booking_pct: number | null
           payout_on_collection_pct: number | null
@@ -1783,6 +1784,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          min_gp_margin_pct?: number | null
           min_threshold_usd?: number | null
           payout_on_booking_pct?: number | null
           payout_on_collection_pct?: number | null
@@ -1795,6 +1797,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          min_gp_margin_pct?: number | null
           min_threshold_usd?: number | null
           payout_on_booking_pct?: number | null
           payout_on_collection_pct?: number | null

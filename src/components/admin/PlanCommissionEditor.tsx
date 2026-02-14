@@ -177,6 +177,7 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
                   <TableHead>Commission Type</TableHead>
                   <TableHead className="text-center">Rate (%)</TableHead>
                   <TableHead className="text-center">Min Threshold</TableHead>
+                  <TableHead className="text-center">Min GP Margin</TableHead>
                   <TableHead className="text-center">Payout Split</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -198,6 +199,11 @@ export function PlanCommissionEditor({ planId }: PlanCommissionEditorProps) {
                     </TableCell>
                     <TableCell className="text-center">
                       {formatCurrency(commission.min_threshold_usd)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {(commission as any).min_gp_margin_pct != null
+                        ? `${(commission as any).min_gp_margin_pct}%`
+                        : "-"}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex flex-col items-center text-xs">
