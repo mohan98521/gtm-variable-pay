@@ -154,10 +154,10 @@ export function BulkUpload() {
           target_bonus_percent: row.target_bonus_percent ? parseFloat(row.target_bonus_percent) : null,
           tfp_local_currency: row.tfp_local_currency ? parseFloat(row.tfp_local_currency) : null,
           tvp_local_currency: row.tvp_local_currency ? parseFloat(row.tvp_local_currency) : null,
-          ote_local_currency: row.ote_local_currency ? parseFloat(row.ote_local_currency) : null,
+          ote_local_currency: ((row.tfp_local_currency ? parseFloat(row.tfp_local_currency) : 0) + (row.tvp_local_currency ? parseFloat(row.tvp_local_currency) : 0)) || null,
           tfp_usd: row.tfp_usd ? parseFloat(row.tfp_usd) : null,
           tvp_usd: row.tvp_usd ? parseFloat(row.tvp_usd) : null,
-          ote_usd: row.ote_usd ? parseFloat(row.ote_usd) : null,
+          ote_usd: ((row.tfp_usd ? parseFloat(row.tfp_usd) : 0) + (row.tvp_usd ? parseFloat(row.tvp_usd) : 0)) || null,
         };
 
         // Check if employee exists

@@ -12,6 +12,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -185,6 +186,26 @@ export function EmployeeFormDialog({
     },
   });
 
+  // Auto-calculate OTE = TFP + TVP (Local Currency)
+  const watchTfpLocal = form.watch("tfp_local_currency");
+  const watchTvpLocal = form.watch("tvp_local_currency");
+  useEffect(() => {
+    const tfp = watchTfpLocal ?? 0;
+    const tvp = watchTvpLocal ?? 0;
+    const ote = tfp + tvp;
+    form.setValue("ote_local_currency", ote || null, { shouldDirty: false });
+  }, [watchTfpLocal, watchTvpLocal, form]);
+
+  // Auto-calculate OTE = TFP + TVP (USD)
+  const watchTfpUsd = form.watch("tfp_usd");
+  const watchTvpUsd = form.watch("tvp_usd");
+  useEffect(() => {
+    const tfp = watchTfpUsd ?? 0;
+    const tvp = watchTvpUsd ?? 0;
+    const ote = tfp + tvp;
+    form.setValue("ote_usd", ote || null, { shouldDirty: false });
+  }, [watchTfpUsd, watchTvpUsd, form]);
+
   useEffect(() => {
     if (employee) {
       form.reset({
@@ -209,10 +230,10 @@ export function EmployeeFormDialog({
         target_bonus_percent: employee.target_bonus_percent,
         tfp_local_currency: employee.tfp_local_currency,
         tvp_local_currency: employee.tvp_local_currency,
-        ote_local_currency: employee.ote_local_currency,
+        ote_local_currency: (employee.tfp_local_currency ?? 0) + (employee.tvp_local_currency ?? 0) || null,
         tfp_usd: employee.tfp_usd,
         tvp_usd: employee.tvp_usd,
-        ote_usd: employee.ote_usd,
+        ote_usd: (employee.tfp_usd ?? 0) + (employee.tvp_usd ?? 0) || null,
       });
     } else {
       form.reset({
@@ -796,9 +817,11 @@ export function EmployeeFormDialog({
                             placeholder="100000" 
                             {...field} 
                             value={field.value ?? ""} 
-                            onChange={e => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                            readOnly
+                            className="bg-muted/50"
                           />
                         </FormControl>
+                        <FormDescription className="text-xs">Auto-calculated: TFP + TVP</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -856,9 +879,11 @@ export function EmployeeFormDialog({
                             placeholder="100000" 
                             {...field} 
                             value={field.value ?? ""} 
-                            onChange={e => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                            readOnly
+                            className="bg-muted/50"
                           />
                         </FormControl>
+                        <FormDescription className="text-xs">Auto-calculated: TFP + TVP</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

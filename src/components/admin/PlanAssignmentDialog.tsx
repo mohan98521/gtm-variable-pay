@@ -133,12 +133,34 @@ export function PlanAssignmentDialog({
     },
   });
 
+  // Auto-calculate OTE = TFP + TVP (Local Currency)
+  const watchTfpLocal = form.watch("tfp_local_currency");
+  const watchTvpLocal = form.watch("tvp_local_currency");
+  useEffect(() => {
+    const tfp = watchTfpLocal ?? 0;
+    const tvp = watchTvpLocal ?? 0;
+    form.setValue("ote_local_currency", tfp + tvp, { shouldDirty: false });
+  }, [watchTfpLocal, watchTvpLocal, form]);
+
+  // Auto-calculate OTE = TFP + Target Bonus (USD)
+  const watchTfpUsd = form.watch("tfp_usd");
+  const watchTargetBonusUsd = form.watch("target_bonus_usd");
+  useEffect(() => {
+    const tfp = watchTfpUsd ?? 0;
+    const bonus = watchTargetBonusUsd ?? 0;
+    form.setValue("ote_usd", tfp + bonus, { shouldDirty: false });
+  }, [watchTfpUsd, watchTargetBonusUsd, form]);
+
   // Populate form when employee or existing assignment changes
   useEffect(() => {
     if (!open) return;
 
     if (existingAssignment) {
       // Editing mode - use existing assignment values
+      const tfpLocal = existingAssignment.tfp_local_currency ?? 0;
+      const tvpLocal = 0; // tvp_local not stored in assignment, will be recalculated
+      const tfpUsd = existingAssignment.tfp_usd ?? 0;
+      const bonusUsd = existingAssignment.target_bonus_usd ?? 0;
       form.reset({
         plan_id: existingAssignment.plan_id,
         effective_start_date: new Date(existingAssignment.effective_start_date),
@@ -149,18 +171,21 @@ export function PlanAssignmentDialog({
         ote_local_currency: existingAssignment.ote_local_currency ?? 0,
         tfp_usd: existingAssignment.tfp_usd ?? 0,
         target_bonus_usd: existingAssignment.target_bonus_usd ?? 0,
-        ote_usd: existingAssignment.ote_usd ?? 0,
+        ote_usd: tfpUsd + bonusUsd,
       });
     } else if (employee) {
       // Creating mode - populate from employee data
-      // Use employee's date of hire if available, otherwise default to Jan 1
       const startDate = employee.date_of_hire 
         ? new Date(employee.date_of_hire) 
         : new Date(selectedYear, 0, 1);
-      // Use employee's departure date if available, otherwise default to Dec 31
       const endDate = employee.departure_date 
         ? new Date(employee.departure_date) 
         : new Date(selectedYear, 11, 31);
+
+      const tfpLocal = employee.tfp_local_currency ?? 0;
+      const tvpLocal = employee.tvp_local_currency ?? 0;
+      const tfpUsd = employee.tfp_usd ?? 0;
+      const tvpUsd = employee.tvp_usd ?? 0;
 
       form.reset({
         plan_id: preselectedPlanId || "",
@@ -170,10 +195,10 @@ export function PlanAssignmentDialog({
         tfp_local_currency: employee.tfp_local_currency ?? 0,
         target_bonus_percent: employee.target_bonus_percent ?? 0,
         tvp_local_currency: employee.tvp_local_currency ?? 0,
-        ote_local_currency: employee.ote_local_currency ?? 0,
+        ote_local_currency: tfpLocal + tvpLocal,
         tfp_usd: employee.tfp_usd ?? 0,
         target_bonus_usd: employee.tvp_usd ?? 0,
-        ote_usd: employee.ote_usd ?? 0,
+        ote_usd: tfpUsd + tvpUsd,
       });
 
       setHasNoAuthAccount(!employee.auth_user_id);
@@ -517,8 +542,9 @@ export function PlanAssignmentDialog({
                     <FormItem>
                       <FormLabel>OTE (Local)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" {...field} />
+                        <Input type="number" step="0.01" {...field} readOnly className="bg-muted/50" />
                       </FormControl>
+                      <FormDescription className="text-xs">Auto-calculated: TFP + TVP</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -565,8 +591,9 @@ export function PlanAssignmentDialog({
                     <FormItem>
                       <FormLabel>OTE (USD)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" {...field} />
+                        <Input type="number" step="0.01" {...field} readOnly className="bg-muted/50" />
                       </FormControl>
+                      <FormDescription className="text-xs">Auto-calculated: TFP + Target Bonus</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
