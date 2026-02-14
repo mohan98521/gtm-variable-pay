@@ -25,6 +25,7 @@ import {
 import {
   Plus,
   Upload,
+  Download,
   Search,
   Users,
   DollarSign,
@@ -34,6 +35,7 @@ import {
   Loader2,
   Target,
 } from "lucide-react";
+import { generateXLSX, downloadXLSX, type ColumnDef } from "@/lib/xlsxExport";
 import {
   usePerformanceTargets,
   useDeletePerformanceTarget,
@@ -154,6 +156,22 @@ export function PerformanceTargetsManagement() {
     setShowFormDialog(true);
   };
 
+  const handleExport = () => {
+    if (!filteredTargets.length) return;
+    const columns: ColumnDef<PerformanceTargetRow>[] = [
+      { key: "full_name", header: "Employee Name" },
+      { key: "employee_id", header: "Employee ID" },
+      { key: "metric_type", header: "Metric Type" },
+      { key: "q1", header: "Q1 (USD)" },
+      { key: "q2", header: "Q2 (USD)" },
+      { key: "q3", header: "Q3 (USD)" },
+      { key: "q4", header: "Q4 (USD)" },
+      { key: "annual", header: "Annual (USD)" },
+    ];
+    const blob = generateXLSX(filteredTargets, columns, "Performance Targets");
+    downloadXLSX(blob, `performance_targets_${selectedYear}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
@@ -218,6 +236,10 @@ export function PerformanceTargetsManagement() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={handleExport} disabled={!filteredTargets.length}>
+                <Download className="h-4 w-4 mr-1.5" />
+                Export
+              </Button>
               <Button variant="outline" onClick={() => setShowBulkUpload(true)}>
                 <Upload className="h-4 w-4 mr-1.5" />
                 Bulk Upload
