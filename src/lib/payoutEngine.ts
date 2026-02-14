@@ -418,7 +418,7 @@ async function calculateEmployeeVariablePay(
   }
 
   const empId = ctx.employee.employee_id;
-  const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`;
+  const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId},solution_architect_employee_id.eq.${empId}`;
 
   let ytdVpUsd = 0;
   let ytdBookingUsd = 0;
@@ -1084,7 +1084,7 @@ export async function calculateMonthlyPayout(
   
   if (nrrOtePct > 0) {
     const empId = employee.employee_id;
-    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`;
+    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId},solution_architect_employee_id.eq.${empId}`;
     
     const { data: nrrDeals } = await supabase
       .from('deals')
@@ -1137,7 +1137,7 @@ export async function calculateMonthlyPayout(
   
   if (planSpiffs && planSpiffs.length > 0) {
     const empId = employee.employee_id;
-    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`;
+    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId},solution_architect_employee_id.eq.${empId}`;
     
     const { data: spiffDeals } = await supabase
       .from('deals')

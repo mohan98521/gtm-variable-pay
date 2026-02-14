@@ -69,8 +69,8 @@ const dealFormSchema = z.object({
   sales_rep_employee_id: z.string().optional(),
   sales_head_employee_id: z.string().optional(),
   sales_engineering_employee_id: z.string().optional(),
-  sales_engineering_head_employee_id: z.string().optional(),
   solution_manager_employee_id: z.string().optional(),
+  solution_architect_employee_id: z.string().optional(),
   linked_to_impl: z.boolean().default(false),
   eligible_for_perpetual_incentive: z.boolean().default(false),
   status: z.string().default("draft"),
@@ -167,8 +167,8 @@ export function DealFormDialog({
       sales_rep_employee_id: "",
       sales_head_employee_id: "",
       sales_engineering_employee_id: "",
-      sales_engineering_head_employee_id: "",
       solution_manager_employee_id: "",
+      solution_architect_employee_id: "",
       linked_to_impl: false,
       eligible_for_perpetual_incentive: false,
       status: "draft",
@@ -207,8 +207,8 @@ export function DealFormDialog({
           sales_rep_employee_id: deal.sales_rep_employee_id || "",
           sales_head_employee_id: deal.sales_head_employee_id || "",
           sales_engineering_employee_id: deal.sales_engineering_employee_id || "",
-          sales_engineering_head_employee_id: deal.sales_engineering_head_employee_id || "",
           solution_manager_employee_id: (deal as any).solution_manager_employee_id || "",
+          solution_architect_employee_id: (deal as any).solution_architect_employee_id || "",
           linked_to_impl: deal.linked_to_impl || false,
           eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive || false,
           status: deal.status,
@@ -262,8 +262,8 @@ export function DealFormDialog({
           sales_rep_employee_id: "",
           sales_head_employee_id: "",
           sales_engineering_employee_id: "",
-          sales_engineering_head_employee_id: "",
           solution_manager_employee_id: "",
+          solution_architect_employee_id: "",
           linked_to_impl: false,
           eligible_for_perpetual_incentive: false,
           status: "draft",
@@ -283,8 +283,8 @@ export function DealFormDialog({
     const salesRepName = getEmployeeName(values.sales_rep_employee_id);
     const salesHeadName = getEmployeeName(values.sales_head_employee_id);
     const salesEngineeringName = seTeamMode ? "" : getEmployeeName(values.sales_engineering_employee_id);
-    const salesEngineeringHeadName = getEmployeeName(values.sales_engineering_head_employee_id);
     const solutionManagerName = smTeamMode ? "" : getEmployeeName(values.solution_manager_employee_id);
+    const solutionArchitectName = getEmployeeName(values.solution_architect_employee_id);
 
     // Build team assignment overrides
     const teamOverrides: Record<string, any> = {};
@@ -310,7 +310,8 @@ export function DealFormDialog({
         sales_rep_name: salesRepName || undefined,
         sales_head_name: salesHeadName || undefined,
         sales_engineering_name: salesEngineeringName || undefined,
-        sales_engineering_head_name: salesEngineeringHeadName || undefined,
+        solution_architect_employee_id: values.solution_architect_employee_id || undefined,
+        solution_architect_name: solutionArchitectName || undefined,
         solution_manager_employee_id: smTeamMode ? undefined : (values.solution_manager_employee_id || undefined),
         solution_manager_name: solutionManagerName || undefined,
         participants,
@@ -342,8 +343,8 @@ export function DealFormDialog({
         sales_head_name: salesHeadName || undefined,
         sales_engineering_employee_id: seTeamMode ? undefined : (values.sales_engineering_employee_id || undefined),
         sales_engineering_name: salesEngineeringName || undefined,
-        sales_engineering_head_employee_id: values.sales_engineering_head_employee_id || undefined,
-        sales_engineering_head_name: salesEngineeringHeadName || undefined,
+        solution_architect_employee_id: values.solution_architect_employee_id || undefined,
+        solution_architect_name: solutionArchitectName || undefined,
         solution_manager_employee_id: smTeamMode ? undefined : (values.solution_manager_employee_id || undefined),
         solution_manager_name: solutionManagerName || undefined,
         linked_to_impl: values.linked_to_impl,
@@ -816,12 +817,13 @@ export function DealFormDialog({
                     />
                   )}
                 </div>
+                {/* Solution Architect ID */}
                 <FormField
                   control={form.control}
-                  name="sales_engineering_head_employee_id"
+                  name="solution_architect_employee_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Sales Engineering Head</FormLabel>
+                      <FormLabel>Solution Architect</FormLabel>
                       <FormControl>
                         <SearchableSelect
                           value={field.value || "_none"}

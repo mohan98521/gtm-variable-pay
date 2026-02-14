@@ -35,6 +35,7 @@ const PARTICIPANT_ROLES = [
   'product_specialist_head_employee_id',
   'solution_manager_employee_id',
   'solution_manager_head_employee_id',
+  'solution_architect_employee_id',
 ] as const;
 
 export interface TeamMemberCompensation {
@@ -210,7 +211,8 @@ export function useTeamCompensation() {
           product_specialist_employee_id,
           product_specialist_head_employee_id,
           solution_manager_employee_id,
-          solution_manager_head_employee_id
+          solution_manager_head_employee_id,
+          solution_architect_employee_id
         `)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);

@@ -28,6 +28,7 @@ const PARTICIPANT_ROLES = [
   "product_specialist_head_employee_id",
   "solution_manager_employee_id",
   "solution_manager_head_employee_id",
+  "solution_architect_employee_id",
 ] as const;
 
 // Roles that can view all data
@@ -239,7 +240,7 @@ export function useDealVariablePayAttribution() {
       
       const { data: deals, error: dealsError } = await supabase
         .from("deals")
-        .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id")
+        .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id, solution_architect_employee_id")
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
       

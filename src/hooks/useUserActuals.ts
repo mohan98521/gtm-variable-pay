@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 
-// All 8 participant role columns in the deals table
+// All participant role columns in the deals table
 const PARTICIPANT_ROLES = [
   'sales_rep_employee_id',
   'sales_head_employee_id',
@@ -12,6 +12,7 @@ const PARTICIPANT_ROLES = [
   'product_specialist_head_employee_id',
   'solution_manager_employee_id',
   'solution_manager_head_employee_id',
+  'solution_architect_employee_id',
 ] as const;
 
 /**
@@ -70,6 +71,7 @@ interface DealRow {
   product_specialist_head_employee_id: string | null;
   solution_manager_employee_id: string | null;
   solution_manager_head_employee_id: string | null;
+  solution_architect_employee_id: string | null;
 }
 
 /**
@@ -114,7 +116,8 @@ export function useUserActuals() {
           product_specialist_employee_id,
           product_specialist_head_employee_id,
           solution_manager_employee_id,
-          solution_manager_head_employee_id
+          solution_manager_head_employee_id,
+          solution_architect_employee_id
         `)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
@@ -220,7 +223,8 @@ export function useEmployeeActuals(employeeId: string | undefined, fiscalYear: n
           product_specialist_employee_id,
           product_specialist_head_employee_id,
           solution_manager_employee_id,
-          solution_manager_head_employee_id
+          solution_manager_head_employee_id,
+          solution_architect_employee_id
         `)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
