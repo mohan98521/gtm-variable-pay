@@ -47,8 +47,10 @@ import {
   LogIn,
   Target,
   Upload,
-  History
+  History,
+  Download
 } from "lucide-react";
+import { generateXLSX, downloadXLSX, type ColumnDef } from "@/lib/xlsxExport";
 import { EmployeeFormDialog, EmployeeFormData } from "./EmployeeFormDialog";
 import { PlanAssignmentDialog } from "./PlanAssignmentDialog";
 import { EmployeeAssignmentsPopover } from "./EmployeeAssignmentsPopover";
@@ -485,6 +487,46 @@ export function EmployeeAccounts() {
               <CardDescription>Add, edit, and manage employee records and authentication accounts</CardDescription>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={() => {
+                if (!filteredEmployees?.length) {
+                  toast.info("No employees to export");
+                  return;
+                }
+                const columns: ColumnDef<Employee>[] = [
+                  { key: "employee_id", header: "Employee ID" },
+                  { key: "full_name", header: "Name" },
+                  { key: "email", header: "Email" },
+                  { key: "designation", header: "Designation" },
+                  { key: "sales_function", header: "Sales Function" },
+                  { key: "department", header: "Department" },
+                  { key: "region", header: "Region" },
+                  { key: "business_unit", header: "Business Unit" },
+                  { key: "group_name", header: "Group" },
+                  { key: "country", header: "Country" },
+                  { key: "city", header: "City" },
+                  { key: "date_of_hire", header: "Date of Joining" },
+                  { key: "departure_date", header: "Last Working Day" },
+                  { key: "local_currency", header: "Local Currency" },
+                  { key: "manager_employee_id", header: "Manager ID" },
+                  { key: "employee_role", header: "Employee Role" },
+                  { key: "incentive_type", header: "Incentive Type" },
+                  { key: "target_bonus_percent", header: "Target Bonus %" },
+                  { key: "tfp_local_currency", header: "TFP (Local)" },
+                  { key: "tvp_local_currency", header: "TVP (Local)" },
+                  { key: "ote_local_currency", header: "OTE (Local)" },
+                  { key: "tfp_usd", header: "TFP (USD)" },
+                  { key: "tvp_usd", header: "TVP (USD)" },
+                  { key: "ote_usd", header: "OTE (USD)" },
+                  { key: "auth_user_id", header: "Account Status", getValue: (row) => row.auth_user_id ? "Active" : "Pending" },
+                  { key: "is_active", header: "Active Status", getValue: (row) => row.is_active ? "Active" : "Inactive" },
+                ];
+                const blob = generateXLSX(filteredEmployees, columns, "Employees");
+                downloadXLSX(blob, `employees_${activeTab}.xlsx`);
+                toast.success("Employee list exported");
+              }}>
+                <Download className="h-4 w-4 mr-1.5" />
+                Export
+              </Button>
               <Button variant="outline" onClick={() => setShowStaffDialog(true)}>
                 <UserPlus className="h-4 w-4 mr-1.5" />
                 Add Staff User
