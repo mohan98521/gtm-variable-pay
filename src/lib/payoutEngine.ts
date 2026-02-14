@@ -947,7 +947,14 @@ async function calculateYearEndReleases(
 }
 
 /**
- * Calculate full monthly payout for a single employee
+ * Calculate full monthly payout for a single employee.
+ * 
+ * MULTI-ASSIGNMENT NOTE: The incremental model naturally handles mid-year
+ * compensation changes. Each month fetches its own active assignment (via
+ * effective_start_date/end_date range match), so months under Assignment A
+ * use A's target_bonus_usd and months under Assignment B use B's. The
+ * incremental calculation (YTD VP - sum of prior finalized payouts) ensures
+ * no double-counting across assignment boundaries.
  */
 export async function calculateMonthlyPayout(
   employee: Employee,

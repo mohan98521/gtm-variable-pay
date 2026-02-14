@@ -46,13 +46,15 @@ import {
   Plus,
   LogIn,
   Target,
-  Upload
+  Upload,
+  History
 } from "lucide-react";
 import { EmployeeFormDialog, EmployeeFormData } from "./EmployeeFormDialog";
 import { PlanAssignmentDialog } from "./PlanAssignmentDialog";
 import { EmployeeAssignmentsPopover } from "./EmployeeAssignmentsPopover";
 import { StaffUserFormDialog } from "./StaffUserFormDialog";
 import { BulkUpload } from "./BulkUpload";
+import { EmployeeCompensationTimeline } from "./EmployeeCompensationTimeline";
 
 interface Employee {
   id: string;
@@ -97,6 +99,7 @@ export function EmployeeAccounts() {
   const [assigningEmployee, setAssigningEmployee] = useState<Employee | null>(null);
   const [showStaffDialog, setShowStaffDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("active");
+  const [viewHistoryEmployee, setViewHistoryEmployee] = useState<Employee | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch assignment counts for all employees
@@ -622,6 +625,10 @@ export function EmployeeAccounts() {
                               <Target className="h-4 w-4 mr-2" />
                               Assign to Plan
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setViewHistoryEmployee(employee)}>
+                              <History className="h-4 w-4 mr-2" />
+                              View History
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               onClick={() => setDeactivatingEmployee(employee)}
@@ -755,6 +762,17 @@ export function EmployeeAccounts() {
 
       {/* Staff User Dialog */}
       <StaffUserFormDialog open={showStaffDialog} onOpenChange={setShowStaffDialog} />
+
+      {/* Compensation History Timeline */}
+      {viewHistoryEmployee && (
+        <EmployeeCompensationTimeline
+          open={!!viewHistoryEmployee}
+          onOpenChange={(open) => !open && setViewHistoryEmployee(null)}
+          employeeId={viewHistoryEmployee.id}
+          employeeName={viewHistoryEmployee.full_name}
+          employeeUserId={viewHistoryEmployee.id}
+        />
+      )}
     </div>
   );
 }

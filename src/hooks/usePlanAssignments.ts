@@ -339,3 +339,88 @@ export function useEmployeeAssignmentCount(userId?: string) {
     enabled: !!userId,
   });
 }
+
+/**
+ * Split an existing assignment at an effective date.
+ * Ends the old assignment the day before, creates a new one from the effective date
+ * with updated compensation values.
+ */
+export function useSplitAssignment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      assignmentId,
+      effectiveDate,
+      newOteUsd,
+      newOteLocal,
+      newTfpUsd,
+      newTfpLocal,
+      newTargetBonusUsd,
+      newTargetBonusPercent,
+    }: {
+      assignmentId: string;
+      effectiveDate: string;
+      newOteUsd?: number | null;
+      newOteLocal?: number | null;
+      newTfpUsd?: number | null;
+      newTfpLocal?: number | null;
+      newTargetBonusUsd?: number | null;
+      newTargetBonusPercent?: number | null;
+    }) => {
+      // 1. Fetch the existing assignment
+      const { data: existing, error: fetchErr } = await supabase
+        .from("user_targets")
+        .select("*")
+        .eq("id", assignmentId)
+        .single();
+
+      if (fetchErr || !existing) throw new Error("Assignment not found");
+
+      // 2. Calculate day before effective date
+      const dayBefore = new Date(effectiveDate);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+      const dayBeforeStr = format(dayBefore, "yyyy-MM-dd");
+
+      // 3. End existing assignment on day before
+      const { error: updateErr } = await supabase
+        .from("user_targets")
+        .update({ effective_end_date: dayBeforeStr })
+        .eq("id", assignmentId);
+
+      if (updateErr) throw updateErr;
+
+      // 4. Create new assignment from effective date
+      const { data: newAssignment, error: insertErr } = await supabase
+        .from("user_targets")
+        .insert({
+          user_id: existing.user_id,
+          plan_id: existing.plan_id,
+          effective_start_date: effectiveDate,
+          effective_end_date: existing.effective_end_date,
+          target_value_annual: existing.target_value_annual,
+          currency: existing.currency,
+          target_bonus_percent: newTargetBonusPercent ?? existing.target_bonus_percent,
+          tfp_local_currency: newTfpLocal ?? existing.tfp_local_currency,
+          ote_local_currency: newOteLocal ?? existing.ote_local_currency,
+          tfp_usd: newTfpUsd ?? existing.tfp_usd,
+          target_bonus_usd: newTargetBonusUsd ?? existing.target_bonus_usd,
+          ote_usd: newOteUsd ?? existing.ote_usd,
+        })
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+      return { oldAssignment: existing, newAssignment };
+    },
+    onSuccess: (data) => {
+      toast.success("Assignment split successfully");
+      queryClient.invalidateQueries({ queryKey: ["employee_plan_assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["plan_assigned_employees"] });
+      queryClient.invalidateQueries({ queryKey: ["user_targets"] });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to split assignment", { description: error.message });
+    },
+  });
+}
