@@ -195,6 +195,11 @@ function StatementHeader({ statement }: { statement: PayoutStatementData }) {
                 {statement.targetBonusUsd != null && (
                   <> | Target Bonus: <span className="font-medium text-foreground">${statement.targetBonusUsd.toLocaleString()}</span></>
                 )}
+                {(statement as any).blendedTargetBonusUsd != null && (
+                  <> | Blended Pro-Rata Target: <span className="font-medium text-primary">${(statement as any).blendedTargetBonusUsd.toLocaleString()}</span>
+                    <span className="text-xs italic ml-1">(weighted by days across assignments)</span>
+                  </>
+                )}
               </p>
             )}
           </div>

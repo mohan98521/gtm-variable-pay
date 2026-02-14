@@ -9,6 +9,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
+import { calculateBlendedProRata, BlendedProRataSegment } from "@/lib/compensation";
 
 export interface AssignmentSegment {
   planName: string;
@@ -16,6 +17,7 @@ export interface AssignmentSegment {
   endDate: string;
   targetBonusUsd: number | null;
   oteUsd: number | null;
+  blendedTargetBonusUsd: number | null;
 }
 
 export interface DashboardPayoutSummary {
@@ -80,12 +82,25 @@ export function useDashboardPayoutSummary() {
             .in("id", planIds);
           (plans || []).forEach(p => planNameMap.set(p.id, p.name));
         }
+        // Calculate blended pro-rata if multiple assignments
+        let blendedTargetBonusUsd: number | null = null;
+        if (targets.length > 1) {
+          const segments: BlendedProRataSegment[] = targets.map(t => ({
+            targetBonusUsd: t.target_bonus_usd ?? 0,
+            startDate: t.effective_start_date,
+            endDate: t.effective_end_date,
+          }));
+          const blendedResult = calculateBlendedProRata(segments, `${selectedYear}-12`, selectedYear);
+          blendedTargetBonusUsd = blendedResult.blendedTargetBonusUsd;
+        }
+
         assignmentSegments = targets.map(t => ({
           planName: planNameMap.get(t.plan_id) || 'Unknown Plan',
           startDate: t.effective_start_date,
           endDate: t.effective_end_date,
           targetBonusUsd: t.target_bonus_usd,
           oteUsd: t.ote_usd,
+          blendedTargetBonusUsd: targets.length > 1 ? blendedTargetBonusUsd : null,
         }));
       }
 
