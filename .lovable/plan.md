@@ -1,36 +1,26 @@
 
 
-## Clean All Actuals Data for Fresh Manual Testing
+## Add Employee List Export
 
-### What Will Be Deleted
+### Overview
+Add an "Export" button to the Employee Accounts header that downloads the current employee list (active or inactive, filtered by search) as an Excel (.xlsx) file.
 
-All transactional/actuals data will be purged in the correct order (child tables first to respect foreign keys):
+### Changes
 
-1. **deal_variable_pay_attribution** (59 rows) -- depends on deals & monthly_payouts
-2. **clawback_ledger** (0 rows) -- depends on deals
-3. **deal_collections** (22 rows) -- depends on deals
-4. **deal_participants** (0 rows) -- depends on deals
-5. **monthly_payouts** (9 rows) -- depends on payout_runs
-6. **payout_adjustments** (0 rows) -- depends on payout_runs
-7. **payout_runs** (1 row)
-8. **deals** (22 rows)
-9. **closing_arr_actuals** (12 rows)
-10. **fnf_settlements** (0 rows)
+**File: `src/components/admin/EmployeeAccounts.tsx`**
 
-### What Will NOT Be Touched
-
-All configuration/setup data remains intact:
-- Compensation plans, commissions, metrics, spiffs
-- Employee profiles and plan assignments
-- Performance targets
-- Currencies and exchange rates
-- Roles and permissions
-
-### Navigation
-
-After cleanup, the Data Inputs page month selector will be set to **January** of the current fiscal year so you can start fresh.
+1. Import `Download` icon from lucide-react and the `generateXLSX`/`downloadXLSX` utilities from `src/lib/xlsxExport.ts`
+2. Add an "Export" button next to the existing action buttons (before "Add Staff User")
+3. The export will:
+   - Use the currently displayed (filtered) employee list
+   - Include columns: Employee ID, Name, Email, Designation, Sales Function, Department, Region, Business Unit, Group, Country, City, Date of Hire, Departure Date, Local Currency, Manager ID, Employee Role, Incentive Type, Target Bonus %, TFP (Local), TVP (Local), OTE (Local), TFP (USD), TVP (USD), OTE (USD), Account Status, Active Status
+   - File named `employees_active.xlsx` or `employees_inactive.xlsx` based on current tab
 
 ### Technical Details
 
-A single database migration will execute `TRUNCATE ... CASCADE` on the parent tables, which automatically clears dependent child rows in one operation. This is the safest and fastest approach.
+| Aspect | Detail |
+|--------|--------|
+| File modified | `src/components/admin/EmployeeAccounts.tsx` |
+| Utilities reused | `generateXLSX`, `downloadXLSX` from `src/lib/xlsxExport.ts` |
+| No database changes | Purely a frontend feature |
 
