@@ -787,6 +787,7 @@ export type Database = {
           sales_engineering_head_employee_id: string | null
           sales_engineering_head_name: string | null
           sales_engineering_name: string | null
+          sales_engineering_team_id: string | null
           sales_head_employee_id: string | null
           sales_head_name: string | null
           sales_rep_employee_id: string | null
@@ -795,6 +796,7 @@ export type Database = {
           solution_manager_head_employee_id: string | null
           solution_manager_head_name: string | null
           solution_manager_name: string | null
+          solution_manager_team_id: string | null
           status: string
           tcv_usd: number | null
           type_of_proposal: string
@@ -833,6 +835,7 @@ export type Database = {
           sales_engineering_head_employee_id?: string | null
           sales_engineering_head_name?: string | null
           sales_engineering_name?: string | null
+          sales_engineering_team_id?: string | null
           sales_head_employee_id?: string | null
           sales_head_name?: string | null
           sales_rep_employee_id?: string | null
@@ -841,6 +844,7 @@ export type Database = {
           solution_manager_head_employee_id?: string | null
           solution_manager_head_name?: string | null
           solution_manager_name?: string | null
+          solution_manager_team_id?: string | null
           status?: string
           tcv_usd?: number | null
           type_of_proposal: string
@@ -879,6 +883,7 @@ export type Database = {
           sales_engineering_head_employee_id?: string | null
           sales_engineering_head_name?: string | null
           sales_engineering_name?: string | null
+          sales_engineering_team_id?: string | null
           sales_head_employee_id?: string | null
           sales_head_name?: string | null
           sales_rep_employee_id?: string | null
@@ -887,12 +892,28 @@ export type Database = {
           solution_manager_head_employee_id?: string | null
           solution_manager_head_name?: string | null
           solution_manager_name?: string | null
+          solution_manager_team_id?: string | null
           status?: string
           tcv_usd?: number | null
           type_of_proposal?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "deals_sales_engineering_team_id_fkey"
+            columns: ["sales_engineering_team_id"]
+            isOneToOne: false
+            referencedRelation: "support_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_solution_manager_team_id_fkey"
+            columns: ["solution_manager_team_id"]
+            isOneToOne: false
+            referencedRelation: "support_teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employees: {
         Row: {
@@ -1893,6 +1914,74 @@ export type Database = {
           is_system_role?: boolean
           label?: string
           name?: string
+        }
+        Relationships: []
+      }
+      support_team_members: {
+        Row: {
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          employee_id: string
+          id: string
+          is_active: boolean
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_from: string
+          effective_to?: string | null
+          employee_id: string
+          id?: string
+          is_active?: boolean
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          employee_id?: string
+          id?: string
+          is_active?: boolean
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "support_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_teams: {
+        Row: {
+          bu: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          region: string | null
+          team_name: string
+          team_role: string
+        }
+        Insert: {
+          bu?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          region?: string | null
+          team_name: string
+          team_role: string
+        }
+        Update: {
+          bu?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          region?: string | null
+          team_name?: string
+          team_role?: string
         }
         Relationships: []
       }

@@ -14,6 +14,34 @@ const PARTICIPANT_ROLES = [
   'solution_manager_head_employee_id',
 ] as const;
 
+/**
+ * Get deal IDs where employee is credited via support team membership
+ */
+async function getTeamDealIds(employeeId: string, yearStart: string, yearEnd: string): Promise<string[]> {
+  const { data: memberships } = await supabase
+    .from('support_team_members' as any)
+    .select('team_id')
+    .eq('employee_id', employeeId)
+    .eq('is_active', true);
+
+  if (!memberships || memberships.length === 0) return [];
+
+  const teamIds = (memberships as any[]).map((m: any) => m.team_id);
+  const orParts = teamIds.flatMap((tid: string) => [
+    `sales_engineering_team_id.eq.${tid}`,
+    `solution_manager_team_id.eq.${tid}`,
+  ]);
+
+  const { data: deals } = await supabase
+    .from('deals')
+    .select('id')
+    .or(orParts.join(','))
+    .gte('month_year', yearStart)
+    .lte('month_year', yearEnd);
+
+  return (deals || []).map(d => d.id);
+}
+
 export interface MonthlyActual {
   month: string;
   value: number;
@@ -76,6 +104,7 @@ export function useUserActuals() {
       const { data: deals, error: dealsError } = await supabase
         .from("deals")
         .select(`
+          id,
           month_year,
           new_software_booking_arr_usd,
           sales_rep_employee_id,
@@ -92,14 +121,17 @@ export function useUserActuals() {
 
       if (dealsError) throw dealsError;
 
-      // Filter deals where current employee is ANY participant and aggregate
+      // Filter deals where current employee is ANY participant (direct or via team)
+      const teamDealIds = await getTeamDealIds(employeeId, fiscalYearStart, fiscalYearEnd);
+      const teamDealIdSet = new Set(teamDealIds);
+      
       const newBookingByMonth = new Map<string, number>();
       (deals || []).forEach((deal: DealRow) => {
-        // Check if current employee is ANY participant in this deal
-        const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
+        const isDirectParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
+        const isTeamParticipant = teamDealIdSet.has((deal as any).id);
         
-        if (isParticipant) {
-          const monthKey = deal.month_year?.substring(0, 7) || ""; // YYYY-MM
+        if (isDirectParticipant || isTeamParticipant) {
+          const monthKey = deal.month_year?.substring(0, 7) || "";
           const current = newBookingByMonth.get(monthKey) || 0;
           newBookingByMonth.set(monthKey, current + (deal.new_software_booking_arr_usd || 0));
         }
