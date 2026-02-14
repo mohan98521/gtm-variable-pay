@@ -117,26 +117,20 @@ describe('Section 3: Sales Head Plans', () => {
     expect(swP + clP).toBeCloseTo(38280, 0);
   });
 
-  it('3.2: SH Hunter Linear 115% → $46,000', () => {
-    // 115% falls clearly in 100-120% tier at 1.6x
+  it('3.2: SH Hunter Stepped_Accelerator 115% → $31,000', () => {
     const m = makeMetric({
-      logic_type: 'Linear',
       multiplier_grids: [grid(0, 100, 1.0), grid(100, 120, 1.6), grid(120, 999, 2.0)],
     });
-    // Target $3M, Actual $3.45M → 115%
-    const r = calculateMetricPayoutFromPlan(m, 3000000, 3450000, 25000);
-    // VP = 25000 * (115/100) * 1.6 = 46000
-    expect(r.payout).toBeCloseTo(46000, 0);
+    // Tier 1: 0-100% at 1.0x = $25,000, Tier 2: 100-115% at 1.6x = $6,000
+    expect(calculateMarginalPayout(115, 25000, m).payout).toBeCloseTo(31000, 0);
   });
 
-  it('3.2b: SH Hunter Linear at exactly 120% → 2.0x tier (boundary)', () => {
+  it('3.2b: SH Hunter Stepped_Accelerator 120% → $33,000', () => {
     const m = makeMetric({
-      logic_type: 'Linear',
       multiplier_grids: [grid(0, 100, 1.0), grid(100, 120, 1.6), grid(120, 999, 2.0)],
     });
-    const r = calculateMetricPayoutFromPlan(m, 3000000, 3600000, 25000);
-    // At exactly 120%, grid boundary puts it in 2.0x tier: 25000 * 1.2 * 2.0 = 60000
-    expect(r.payout).toBeCloseTo(60000, 0);
+    // Tier 1: 0-100% at 1.0x = $25,000, Tier 2: 100-120% at 1.6x = $8,000
+    expect(calculateMarginalPayout(120, 25000, m).payout).toBeCloseTo(33000, 0);
   });
 });
 
