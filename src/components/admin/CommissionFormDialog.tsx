@@ -42,6 +42,7 @@ const formSchema = z.object({
     .min(0, "Rate must be at least 0%")
     .max(100, "Rate cannot exceed 100%"),
   min_threshold_usd: z.coerce.number().nullable().optional(),
+  min_gp_margin_pct: z.coerce.number().nullable().optional(),
   is_active: z.boolean().default(true),
   payout_on_booking_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
   payout_on_collection_pct: z.coerce.number().min(0, "Min 0%").max(100, "Max 100%"),
@@ -87,6 +88,7 @@ export function CommissionFormDialog({
       custom_type_name: "",
       commission_rate_pct: 0,
       min_threshold_usd: null,
+      min_gp_margin_pct: null,
       is_active: true,
       payout_on_booking_pct: 70,
       payout_on_collection_pct: 25,
@@ -111,6 +113,7 @@ export function CommissionFormDialog({
           custom_type_name: isPredefined ? "" : commission.commission_type,
           commission_rate_pct: commission.commission_rate_pct,
           min_threshold_usd: commission.min_threshold_usd,
+          min_gp_margin_pct: (commission as any).min_gp_margin_pct ?? null,
           is_active: commission.is_active,
           payout_on_booking_pct: (commission as any).payout_on_booking_pct ?? 70,
           payout_on_collection_pct: (commission as any).payout_on_collection_pct ?? 25,
@@ -122,6 +125,7 @@ export function CommissionFormDialog({
           custom_type_name: "",
           commission_rate_pct: 0,
           min_threshold_usd: null,
+          min_gp_margin_pct: null,
           is_active: true,
           payout_on_booking_pct: 70,
           payout_on_collection_pct: 25,
@@ -319,6 +323,35 @@ export function CommissionFormDialog({
                   </FormControl>
                   <FormDescription>
                     Minimum deal value required to qualify for commission (e.g., $50,000 for Perpetual License).
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="min_gp_margin_pct"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Min GP Margin (%)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      placeholder="Optional"
+                      {...field}
+                      value={field.value ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        field.onChange(value === "" ? null : parseFloat(value));
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Only deals with GP margin ≥ this % qualify for commission. Leave empty for no restriction.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

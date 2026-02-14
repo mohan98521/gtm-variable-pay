@@ -8,6 +8,7 @@ export interface PlanCommission {
   payout_on_booking_pct?: number;
   payout_on_collection_pct?: number;
   payout_on_year_end_pct?: number;
+  min_gp_margin_pct?: number | null;
 }
 
 export interface CommissionCalculation {

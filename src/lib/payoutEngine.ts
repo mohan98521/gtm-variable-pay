@@ -673,7 +673,7 @@ async function calculateEmployeeCommissions(
   const empId = ctx.employee.employee_id;
   const { data: directDeals } = await supabase
     .from('deals')
-    .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl')
+    .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive')
     .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`)
     .eq('month_year', ctx.monthYear);
 
@@ -685,7 +685,7 @@ async function calculateEmployeeCommissions(
     if (missingIds.length > 0) {
       const { data: teamDeals } = await supabase
         .from('deals')
-        .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl')
+        .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive')
         .in('id', missingIds);
       allCommDeals = allCommDeals.concat(teamDeals || []);
     }
@@ -715,15 +715,15 @@ async function calculateEmployeeCommissions(
       return { booking, collection, yearEnd };
     };
 
-    // Perpetual License
-    if (deal.perpetual_license_usd && deal.perpetual_license_usd > 0) {
+    // Perpetual License — uses deal flag instead of TCV threshold
+    if (deal.perpetual_license_usd && deal.perpetual_license_usd > 0 && deal.eligible_for_perpetual_incentive === true) {
       const comm = ctx.commissions.find(c => c.commission_type === 'Perpetual License' && c.is_active);
       if (comm) {
         const splits = getSplits(comm);
         const result = calculateDealCommission(
           deal.perpetual_license_usd,
           comm.commission_rate_pct,
-          comm.min_threshold_usd,
+          null, // threshold ignored; eligibility via deal flag
           splits.booking,
           splits.collection,
           splits.yearEnd
@@ -733,7 +733,7 @@ async function calculateEmployeeCommissions(
           commissionType: 'Perpetual License',
           tcvUsd: deal.perpetual_license_usd,
           commissionRatePct: comm.commission_rate_pct,
-          minThresholdUsd: comm.min_threshold_usd,
+          minThresholdUsd: null,
           qualifies: result.qualifies,
           grossCommission: result.gross,
           paidAmount: result.paid,
@@ -743,31 +743,38 @@ async function calculateEmployeeCommissions(
       }
     }
     
-    // Managed Services
+    // Managed Services — requires GP margin >= min_gp_margin_pct (if configured)
     if (deal.managed_services_usd && deal.managed_services_usd > 0) {
       const comm = ctx.commissions.find(c => c.commission_type === 'Managed Services' && c.is_active);
       if (comm) {
-        const splits = getSplits(comm);
-        const result = calculateDealCommission(
-          deal.managed_services_usd,
-          comm.commission_rate_pct,
-          comm.min_threshold_usd,
-          splits.booking,
-          splits.collection,
-          splits.yearEnd
-        );
-        calculations.push({
-          dealId: deal.id,
-          commissionType: 'Managed Services',
-          tcvUsd: deal.managed_services_usd,
-          commissionRatePct: comm.commission_rate_pct,
-          minThresholdUsd: comm.min_threshold_usd,
-          qualifies: result.qualifies,
-          grossCommission: result.gross,
-          paidAmount: result.paid,
-          holdbackAmount: result.holdback,
-          yearEndHoldback: result.yearEndHoldback,
-        });
+        // GP margin eligibility check
+        const minGpMargin = (comm as any).min_gp_margin_pct;
+        const dealGpMargin = deal.gp_margin_percent;
+        const gpMarginQualifies = minGpMargin == null || (dealGpMargin != null && dealGpMargin >= minGpMargin);
+        
+        if (gpMarginQualifies) {
+          const splits = getSplits(comm);
+          const result = calculateDealCommission(
+            deal.managed_services_usd,
+            comm.commission_rate_pct,
+            comm.min_threshold_usd,
+            splits.booking,
+            splits.collection,
+            splits.yearEnd
+          );
+          calculations.push({
+            dealId: deal.id,
+            commissionType: 'Managed Services',
+            tcvUsd: deal.managed_services_usd,
+            commissionRatePct: comm.commission_rate_pct,
+            minThresholdUsd: comm.min_threshold_usd,
+            qualifies: result.qualifies,
+            grossCommission: result.gross,
+            paidAmount: result.paid,
+            holdbackAmount: result.holdback,
+            yearEndHoldback: result.yearEndHoldback,
+          });
+        }
       }
     }
     

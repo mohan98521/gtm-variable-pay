@@ -1,0 +1,1 @@
+ALTER TABLE public.plan_commissions ADD COLUMN min_gp_margin_pct numeric DEFAULT NULL;

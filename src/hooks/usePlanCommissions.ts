@@ -12,6 +12,7 @@ export interface PlanCommission {
   payout_on_booking_pct: number;
   payout_on_collection_pct: number;
   payout_on_year_end_pct: number;
+  min_gp_margin_pct: number | null;
   created_at: string;
 }
 
@@ -58,6 +59,7 @@ export function useCreatePlanCommission() {
       payout_on_booking_pct?: number;
       payout_on_collection_pct?: number;
       payout_on_year_end_pct?: number;
+      min_gp_margin_pct?: number | null;
     }) => {
       const { data, error } = await supabase
         .from("plan_commissions")
@@ -70,6 +72,7 @@ export function useCreatePlanCommission() {
           payout_on_booking_pct: values.payout_on_booking_pct ?? 70,
           payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
           payout_on_year_end_pct: values.payout_on_year_end_pct ?? 5,
+          min_gp_margin_pct: values.min_gp_margin_pct ?? null,
         })
         .select()
         .single();
@@ -100,6 +103,7 @@ export function useUpdatePlanCommission() {
       payout_on_booking_pct?: number;
       payout_on_collection_pct?: number;
       payout_on_year_end_pct?: number;
+      min_gp_margin_pct?: number | null;
     }) => {
       const { data, error } = await supabase
         .from("plan_commissions")
@@ -110,6 +114,7 @@ export function useUpdatePlanCommission() {
           payout_on_booking_pct: values.payout_on_booking_pct ?? 70,
           payout_on_collection_pct: values.payout_on_collection_pct ?? 25,
           payout_on_year_end_pct: values.payout_on_year_end_pct ?? 5,
+          min_gp_margin_pct: values.min_gp_margin_pct ?? null,
         })
         .eq("id", values.id)
         .select()
