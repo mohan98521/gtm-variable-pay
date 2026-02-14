@@ -74,6 +74,8 @@ export function PerformanceTargetsBulkUpload({
   const downloadTemplate = () => {
     const template = `employee_id,metric_type,q1_target_usd,q2_target_usd,q3_target_usd,q4_target_usd
 EMP001,New Software Booking ARR,200000,250000,250000,300000
+EMP001,CR/ER,50000,60000,60000,80000
+EMP001,Implementation,25000,30000,30000,40000
 EMP002,Closing ARR,100000,125000,125000,150000`;
 
     downloadCSV(template, "performance_targets_template.csv");
@@ -227,6 +229,7 @@ EMP002,Closing ARR,100000,125000,125000,150000`;
           <DialogTitle>Bulk Upload Performance Targets</DialogTitle>
           <DialogDescription>
             Upload a CSV file with quarterly targets. Annual targets will be calculated automatically.
+            Supports CR/ER and Implementation metrics for NRR target computation.
           </DialogDescription>
         </DialogHeader>
 
