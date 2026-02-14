@@ -134,6 +134,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
     const headers = [
       'Employee Code',
       'Employee Name',
+      'Plan',
       'Currency',
       'VP (USD)',
       'Comm (USD)',
@@ -149,6 +150,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
     const rows = filteredEmployees.map(emp => [
       emp.employeeCode,
       emp.employeeName,
+      emp.planName || '-',
       emp.localCurrency,
       emp.variablePayUsd.toFixed(2),
       emp.commissionsUsd.toFixed(2),
@@ -183,6 +185,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
     const allEmployeesColumns = [
       { key: 'employeeCode', header: 'Employee Code' },
       { key: 'employeeName', header: 'Employee Name' },
+      { key: 'planName', header: 'Plan' },
       { key: 'localCurrency', header: 'Currency' },
       { key: 'variablePayUsd', header: 'VP (USD)' },
       { key: 'commissionsUsd', header: 'Comm (USD)' },
@@ -442,6 +445,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
+                    <TableHead>Plan</TableHead>
                     <TableHead>Currency</TableHead>
                     <TableHead className="text-right">VP (USD)</TableHead>
                     <TableHead className="text-right">Comm (USD)</TableHead>
@@ -462,6 +466,9 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                           <p className="font-medium">{emp.employeeName}</p>
                           <p className="text-sm text-muted-foreground">{emp.employeeCode}</p>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{emp.planName || '-'}</span>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{emp.localCurrency}</Badge>
@@ -488,7 +495,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
                   {/* Totals Row */}
                   {filteredTotals && (
                     <TableRow className="bg-muted/50 font-medium">
-                      <TableCell colSpan={2}>
+                      <TableCell colSpan={3}>
                         Total ({filteredEmployees.length} employees)
                       </TableCell>
                       <TableCell className="text-right">

@@ -98,6 +98,8 @@ export interface PayoutStatementData {
   localCurrency: string;
   compensationRate: number;
   marketRate: number;
+  planName: string | null;
+  targetBonusUsd: number | null;
   variablePayItems: VariablePayItem[];
   commissionItems: CommissionItem[];
   additionalPayItems: AdditionalPayItem[];
@@ -275,6 +277,9 @@ async function fetchPayoutStatementData(
   let releaseItems: ReleaseItem[] = [];
   let clawbackItems: ClawbackItem[] = [];
 
+  let planName: string | null = null;
+  let targetBonusUsd: number | null = null;
+
   if (payoutRun) {
     // Fetch from persisted monthly_payouts
     const { data: payouts } = await supabase
@@ -283,13 +288,35 @@ async function fetchPayoutStatementData(
       .eq("payout_run_id", payoutRun.id)
       .eq("employee_id", employeeUuid);
 
+    // Resolve plan name from the first VP payout's plan_id
+    const vpPayout = (payouts || []).find(p => classifyPayoutType(p.payout_type) === 'vp');
+    if (vpPayout?.plan_id) {
+      const { data: plan } = await supabase
+        .from("comp_plans")
+        .select("name")
+        .eq("id", vpPayout.plan_id)
+        .maybeSingle();
+      planName = plan?.name || null;
+
+      // Also get target bonus from user_targets for this plan + employee
+      const { data: target } = await supabase
+        .from("user_targets")
+        .select("target_bonus_usd")
+        .eq("user_id", employeeUuid)
+        .eq("plan_id", vpPayout.plan_id)
+        .lte("effective_start_date", monthYear.length === 7 ? monthYear + "-28" : monthYear)
+        .gte("effective_end_date", monthYear.length === 7 ? monthYear + "-01" : monthYear)
+        .maybeSingle();
+      targetBonusUsd = target?.target_bonus_usd || null;
+    }
+
     (payouts || []).forEach(payout => {
       const category = classifyPayoutType(payout.payout_type);
       
       switch (category) {
         case 'vp':
           variablePayItems.push({
-            metricName: 'Variable Pay',
+            metricName: planName ? `Variable Pay (${planName})` : 'Variable Pay',
             target: 0,
             actual: 0,
             achievementPct: 0,
@@ -412,6 +439,8 @@ async function fetchPayoutStatementData(
     localCurrency,
     compensationRate,
     marketRate,
+    planName,
+    targetBonusUsd,
     variablePayItems,
     commissionItems,
     additionalPayItems,

@@ -10,6 +10,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 
+export interface AssignmentSegment {
+  planName: string;
+  startDate: string;
+  endDate: string;
+  targetBonusUsd: number | null;
+  oteUsd: number | null;
+}
+
 export interface DashboardPayoutSummary {
   totalEligible: number;
   totalPaid: number;        // booking_amount_usd (Upon Booking)
@@ -20,6 +28,7 @@ export interface DashboardPayoutSummary {
   totalVariablePay: number; // VP payout type
   isFromPayoutRun: boolean;
   monthsCovered: number;
+  assignmentSegments: AssignmentSegment[];
 }
 
 export function useDashboardPayoutSummary() {
@@ -50,7 +59,37 @@ export function useDashboardPayoutSummary() {
 
       if (!employee) return null;
 
-      // 4. Fetch all monthly_payouts for this employee in the fiscal year
+      // 4. Fetch user_targets for this employee in the fiscal year to get assignment segments
+      const { data: targets } = await supabase
+        .from("user_targets")
+        .select("plan_id, effective_start_date, effective_end_date, target_bonus_usd, ote_usd")
+        .eq("user_id", employee.id)
+        .lte("effective_start_date", `${selectedYear}-12-31`)
+        .gte("effective_end_date", `${selectedYear}-01-01`)
+        .order("effective_start_date", { ascending: true });
+
+      // Resolve plan names for segments
+      let assignmentSegments: AssignmentSegment[] = [];
+      if (targets && targets.length > 0) {
+        const planIds = [...new Set(targets.map(t => t.plan_id).filter(Boolean))] as string[];
+        const planNameMap = new Map<string, string>();
+        if (planIds.length > 0) {
+          const { data: plans } = await supabase
+            .from("comp_plans")
+            .select("id, name")
+            .in("id", planIds);
+          (plans || []).forEach(p => planNameMap.set(p.id, p.name));
+        }
+        assignmentSegments = targets.map(t => ({
+          planName: planNameMap.get(t.plan_id) || 'Unknown Plan',
+          startDate: t.effective_start_date,
+          endDate: t.effective_end_date,
+          targetBonusUsd: t.target_bonus_usd,
+          oteUsd: t.ote_usd,
+        }));
+      }
+
+      // 5. Fetch all monthly_payouts for this employee in the fiscal year
       const { data: payouts, error } = await supabase
         .from("monthly_payouts")
         .select("payout_type, calculated_amount_usd, booking_amount_usd, collection_amount_usd, year_end_amount_usd, month_year")
@@ -71,6 +110,7 @@ export function useDashboardPayoutSummary() {
           totalVariablePay: 0,
           isFromPayoutRun: false,
           monthsCovered: 0,
+          assignmentSegments,
         } as DashboardPayoutSummary;
       }
 
@@ -110,6 +150,7 @@ export function useDashboardPayoutSummary() {
         totalVariablePay,
         isFromPayoutRun: true,
         monthsCovered: monthsSet.size,
+        assignmentSegments,
       } as DashboardPayoutSummary;
     },
   });
