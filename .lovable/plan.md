@@ -1,74 +1,36 @@
 
 
-## Commission Eligibility Modifications
+## Clean All Actuals Data for Fresh Manual Testing
 
-### Overview
-Two changes to how commission eligibility is determined:
-1. **Managed Services**: Add a GP Margin threshold filter -- only deals with GP margin >= configured % qualify
-2. **Perpetual License**: Replace TCV threshold with the existing "Eligible for Perpetual Incentive" flag from the deal record
+### What Will Be Deleted
 
----
+All transactional/actuals data will be purged in the correct order (child tables first to respect foreign keys):
 
-### Change 1: Managed Services GP Margin Filter
+1. **deal_variable_pay_attribution** (59 rows) -- depends on deals & monthly_payouts
+2. **clawback_ledger** (0 rows) -- depends on deals
+3. **deal_collections** (22 rows) -- depends on deals
+4. **deal_participants** (0 rows) -- depends on deals
+5. **monthly_payouts** (9 rows) -- depends on payout_runs
+6. **payout_adjustments** (0 rows) -- depends on payout_runs
+7. **payout_runs** (1 row)
+8. **deals** (22 rows)
+9. **closing_arr_actuals** (12 rows)
+10. **fnf_settlements** (0 rows)
 
-**Database Migration**
-- Add `min_gp_margin_pct` column (numeric, default NULL) to the `plan_commissions` table
-- This allows each plan's commission entry to optionally require a minimum GP margin
+### What Will NOT Be Touched
 
-**Payout Engine** (`src/lib/payoutEngine.ts`)
-- Update the deal query in `calculateEmployeeCommissions` to also fetch `gp_margin_percent`
-- In the Managed Services commission block (~line 747), add a check: if `min_gp_margin_pct` is set on the commission config and `deal.gp_margin_percent < min_gp_margin_pct`, skip the deal
+All configuration/setup data remains intact:
+- Compensation plans, commissions, metrics, spiffs
+- Employee profiles and plan assignments
+- Performance targets
+- Currencies and exchange rates
+- Roles and permissions
 
-**Commission Form UI** (`src/components/admin/CommissionFormDialog.tsx`)
-- Add a new form field "Min GP Margin (%)" that appears for all commission types (but is most relevant for Managed Services)
-- Wire it through `PlanCommissionEditor` and `usePlanCommissions` hook
+### Navigation
 
-**Commission Interface** (`src/lib/commissions.ts`)
-- Add `min_gp_margin_pct` to the `PlanCommission` interface
-
----
-
-### Change 2: Perpetual License Uses Deal Flag
-
-**Payout Engine** (`src/lib/payoutEngine.ts`)
-- Update the deal query to also fetch `eligible_for_perpetual_incentive`
-- In the Perpetual License commission block (~line 718), replace the TCV threshold check with: if `deal.eligible_for_perpetual_incentive !== true`, skip the deal
-- The `min_threshold_usd` on the Perpetual License commission config will be ignored in favor of this flag
-
----
+After cleanup, the Data Inputs page month selector will be set to **January** of the current fiscal year so you can start fresh.
 
 ### Technical Details
 
-**Files to modify:**
-
-| File | Change |
-|------|--------|
-| Database migration | Add `min_gp_margin_pct` to `plan_commissions` |
-| `src/lib/commissions.ts` | Add `min_gp_margin_pct` to `PlanCommission` interface |
-| `src/lib/payoutEngine.ts` | Fetch `gp_margin_percent` and `eligible_for_perpetual_incentive` in commission deal query; add GP margin check for Managed Services; replace threshold check with flag check for Perpetual License |
-| `src/hooks/usePlanCommissions.ts` | Include `min_gp_margin_pct` in select/create/update |
-| `src/components/admin/CommissionFormDialog.tsx` | Add "Min GP Margin (%)" field |
-| `src/components/admin/PlanCommissionEditor.tsx` | Display GP margin column in the table |
-
-**Calculation logic changes:**
-
-```text
-MANAGED SERVICES (before):
-  if deal.managed_services_usd > 0 AND deal.tcv_usd >= min_threshold_usd
-    -> commission = managed_services_usd * rate%
-
-MANAGED SERVICES (after):
-  if deal.managed_services_usd > 0
-    AND (min_gp_margin_pct is NULL OR deal.gp_margin_percent >= min_gp_margin_pct)
-    -> commission = managed_services_usd * rate%
-
-PERPETUAL LICENSE (before):
-  if deal.perpetual_license_usd > 0 AND deal.tcv_usd >= min_threshold_usd
-    -> commission = perpetual_license_usd * rate%
-
-PERPETUAL LICENSE (after):
-  if deal.perpetual_license_usd > 0 AND deal.eligible_for_perpetual_incentive = true
-    -> commission = perpetual_license_usd * rate%
-    (min_threshold_usd ignored for this type)
-```
+A single database migration will execute `TRUNCATE ... CASCADE` on the parent tables, which automatically clears dependent child rows in one operation. This is the safest and fastest approach.
 
