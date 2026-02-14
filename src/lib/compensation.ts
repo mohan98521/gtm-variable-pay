@@ -241,6 +241,90 @@ export function calculateMetricPayout(
   return { multiplier, payout };
 }
 
+// ============= BLENDED PRO-RATA TARGET BONUS =============
+
+export interface BlendedProRataSegment {
+  targetBonusUsd: number;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+}
+
+export interface BlendedProRataResult {
+  effectiveTargetBonusUsd: number;
+  blendedTargetBonusUsd: number;
+  isBlended: boolean;
+  segmentDetails: Array<{
+    targetBonusUsd: number;
+    days: number;
+    contribution: number;
+  }>;
+}
+
+/**
+ * Calculate blended pro-rata target bonus for mid-year compensation changes.
+ *
+ * Logic:
+ * - If only one segment exists, return its target as-is.
+ * - If multiple segments exist:
+ *   - Compute blended = sum(segment.target × segment.days / totalDaysInYear)
+ *   - If currentMonth falls within the FIRST segment: return first segment's original target
+ *   - Otherwise: return the blended target
+ *
+ * Uses actual calendar days (not months/12) for precision.
+ */
+export function calculateBlendedProRata(
+  segments: BlendedProRataSegment[],
+  currentMonth: string, // YYYY-MM
+  fiscalYear: number
+): BlendedProRataResult {
+  if (segments.length === 0) {
+    return { effectiveTargetBonusUsd: 0, blendedTargetBonusUsd: 0, isBlended: false, segmentDetails: [] };
+  }
+
+  if (segments.length === 1) {
+    const seg = segments[0];
+    return {
+      effectiveTargetBonusUsd: seg.targetBonusUsd,
+      blendedTargetBonusUsd: seg.targetBonusUsd,
+      isBlended: false,
+      segmentDetails: [{ targetBonusUsd: seg.targetBonusUsd, days: 365, contribution: seg.targetBonusUsd }],
+    };
+  }
+
+  const yearStart = new Date(fiscalYear, 0, 1);
+  const yearEnd = new Date(fiscalYear, 11, 31);
+  const totalDaysInYear = Math.ceil((yearEnd.getTime() - yearStart.getTime()) / (1000 * 60 * 60 * 24)) + 1; // 365 or 366
+
+  // Sort segments by start date
+  const sorted = [...segments].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  let blendedTarget = 0;
+  const segmentDetails: BlendedProRataResult['segmentDetails'] = [];
+
+  for (const seg of sorted) {
+    const segStart = new Date(Math.max(new Date(seg.startDate).getTime(), yearStart.getTime()));
+    const segEnd = new Date(Math.min(new Date(seg.endDate).getTime(), yearEnd.getTime()));
+    const days = Math.max(0, Math.ceil((segEnd.getTime() - segStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    const contribution = seg.targetBonusUsd * days / totalDaysInYear;
+    blendedTarget += contribution;
+    segmentDetails.push({ targetBonusUsd: seg.targetBonusUsd, days, contribution });
+  }
+
+  // Determine if currentMonth falls within the first segment
+  const firstSeg = sorted[0];
+  const currentMonthDate = new Date(`${currentMonth}-15`); // mid-month for comparison
+  const firstSegEnd = new Date(firstSeg.endDate);
+
+  const isInFirstSegment = currentMonthDate <= firstSegEnd;
+
+  return {
+    effectiveTargetBonusUsd: isInFirstSegment ? firstSeg.targetBonusUsd : blendedTarget,
+    blendedTargetBonusUsd: blendedTarget,
+    isBlended: !isInFirstSegment,
+    segmentDetails,
+  };
+}
+
 // ============= CURRENCY CONVERSION =============
 
 export interface CurrencyAmount {

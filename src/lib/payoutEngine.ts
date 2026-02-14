@@ -26,6 +26,7 @@ import { calculateDealCommission, calculateTotalCommission, CommissionCalculatio
 import { calculateNRRPayout, NRRDeal, NRRCalculationResult } from "./nrrCalculation";
 import { calculateAllSpiffs, SpiffConfig, SpiffDeal, SpiffMetric, SpiffDealBreakdown } from "./spiffCalculation";
 import { resolveTeamMembers } from "@/hooks/useSupportTeams";
+import { calculateBlendedProRata, BlendedProRataSegment } from "./compensation";
 
 // ============= HELPERS =============
 
@@ -985,7 +986,31 @@ export async function calculateMonthlyPayout(
   const planData = target.comp_plans as any;
   const planName = planData?.name || 'Unknown Plan';
   const isClawbackExempt = planData?.is_clawback_exempt === true;
-  const targetBonusUsd = target.target_bonus_usd ?? employee.tvp_usd ?? 0;
+  
+  // === BLENDED PRO-RATA TARGET BONUS ===
+  // Fetch ALL assignments for this employee in the fiscal year
+  const { data: allAssignments } = await supabase
+    .from('user_targets')
+    .select('target_bonus_usd, effective_start_date, effective_end_date')
+    .eq('user_id', employee.id)
+    .lte('effective_start_date', `${fiscalYear}-12-31`)
+    .gte('effective_end_date', `${fiscalYear}-01-01`)
+    .order('effective_start_date', { ascending: true });
+
+  let targetBonusUsd: number;
+  
+  if (allAssignments && allAssignments.length > 1) {
+    const segments: BlendedProRataSegment[] = allAssignments.map(a => ({
+      targetBonusUsd: a.target_bonus_usd ?? 0,
+      startDate: a.effective_start_date,
+      endDate: a.effective_end_date,
+    }));
+    const currentMonthStr = monthYear.substring(0, 7);
+    const blendedResult = calculateBlendedProRata(segments, currentMonthStr, fiscalYear);
+    targetBonusUsd = blendedResult.effectiveTargetBonusUsd;
+  } else {
+    targetBonusUsd = target.target_bonus_usd ?? employee.tvp_usd ?? 0;
+  }
   
   // Get plan metrics with multiplier grids
   const { data: metrics } = await supabase
