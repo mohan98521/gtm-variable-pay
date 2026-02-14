@@ -1,96 +1,71 @@
 
 
-## Changes to Deal Form and Bulk Upload
+## Validate Plan Assignment Dates Against Employee Joining and Exit Dates
 
-### Summary
-Three changes: (1) Remove "Sales Engineering Head ID" from the deal form and bulk upload, (2) Add a new "Solution Architect ID" field, and (3) Add a warning system in bulk upload when both an individual ID and a team name are provided for the same role, with the ability to download warnings.
+### Current State
 
----
+**What works today:**
+- When creating a new plan assignment, the start date auto-populates from the employee's Date of Joining and the end date from their Last Working Day (or fiscal year boundaries as fallback).
+- When an employee's departure date is set via the Employee Form, any plan assignments ending after that date are automatically shortened (`autoEndAssignments` logic).
 
-### 1. Remove "Sales Engineering Head ID" from Deal Form and Bulk Upload
-
-Since SE Heads are on overlay and get credited via their overlay comp plan, they do not need per-deal attribution.
-
-**Files to change:**
-
-- **`src/components/data-inputs/DealFormDialog.tsx`**
-  - Remove the `sales_engineering_head_employee_id` schema field and form field (lines 72, 170, 210, 265, 286, 313, 345-346, 819-843)
-  - Remove the SE Head name resolution in `onSubmit`
-
-- **`src/components/data-inputs/DealsBulkUpload.tsx`**
-  - Remove `sales_engineering_head_id` from `ParsedDeal` interface, `CSV_TEMPLATE_HEADERS`, template example row, `buildDealFromRow`, `validateDeals` participant fields, and `uploadMutation` dealData
-
-- **`src/hooks/useDeals.ts`**
-  - Remove `sales_engineering_head` from `PARTICIPANT_ROLES`
-
-- **`src/hooks/useSupportTeams.ts`**
-  - Remove `sales_engineering_head` from `TEAM_ROLES`
-
-**Note:** The database columns (`sales_engineering_head_employee_id`, `sales_engineering_head_name`) will remain untouched. Existing attribution logic in `payoutEngine.ts`, `useUserActuals.ts`, `useMyDealsWithIncentives.ts`, `useDealVariablePayAttribution.ts`, `useTeamCompensation.ts`, and `useCurrentUserCompensation.ts` will continue to work for historical deals that have this field populated. New deals simply won't have it set.
+**What is missing:**
+- No validation prevents assigning a plan **before** the employee's joining date.
+- No validation prevents assigning a plan **after** the employee's departure date.
+- No warning or auto-update when an employee's **joining date is changed** and existing assignments start before the new joining date.
+- The overlap check in `usePlanAssignments.ts` only checks for date conflicts between assignments, not against the employee's tenure window.
 
 ---
 
-### 2. Add "Solution Architect ID" field
+### Changes
 
-**Database migration:**
-- Add two new columns to the `deals` table:
-  - `solution_architect_employee_id` (text, nullable)
-  - `solution_architect_name` (text, nullable)
+#### 1. PlanAssignmentDialog.tsx -- Add tenure-boundary validation
 
-**Files to change:**
+- Add a **warning alert** (non-blocking) if the selected start date is before the employee's `date_of_hire`.
+- Add a **warning alert** if the selected end date is after the employee's `departure_date` (when set).
+- Add a **blocking validation error** if the entire assignment falls completely outside the employee's tenure (start date after departure, or end date before joining).
+- Show helpful text like: "Start date is before employee's joining date (Jan 15, 2026). The assignment will only be effective from their joining date onward."
 
-- **`src/components/data-inputs/DealFormDialog.tsx`**
-  - Add `solution_architect_employee_id` to the form schema, default values, and reset logic
-  - Add a new employee dropdown field labeled "Solution Architect ID" in the Participants section
-  - Include name resolution in `onSubmit`
+#### 2. PlanAssignmentDialog.tsx -- Auto-clamp dates on employee change
 
-- **`src/components/data-inputs/DealsBulkUpload.tsx`**
-  - Add `solution_architect_id` to `ParsedDeal`, `CSV_TEMPLATE_HEADERS`, template row, `buildDealFromRow`, validation, and `uploadMutation`
+- When the user picks a start date earlier than `date_of_hire`, show the warning but allow it (some companies pre-assign plans).
+- When the user picks an end date later than `departure_date`, show a warning and offer a "Use departure date" quick-fix button.
 
-- **`src/hooks/useDeals.ts`**
-  - Add `solution_architect_employee_id` and `solution_architect_name` to the `Deal` interface
-  - Add `solution_architect` to `PARTICIPANT_ROLES`
+#### 3. EmployeeFormDialog.tsx -- Auto-update assignments on joining date change
 
----
+- Extend the existing `autoEndAssignments` pattern to also handle joining date changes:
+  - When `date_of_hire` is updated to a **later** date, find any assignments with `effective_start_date` before the new joining date and offer to adjust them.
+  - Auto-update those assignments' start dates to match the new joining date, with a toast notification.
+- The existing departure date auto-end logic remains unchanged.
 
-### 3. Validation warnings for individual + team conflicts in Bulk Upload
+#### 4. usePlanAssignments.ts -- Add tenure validation in create/update mutations
 
-Currently, when both an individual ID and a team name are provided for the same role (SE or Solution Manager), the system treats it as an error. The plan changes this to a **warning** (not blocking) and adds a "Download Warnings" button.
-
-**File: `src/components/data-inputs/DealsBulkUpload.tsx`**
-
-- Add a new `ValidationWarning` interface (same shape as `ValidationError`)
-- Add a `validationWarnings` state alongside `validationErrors`
-- In `validateDeals`, return both `errors` and `warnings`:
-  - The "Both individual ID and team name provided" messages become warnings instead of errors
-  - Actual problems (team not found, role mismatch) remain errors
-- Add a warnings display section in the UI (yellow/amber styled, separate from errors)
-- Add a "Download Warnings" button that exports warnings as CSV
-- Allow upload to proceed when there are warnings but no errors
-- The warning message will read: "Row X: Both SE individual ID and SE team name provided -- team will take priority, individual ID will be ignored"
+- Before inserting or updating an assignment, fetch the employee's `date_of_hire` and `departure_date` from the `employees` table.
+- If the assignment's start date is before `date_of_hire`, add a warning in the toast (non-blocking).
+- If the assignment's end date is after `departure_date` (when set), automatically clamp the end date to the departure date and notify via toast.
 
 ---
 
 ### Technical Details
 
-**Database migration SQL:**
-```sql
-ALTER TABLE public.deals
-  ADD COLUMN solution_architect_employee_id text,
-  ADD COLUMN solution_architect_name text;
-```
+**File: `src/components/admin/PlanAssignmentDialog.tsx`**
+- Add computed state variables `isBeforeJoining` and `isAfterDeparture` derived from form watch values vs employee props.
+- Render conditional `Alert` components (amber/warning style) between the date pickers and the compensation fields.
+- Add a small "Use joining date" / "Use departure date" button inside each alert for quick correction.
 
-**Attribution note:** The new `solution_architect` role will need to be added to the attribution filter queries in `payoutEngine.ts`, `useUserActuals.ts`, `useMyDealsWithIncentives.ts`, `useDealVariablePayAttribution.ts`, `useTeamCompensation.ts`, and `useCurrentUserCompensation.ts` so that Solution Architects receive credit for deals they are tagged on. This will be included in this implementation.
+**File: `src/components/admin/EmployeeFormDialog.tsx`**
+- Add a new `autoAdjustAssignmentStartDates` function (similar to existing `autoEndAssignments`).
+- Call it in `handleSubmit` when `date_of_hire` has changed to a later date.
+- Query `user_targets` where `effective_start_date < new_date_of_hire` and update them.
+
+**File: `src/hooks/usePlanAssignments.ts`**
+- In `useCreatePlanAssignment` and `useUpdatePlanAssignment`, after the overlap check, add a tenure boundary check.
+- Fetch employee record by `user_id` to get `date_of_hire` and `departure_date`.
+- If `departure_date` is set and `effective_end_date > departure_date`, auto-clamp and add a warning toast.
 
 **Files modified (total):**
-- `src/components/data-inputs/DealFormDialog.tsx`
-- `src/components/data-inputs/DealsBulkUpload.tsx`
-- `src/hooks/useDeals.ts`
-- `src/hooks/useSupportTeams.ts`
-- `src/hooks/useUserActuals.ts`
-- `src/hooks/useMyDealsWithIncentives.ts`
-- `src/hooks/useDealVariablePayAttribution.ts`
-- `src/hooks/useTeamCompensation.ts`
-- `src/hooks/useCurrentUserCompensation.ts`
-- `src/lib/payoutEngine.ts`
-- Database migration (new columns)
+- `src/components/admin/PlanAssignmentDialog.tsx`
+- `src/components/admin/EmployeeFormDialog.tsx`
+- `src/hooks/usePlanAssignments.ts`
+
+No database or schema changes required.
+
