@@ -792,6 +792,8 @@ export type Database = {
           sales_head_name: string | null
           sales_rep_employee_id: string | null
           sales_rep_name: string | null
+          solution_architect_employee_id: string | null
+          solution_architect_name: string | null
           solution_manager_employee_id: string | null
           solution_manager_head_employee_id: string | null
           solution_manager_head_name: string | null
@@ -840,6 +842,8 @@ export type Database = {
           sales_head_name?: string | null
           sales_rep_employee_id?: string | null
           sales_rep_name?: string | null
+          solution_architect_employee_id?: string | null
+          solution_architect_name?: string | null
           solution_manager_employee_id?: string | null
           solution_manager_head_employee_id?: string | null
           solution_manager_head_name?: string | null
@@ -888,6 +892,8 @@ export type Database = {
           sales_head_name?: string | null
           sales_rep_employee_id?: string | null
           sales_rep_name?: string | null
+          solution_architect_employee_id?: string | null
+          solution_architect_name?: string | null
           solution_manager_employee_id?: string | null
           solution_manager_head_employee_id?: string | null
           solution_manager_head_name?: string | null

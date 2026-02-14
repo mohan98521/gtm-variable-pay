@@ -39,6 +39,8 @@ export interface Deal {
   solution_manager_name: string | null;
   solution_manager_head_employee_id: string | null;
   solution_manager_head_name: string | null;
+  solution_architect_employee_id: string | null;
+  solution_architect_name: string | null;
   linked_to_impl: boolean | null;
   eligible_for_perpetual_incentive: boolean | null;
   status: string;
@@ -128,8 +130,8 @@ export const PARTICIPANT_ROLES = [
   { value: "sales_rep", label: "Sales Rep" },
   { value: "sales_head", label: "Sales Head" },
   { value: "sales_engineering", label: "Sales Engineering" },
-  { value: "sales_engineering_head", label: "Sales Engineering Head" },
   { value: "solution_manager", label: "Solution Manager" },
+  { value: "solution_architect", label: "Solution Architect" },
 ] as const;
 
 export const DEAL_STATUSES = [

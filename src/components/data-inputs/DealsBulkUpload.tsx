@@ -56,8 +56,8 @@ interface ParsedDeal {
   sales_rep_id?: string;
   sales_head_id?: string;
   sales_engineering_id?: string;
-  sales_engineering_head_id?: string;
   solution_manager_id?: string;
+  solution_architect_id?: string;
   sales_engineering_team_name?: string;
   solution_manager_team_name?: string;
   sales_engineering_team_id?: string;
@@ -69,6 +69,12 @@ interface ParsedDeal {
 }
 
 interface ValidationError {
+  row: number;
+  field: string;
+  message: string;
+}
+
+interface ValidationWarning {
   row: number;
   field: string;
   message: string;
@@ -97,9 +103,9 @@ const CSV_TEMPLATE_HEADERS = [
   "sales_head_id",
   "sales_engineering_id",
   "sales_engineering_team_name",
-  "sales_engineering_head_id",
   "solution_manager_id",
   "solution_manager_team_name",
+  "solution_architect_id",
   "linked_to_impl",
   "eligible_for_perpetual_incentive",
   "status",
@@ -152,9 +158,9 @@ const generateCSVTemplate = (): string => {
     "",        // sales_head_id
     "",        // sales_engineering_id
     "APAC SE Team", // sales_engineering_team_name
-    "",        // sales_engineering_head_id
     "",        // solution_manager_id
     "",        // solution_manager_team_name
+    "",        // solution_architect_id
     "no",
     "no",
     "draft",
@@ -167,6 +173,7 @@ const generateCSVTemplate = (): string => {
 export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
   const [parsedDeals, setParsedDeals] = useState<ParsedDeal[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [validationWarnings, setValidationWarnings] = useState<ValidationWarning[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
@@ -227,8 +234,8 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     sales_rep_id: deal.sales_rep_id || undefined,
     sales_head_id: deal.sales_head_id || undefined,
     sales_engineering_id: deal.sales_engineering_id || undefined,
-    sales_engineering_head_id: deal.sales_engineering_head_id || undefined,
     solution_manager_id: deal.solution_manager_id || undefined,
+    solution_architect_id: deal.solution_architect_id || undefined,
     sales_engineering_team_name: deal.sales_engineering_team_name || undefined,
     solution_manager_team_name: deal.solution_manager_team_name || undefined,
     linked_to_impl: deal.linked_to_impl ? parseBoolean(deal.linked_to_impl) : false,
@@ -295,8 +302,9 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     return { id: match.id, error: null };
   };
 
-  const validateDeals = (deals: ParsedDeal[]): ValidationError[] => {
+  const validateDeals = (deals: ParsedDeal[]): { errors: ValidationError[]; warnings: ValidationWarning[] } => {
     const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
     const employeeIds = new Set(employees.map((e) => e.employee_id));
 
     deals.forEach((deal, index) => {
@@ -324,7 +332,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       // Validate participant employee IDs if provided
       const participantFields = [
         "sales_rep_id", "sales_head_id", "sales_engineering_id",
-        "sales_engineering_head_id", "solution_manager_id"
+        "solution_manager_id", "solution_architect_id"
       ];
       participantFields.forEach((field) => {
         const empId = deal[field as keyof ParsedDeal] as string | undefined;
@@ -337,22 +345,22 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       if (deal.sales_engineering_team_name) {
         const { error } = resolveTeamId(deal.sales_engineering_team_name, "sales_engineering");
         if (error) errors.push({ row, field: "sales_engineering_team_name", message: error });
-        // Warn if both individual and team provided
-        if (deal.sales_engineering_id) {
-          errors.push({ row, field: "sales_engineering_team_name", message: "Both individual ID and team name provided; team will take priority" });
+        // Warning if both individual and team provided
+        if (deal.sales_engineering_id && !error) {
+          warnings.push({ row, field: "sales_engineering_team_name", message: "Both SE individual ID and SE team name provided — team will take priority, individual ID will be ignored" });
         }
       }
 
       if (deal.solution_manager_team_name) {
         const { error } = resolveTeamId(deal.solution_manager_team_name, "solution_manager");
         if (error) errors.push({ row, field: "solution_manager_team_name", message: error });
-        if (deal.solution_manager_id) {
-          errors.push({ row, field: "solution_manager_team_name", message: "Both individual ID and team name provided; team will take priority" });
+        if (deal.solution_manager_id && !error) {
+          warnings.push({ row, field: "solution_manager_team_name", message: "Both SM individual ID and SM team name provided — team will take priority, individual ID will be ignored" });
         }
       }
     });
 
-    return errors;
+    return { errors, warnings };
   };
 
   const handleDownloadErrors = () => {
@@ -373,6 +381,24 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadWarnings = () => {
+    const headers = ["Row", "Field", "Warning Message"];
+    const csvContent = [
+      headers.join(","),
+      ...validationWarnings.map(
+        (w) => `${w.row},"${w.field}","${w.message.replace(/"/g, '""')}"`
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `deals_upload_warnings_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
@@ -385,9 +411,10 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
         reader.onload = (e) => {
           const text = e.target?.result as string;
           const deals = parseCSV(text);
-          const errors = validateDeals(deals);
+          const { errors, warnings } = validateDeals(deals);
           setParsedDeals(deals);
           setValidationErrors(errors);
+          setValidationWarnings(warnings);
         };
         reader.readAsText(file);
       } else if (extension === "xlsx" || extension === "xls") {
@@ -396,9 +423,10 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
           const buffer = e.target?.result as ArrayBuffer;
           const rows = parseExcel(buffer);
           const deals = rowsToParsedDeals(rows);
-          const errors = validateDeals(deals);
+          const { errors, warnings } = validateDeals(deals);
           setParsedDeals(deals);
           setValidationErrors(errors);
+          setValidationWarnings(warnings);
         };
         reader.readAsArrayBuffer(file);
       }
@@ -464,12 +492,13 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
           sales_engineering_employee_id: useSeTeam ? null : (deal.sales_engineering_id || null),
           sales_engineering_name: useSeTeam ? null : getEmployeeName(deal.sales_engineering_id),
           sales_engineering_team_id: seTeam.id || null,
-          sales_engineering_head_employee_id: deal.sales_engineering_head_id || null,
-          sales_engineering_head_name: getEmployeeName(deal.sales_engineering_head_id),
           // SM: team takes priority over individual
           solution_manager_employee_id: useSmTeam ? null : (deal.solution_manager_id || null),
           solution_manager_name: useSmTeam ? null : getEmployeeName(deal.solution_manager_id),
           solution_manager_team_id: smTeam.id || null,
+          // Solution Architect
+          solution_architect_employee_id: deal.solution_architect_id || null,
+          solution_architect_name: getEmployeeName(deal.solution_architect_id),
           linked_to_impl: deal.linked_to_impl || false,
           eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive || false,
           status: deal.status || "draft",
@@ -492,6 +521,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
       queryClient.invalidateQueries({ queryKey: ["deals"] });
       setParsedDeals([]);
       setValidationErrors([]);
+      setValidationWarnings([]);
       setIsUploading(false);
       onOpenChange(false);
     },
@@ -523,6 +553,7 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
   const handleClose = () => {
     setParsedDeals([]);
     setValidationErrors([]);
+    setValidationWarnings([]);
     setUploadProgress(0);
     onOpenChange(false);
   };
@@ -585,19 +616,47 @@ export function DealsBulkUpload({ open, onOpenChange }: DealsBulkUploadProps) {
                 <span className="text-sm font-medium">
                   {parsedDeals.length} deals parsed
                 </span>
-                {validationErrors.length === 0 ? (
-                  <Badge variant="default" className="bg-green-500">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Valid
-                  </Badge>
-                ) : (
-                  <Badge variant="destructive">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    {validationErrors.length} errors
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {validationWarnings.length > 0 && (
+                    <Badge variant="outline" className="border-amber-500 text-amber-600">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {validationWarnings.length} warnings
+                    </Badge>
+                  )}
+                  {validationErrors.length === 0 ? (
+                    <Badge variant="default" className="bg-green-500">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Valid
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      {validationErrors.length} errors
+                    </Badge>
+                  )}
+                </div>
               </div>
 
+              {/* Warnings Section */}
+              {validationWarnings.length > 0 && (
+                <div className="space-y-2">
+                  <ScrollArea className="h-24 border border-amber-300 bg-amber-50 dark:bg-amber-950/20 rounded-md p-3">
+                    <div className="space-y-1">
+                      {validationWarnings.map((warning, idx) => (
+                        <div key={idx} className="text-xs text-amber-700 dark:text-amber-400">
+                          Row {warning.row}, {warning.field}: {warning.message}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  <Button variant="outline" size="sm" onClick={handleDownloadWarnings}>
+                    <Download className="h-4 w-4 mr-1.5" />
+                    Download Warnings
+                  </Button>
+                </div>
+              )}
+
+              {/* Errors Section */}
               {validationErrors.length > 0 && (
                 <div className="space-y-2">
                   <ScrollArea className="h-32 border rounded-md p-3">

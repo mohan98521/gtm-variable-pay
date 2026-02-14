@@ -11,7 +11,7 @@ import {
 } from "@/lib/dealVariablePayAttribution";
 import { PlanMetric } from "@/hooks/usePlanMetrics";
 
-// All 8 participant role columns in the deals table
+// All participant role columns in the deals table
 const PARTICIPANT_ROLES = [
   "sales_rep_employee_id",
   "sales_head_employee_id",
@@ -21,6 +21,7 @@ const PARTICIPANT_ROLES = [
   "product_specialist_head_employee_id",
   "solution_manager_employee_id",
   "solution_manager_head_employee_id",
+  "solution_architect_employee_id",
 ] as const;
 
 // Roles that can view all data (non-sales roles without targets)
@@ -446,10 +447,10 @@ async function calculateVPForAllEmployees(
   if (vpConfigs.size === 0) return vpMap;
   
   // Fetch ALL YTD deals for VP calculation (need full context for each employee)
-  const { data: ytdDeals } = await supabase
-    .from("deals")
-    .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id")
-    .gte("month_year", fiscalYearStart)
+    const { data: ytdDeals } = await supabase
+      .from("deals")
+      .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id, solution_architect_employee_id")
+      .gte("month_year", fiscalYearStart)
     .lte("month_year", fiscalYearEnd);
   
   if (!ytdDeals?.length) return vpMap;
@@ -601,7 +602,7 @@ export function useMyDealsWithIncentives(selectedMonth: string | null) {
           // Get ALL YTD deals for VP calculation (not just filtered by month)
           const { data: ytdDeals } = await supabase
             .from("deals")
-            .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id")
+            .select("id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id, solution_architect_employee_id")
             .gte("month_year", fiscalYearStart)
             .lte("month_year", fiscalYearEnd);
           
