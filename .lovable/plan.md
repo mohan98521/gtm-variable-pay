@@ -1,140 +1,81 @@
 
 
-## Mid-Year Compensation Changes and Employee Management Gaps
+## Add Plan Assignment Visibility to Payout Statements and Payout Run Details
 
-### Problem Statement
+### Problem
 
-When an employee receives a mid-year compensation change (hike, role movement, transfer), the system needs to:
-1. Record the historical compensation values (what was the old OTE/TFP/TVP?)
-2. Split the existing plan assignment into a "before" and "after" period with different compensation values
-3. Ensure the payout engine correctly pro-rates each period independently
-4. Maintain an audit trail of what changed, when, and by whom
+When an employee has mid-year compensation changes (split assignments), the Payout Statement and Payout Run Detail views show generic labels like "Variable Pay" without indicating which plan or target bonus was used for the calculation. This makes it impossible to verify that the correct plan was applied for a given month.
 
-### Current Gaps Identified
+### Gaps to Fix
 
-| Gap | Impact | Severity |
-|-----|--------|----------|
-| No compensation change history table | Cannot track what OTE/TFP was before a hike | High |
-| Employee master edits overwrite values in-place | Historical compensation data is lost forever | High |
-| No "Split Assignment" workflow for mid-year changes | Admin must manually end old assignment + create new one with new OTE -- error-prone | High |
-| No Change Reason capture (hike, promotion, transfer, correction) | No audit trail for why compensation changed | Medium |
-| Payout engine does not blend two assignments in one fiscal year | If assignment A runs Jan-Jun and B runs Jul-Dec, each month picks the right plan, but YTD VP calculation uses a single target_bonus_usd across all months | High |
-| No effective-date-aware compensation rate on user_targets | compensation_exchange_rate is on employees table (single value), not per-assignment | Medium |
-| No UI to view an employee's compensation timeline/history | Admin cannot see past changes at a glance | Medium |
-| Employee deactivation does not auto-end plan assignment | Departing employee's assignment may extend beyond departure date | Low |
+| Component | Gap | Fix |
+|-----------|-----|-----|
+| Payout Statement (hook) | VP items show hardcoded `metricName: 'Variable Pay'` with no plan context | Join `monthly_payouts.plan_id` to `comp_plans.name` and include plan name + target bonus |
+| Payout Statement (UI) | Statement header shows no plan info | Add "Plan: [Plan Name]" and "Target Bonus: $X" to the header card |
+| Payout Run Detail (hook) | `EmployeePayoutSummary` has no plan name field | Add `planName` field by joining `plan_id` to `comp_plans` |
+| Payout Run Detail (UI) | Employee table has no Plan column | Add a "Plan" column showing which plan was active for that month |
+| Dashboard | No blended target summary for multi-assignment years | Add a small info section when multiple assignments exist, showing each period and its OTE |
 
 ---
 
-### Plan
+### Changes
 
-#### 1. New Database Table: `employee_change_log`
+#### 1. `src/hooks/usePayoutStatement.ts` -- Add plan context to statement data
 
-Captures a snapshot every time compensation-relevant fields change on the `employees` table or `user_targets` table.
+- Add `planName` and `targetBonusUsd` fields to the `PayoutStatementData` interface
+- In `fetchPayoutStatementData()`, after fetching `monthly_payouts`, extract the `plan_id` from the first payout record
+- Join to `comp_plans` to get the plan name
+- Join to `user_targets` to get the `target_bonus_usd` for the active assignment in that month
+- Set `metricName` on VP items to the actual plan metric name (or plan name) instead of hardcoded `'Variable Pay'`
+
+#### 2. `src/components/reports/PayoutStatement.tsx` -- Show plan in header
+
+- In `StatementHeader`, display the plan name and target bonus below the employee name/period line
+- Example: "Plan: Hunter FY2026 | Target Bonus: $25,000"
+
+#### 3. `src/hooks/useMonthlyPayouts.ts` -- Add plan name to employee breakdown
+
+- In `useEmployeePayoutBreakdown()`, after fetching payouts, collect unique `plan_id` values
+- Batch-fetch plan names from `comp_plans`
+- Add `planName` to `EmployeePayoutSummary` interface, populated from the first VP payout's `plan_id`
+
+#### 4. `src/components/admin/PayoutRunDetail.tsx` -- Add Plan column
+
+- Add a "Plan" column to the Employee Payouts table between Employee and Currency
+- Display the plan name from the enriched `EmployeePayoutSummary`
+- Add `planName` to CSV and XLSX exports
+
+#### 5. `src/hooks/useDashboardPayoutSummary.ts` -- Add blended target info
+
+- When fetching YTD payout summary, also query `user_targets` for the current employee in the fiscal year
+- If multiple assignments exist, return an array of `{ planName, startDate, endDate, targetBonusUsd }` segments
+
+#### 6. `src/pages/Dashboard.tsx` -- Show blended target info
+
+- When `payoutSummary` contains multiple assignment segments, render a small info card below the summary cards showing:
 
 ```text
-employee_change_log
-  id              UUID (PK)
-  employee_id     UUID (FK -> employees.id)
-  changed_at      TIMESTAMPTZ (default now())
-  changed_by      UUID (FK -> auth.users.id)
-  change_type     TEXT  -- 'hike', 'promotion', 'transfer', 'correction', 'new_joiner', 'departure'
-  change_reason   TEXT  -- free-text note
-  field_changes   JSONB -- { "tfp_usd": { "old": 80000, "new": 90000 }, "sales_function": { "old": "Farmer", "new": "Hunter" } }
-  effective_date  DATE  -- when the change takes effect
+Assignment Periods:
+  Jan - Jun 2026: Hunter FY2026 (OTE $100,000 | Target Bonus $20,000)
+  Jul - Dec 2026: Hunter FY2026 (OTE $120,000 | Target Bonus $24,000)
 ```
-
-- RLS: Readable by admin, finance, gtm_ops. Writable by admin, gtm_ops.
-
-#### 2. Enhanced Employee Edit Flow with Change Capture
-
-**File: `src/components/admin/EmployeeFormDialog.tsx`**
-
-When editing an employee, add:
-- A "Change Type" dropdown (Hike, Promotion, Transfer, Correction) -- required when compensation fields change
-- An "Effective Date" date picker -- defaults to today
-- A "Reason / Notes" text field -- optional
-- On save: detect which fields changed, write a row to `employee_change_log`, then update the employee record
-
-**File: `src/hooks/useEmployeeChangeLog.ts`** (new)
-
-- `useEmployeeChangeLog(employeeId)` -- fetches change history for an employee
-- `useLogEmployeeChange()` -- mutation to insert a change log entry
-
-#### 3. Mid-Year Assignment Split Workflow
-
-When compensation values change mid-year and the employee has an active plan assignment, the system should offer to split the assignment:
-
-**Workflow:**
-1. Admin edits employee OTE from $100k to $120k effective July 1
-2. System detects an active `user_targets` assignment spanning Jan 1 - Dec 31 with OTE $100k
-3. System prompts: "This employee has an active plan assignment. Would you like to split it at the effective date?"
-4. If confirmed:
-   - End existing assignment on June 30 (keeping old OTE $100k)
-   - Create new assignment starting July 1 through Dec 31 with new OTE $120k
-   - Both assignments reference the same plan (unless a plan change is also selected)
-
-**File: `src/components/admin/CompensationChangeDialog.tsx`** (new)
-
-A dedicated dialog that appears when compensation-impacting fields change on an employee. Shows:
-- The current active assignment details
-- The proposed changes
-- Option to split or keep as-is
-- Effective date picker
-- Change type and reason fields
-
-#### 4. Payout Engine Fix for Multi-Assignment Years
-
-**File: `src/lib/payoutEngine.ts`**
-
-Currently at line 961, the engine fetches a single assignment for the month. This works correctly for monthly calculation since each month picks the right assignment. However, the YTD VP calculation (used for incremental computation) needs to account for different `target_bonus_usd` values across assignments within the same year.
-
-The fix:
-- When calculating YTD VP, instead of using a single `targetBonusUsd` for the full year, sum the pro-rated bonus from each assignment period
-- For months Jan-Jun with Assignment A ($100k OTE): use A's target_bonus_usd pro-rated for 6 months
-- For months Jul-Dec with Assignment B ($120k OTE): use B's target_bonus_usd pro-rated for 6 months
-- The incremental calculation (YTD minus prior) naturally handles this since each month's calculation uses that month's active assignment
-
-**Validation**: Confirm that the current incremental model (calculate this month using this month's plan, subtract sum of prior months' finalized payouts) already handles the multi-assignment case correctly. Since each month is calculated independently with its own assignment's bonus, the incremental subtraction should work. Add a comment and test coverage.
-
-#### 5. Employee Compensation Timeline UI
-
-**File: `src/components/admin/EmployeeCompensationTimeline.tsx`** (new)
-
-Add a "Compensation History" section visible when viewing/editing an employee, showing:
-- A chronological timeline of all changes from `employee_change_log`
-- Each entry shows: date, change type badge, what changed (old value to new value), changed by, reason
-- Also shows all plan assignments from `user_targets` interleaved on the timeline
-
-Accessible from the Employee Accounts table via a new "View History" action in the dropdown menu.
-
-#### 6. Auto-End Assignment on Departure
-
-**File: `src/components/admin/EmployeeFormDialog.tsx`**
-
-When an admin sets a `departure_date` on an employee:
-- Check if any active `user_targets` assignment has an `effective_end_date` after the departure date
-- If so, prompt: "Adjust assignment end date to match departure date?"
-- If confirmed, update the assignment's `effective_end_date` to the departure date
-
-#### 7. Compensation Change Audit in Existing Audit System
-
-**File: `src/lib/auditLogger.ts`**
-
-Add `logEmployeeChange()` function that writes to `payout_audit_log` with action type `employee_compensation_changed`, capturing the field changes, effective date, and change type.
 
 ---
 
-### Technical Details -- Files to Create/Modify
+### Technical Details
 
-| File | Action | Description |
-|------|--------|-------------|
-| Migration SQL | Create | `employee_change_log` table with RLS policies |
-| `src/hooks/useEmployeeChangeLog.ts` | Create | Hooks for reading/writing change log |
-| `src/components/admin/CompensationChangeDialog.tsx` | Create | Mid-year split workflow dialog |
-| `src/components/admin/EmployeeCompensationTimeline.tsx` | Create | Timeline view of compensation history |
-| `src/components/admin/EmployeeFormDialog.tsx` | Modify | Add change type/reason/effective date fields; trigger split workflow |
-| `src/components/admin/EmployeeAccounts.tsx` | Modify | Add "View History" action to dropdown menu |
-| `src/lib/payoutEngine.ts` | Modify | Add comments confirming multi-assignment handling; add blended YTD bonus helper if needed |
-| `src/lib/auditLogger.ts` | Modify | Add `logEmployeeChange()` function |
-| `src/hooks/usePlanAssignments.ts` | Modify | Add `useSplitAssignment()` mutation for the split workflow |
+**Data flow**: `monthly_payouts.plan_id` (UUID) already stores which plan was used for each payout line. The fix is purely about joining this to `comp_plans.name` and surfacing it in the UI.
+
+**Files to modify**:
+
+| File | Action |
+|------|--------|
+| `src/hooks/usePayoutStatement.ts` | Add plan_id lookup, enrich VP items with plan name |
+| `src/components/reports/PayoutStatement.tsx` | Show plan name + target bonus in header |
+| `src/hooks/useMonthlyPayouts.ts` | Add planName to EmployeePayoutSummary |
+| `src/components/admin/PayoutRunDetail.tsx` | Add Plan column to table + exports |
+| `src/hooks/useDashboardPayoutSummary.ts` | Add multi-assignment segment data |
+| `src/pages/Dashboard.tsx` | Render blended target info card |
+
+No database changes are needed -- all required data (`plan_id` on `monthly_payouts`, plan names on `comp_plans`, assignments on `user_targets`) already exists.
 
