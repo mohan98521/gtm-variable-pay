@@ -1,55 +1,42 @@
 
 
-## Remove Unused Participant Roles and Rename Solution Manager
+## Add Support Team Columns to Deals Bulk Upload
 
 ### Overview
-Simplify the Deal Form by removing 3 participant fields (Product Specialist, Product Specialist Head, Solution Manager Head) and relabeling "Solution Manager" to "Solution Manager ID". The support team toggles for Sales Engineering and Solution Manager already exist and will remain.
+Add two new optional columns (`sales_engineering_team_name` and `solution_manager_team_name`) to the bulk upload template. Users can specify either an individual employee ID **or** a team name for Sales Engineering and Solution Manager roles -- if both are provided, the team takes priority (matching the UI form behavior).
 
 ### Changes
 
-**1. File: `src/components/data-inputs/DealFormDialog.tsx` -- Remove fields and relabel**
+**File: `src/components/data-inputs/DealsBulkUpload.tsx`**
 
-- Remove the "Product Specialist" form field (lines 870-894)
-- Remove the "Product Specialist Head" form field (lines 895-919)
-- Remove the "Solution Manager Head" form field (lines 971-995)
-- Relabel "Solution Manager" to "Solution Manager ID" in the team/individual toggle section
-- Remove the corresponding default values in form.reset() for the removed fields (set them to empty/undefined so they are not submitted)
-- Clean up the `onSubmit` function to stop building names for removed fields (`productSpecialistName`, `productSpecialistHeadName`, `solutionManagerHeadName`)
+1. **Add a query to fetch support teams** -- similar to the existing employees query, fetch all active support teams to build a lookup map of `team_name -> { id, team_role }`.
 
-**2. File: `src/hooks/useDeals.ts` -- Update PARTICIPANT_ROLES constant**
+2. **Update `ParsedDeal` interface** -- add two new optional fields:
+   - `sales_engineering_team_name?: string`
+   - `solution_manager_team_name?: string`
+   - `sales_engineering_team_id?: string` (resolved from name)
+   - `solution_manager_team_id?: string` (resolved from name)
 
-Remove from `PARTICIPANT_ROLES`:
-- `product_specialist`
-- `product_specialist_head`
-- `solution_manager_head`
+3. **Update `CSV_TEMPLATE_HEADERS`** -- add `sales_engineering_team_name` and `solution_manager_team_name` after their respective individual ID columns.
 
-Keep: `sales_rep`, `sales_head`, `sales_engineering`, `sales_engineering_head`, `product_specialist` (removing), `solution_manager`
+4. **Update `generateCSVTemplate`** -- add empty values for the two new columns in the example row, with a comment row or note that users should fill either the individual ID or team name, not both.
 
-Updated list:
-```
-sales_rep, sales_head, sales_engineering, sales_engineering_head, solution_manager
-```
+5. **Update `parseCSV` and `rowsToParsedDeals`** -- read the two new columns from the raw data.
 
-**3. File: `src/hooks/useSupportTeams.ts` -- Update TEAM_ROLES constant**
+6. **Update `validateDeals`** -- add validation logic:
+   - If `sales_engineering_team_name` is provided, look it up in the support teams list; error if not found or if the team's `team_role` is not `sales_engineering`.
+   - Same for `solution_manager_team_name` with role `solution_manager`.
+   - If both an individual ID and a team name are provided for the same role, show a warning (team will take priority).
+   - Resolve the validated team name to its UUID (`sales_engineering_team_id` / `solution_manager_team_id`).
 
-Remove from `TEAM_ROLES`:
-- `product_specialist`
-- `product_specialist_head`
-- `solution_manager_head`
+7. **Update `uploadMutation`** -- when building `dealData` for insert:
+   - If a team name was provided and resolved, set `sales_engineering_team_id` and clear the individual `sales_engineering_employee_id` / `sales_engineering_name`.
+   - Same logic for `solution_manager_team_id`.
 
-**4. File: `src/components/data-inputs/DealsBulkUpload.tsx` -- Update template and mapping**
+### Technical Details
 
-- Remove `product_specialist_id`, `product_specialist_head_id`, `solution_manager_head_id` from the CSV template columns and field mapping
-- Update the template example rows accordingly
-
-**5. File: `src/components/data-inputs/DealsTable.tsx` -- Remove table columns**
-
-- Remove Product Specialist, Product Specialist Head, and Solution Manager Head columns from the deals table display
-
-### What is NOT changing
-- The database columns remain untouched (they will simply be empty/null for new deals)
-- Existing deals with data in these fields keep their data
-- The Solution Manager field retains its full team/individual toggle functionality -- only the label changes to "Solution Manager ID"
-- Sales Rep, Sales Head, Sales Engineering (with team toggle), Sales Engineering Head all stay as-is
-- Attribution logic in `useMyDealsWithIncentives.ts`, `useTeamCompensation.ts`, and `fnfEngine.ts` will continue to work (they read whatever is stored in the DB columns)
+- Support teams are fetched once via `useQuery` with key `["support-teams-validation"]`, selecting `id, team_name, team_role, is_active` where `is_active = true`.
+- Team name matching is case-insensitive (`toLowerCase()` comparison).
+- The template example row will show: individual columns empty + team column = `"APAC SE Team"` to demonstrate usage.
+- No database or schema changes required -- the `deals` table already has `sales_engineering_team_id` and `solution_manager_team_id` columns.
 
