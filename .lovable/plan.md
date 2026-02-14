@@ -1,31 +1,29 @@
 
 
-## Simplify Stats Cards and Add Clickable Employee List Downloads
+## Make Employee Stats Cards Clickable for Downloads
+
+### Overview
+Add clickable download functionality to each of the 4 stats cards in the Employee Accounts section, mirroring the pattern already used in the Performance Targets tab.
 
 ### Changes
 
-**File: `src/components/admin/PerformanceTargetsManagement.tsx`**
+**File: `src/components/admin/EmployeeAccounts.tsx`**
 
-#### 1. Remove "Total Annual Value" and "NRR Targets" stats cards
-- Remove the 2nd card (Total Annual Value / DollarSign) and 4th card (NRR Targets / Target) from the stats grid (lines 214-265)
-- Change grid from `lg:grid-cols-4` to `lg:grid-cols-2` since only 2 cards remain
-- Clean up unused stats (`totalAnnualValue`, `nrrEmployeeCount`, `nrrTotalValue`) and unused imports (`DollarSign`, `Target`)
+1. **"Active Employees" card** -- On click, export all active employees (full 26-field Excel export)
+2. **"With Accounts" card** -- On click, export only active employees who have an `auth_user_id` set
+3. **"Pending Accounts" card** -- On click, export only active employees who do NOT have an `auth_user_id`
+4. **"Inactive" card** -- On click, export all inactive employees
 
-#### 2. Make "Employees with Targets" card clickable to export their target list
-- Wrap the card content in a clickable cursor-pointer style
-- On click, generate and download an Excel file containing all targets for employees who have targets (the full `targets` dataset grouped by employee)
-- Add a subtle download icon or hover indicator so users know it is clickable
-
-#### 3. Make "Without Targets" card clickable to export employee list without targets
-- Compute the list of employees without targets by comparing active employees against those with targets
-- Fetch employee names for the "without targets" list (already have `totalEmployees` count; will need to fetch actual employee records)
-- On click, generate and download an Excel file listing employees who have no targets assigned (Employee Name, Employee ID)
+Each card will:
+- Get `cursor-pointer` and `hover:shadow-md transition-shadow` classes
+- Show a small `Download` icon as a visual affordance
+- Reuse the existing `generateXLSX` / `downloadXLSX` utilities and the same 26-column definition already used for the Export button
+- Show a toast if the list is empty ("No employees in this category")
 
 ### Technical Details
 
-- Update the existing `totalEmployees` query to fetch actual employee records (`employee_id`, `full_name`) instead of just a count, so we can identify who lacks targets
-- Add two new handler functions: `handleExportWithTargets()` and `handleExportWithoutTargets()`
-- Reuse existing `generateXLSX` / `downloadXLSX` utilities
-- Cards will show a subtle hover effect (e.g., `hover:shadow-md cursor-pointer transition-shadow`) to indicate interactivity
-- Add a small Download icon next to each card value as a visual affordance
+- Extract the existing column definition (lines 495-522) into a shared constant to avoid duplication across the Export button and the 4 card handlers
+- Add 4 click handler functions that filter `activeEmployees` / `inactiveEmployees` by the relevant criteria and generate the download
+- File naming convention: `active_employees.xlsx`, `employees_with_accounts.xlsx`, `employees_pending_accounts.xlsx`, `inactive_employees.xlsx`
+- No database or backend changes required
 
