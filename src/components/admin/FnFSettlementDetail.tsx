@@ -24,6 +24,8 @@ const STATUS_FLOW = ['draft', 'review', 'approved', 'finalized', 'paid'] as cons
 const LINE_TYPE_LABELS: Record<string, string> = {
   year_end_release: "Year-End Release",
   vp_settlement: "VP Settlement",
+  nrr_settlement: "NRR Settlement",
+  spiff_settlement: "SPIFF Settlement",
   commission_settlement: "Commission Settlement",
   clawback_deduction: "Clawback Deduction",
   clawback_carryforward: "Clawback Carry-forward",
@@ -167,6 +169,7 @@ export function FnFSettlementDetail({ settlementId, onBack, employeeNameMap }: P
                     settlementId: settlement.id,
                     tranche: 1,
                     newStatus: t1Next,
+                    employeeId: settlement.employee_id,
                   })
                 }
                 disabled={updateStatus.isPending}
@@ -216,6 +219,7 @@ export function FnFSettlementDetail({ settlementId, onBack, employeeNameMap }: P
                     settlementId: settlement.id,
                     tranche: 2,
                     newStatus: t2Next,
+                    employeeId: settlement.employee_id,
                   })
                 }
                 disabled={updateStatus.isPending}
