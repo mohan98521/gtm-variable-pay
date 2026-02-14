@@ -70,10 +70,7 @@ const dealFormSchema = z.object({
   sales_head_employee_id: z.string().optional(),
   sales_engineering_employee_id: z.string().optional(),
   sales_engineering_head_employee_id: z.string().optional(),
-  product_specialist_employee_id: z.string().optional(),
-  product_specialist_head_employee_id: z.string().optional(),
   solution_manager_employee_id: z.string().optional(),
-  solution_manager_head_employee_id: z.string().optional(),
   linked_to_impl: z.boolean().default(false),
   eligible_for_perpetual_incentive: z.boolean().default(false),
   status: z.string().default("draft"),
@@ -171,10 +168,7 @@ export function DealFormDialog({
       sales_head_employee_id: "",
       sales_engineering_employee_id: "",
       sales_engineering_head_employee_id: "",
-      product_specialist_employee_id: "",
-      product_specialist_head_employee_id: "",
       solution_manager_employee_id: "",
-      solution_manager_head_employee_id: "",
       linked_to_impl: false,
       eligible_for_perpetual_incentive: false,
       status: "draft",
@@ -214,10 +208,7 @@ export function DealFormDialog({
           sales_head_employee_id: deal.sales_head_employee_id || "",
           sales_engineering_employee_id: deal.sales_engineering_employee_id || "",
           sales_engineering_head_employee_id: deal.sales_engineering_head_employee_id || "",
-          product_specialist_employee_id: deal.product_specialist_employee_id || "",
-          product_specialist_head_employee_id: (deal as any).product_specialist_head_employee_id || "",
           solution_manager_employee_id: (deal as any).solution_manager_employee_id || "",
-          solution_manager_head_employee_id: (deal as any).solution_manager_head_employee_id || "",
           linked_to_impl: deal.linked_to_impl || false,
           eligible_for_perpetual_incentive: deal.eligible_for_perpetual_incentive || false,
           status: deal.status,
@@ -272,10 +263,7 @@ export function DealFormDialog({
           sales_head_employee_id: "",
           sales_engineering_employee_id: "",
           sales_engineering_head_employee_id: "",
-          product_specialist_employee_id: "",
-          product_specialist_head_employee_id: "",
           solution_manager_employee_id: "",
-          solution_manager_head_employee_id: "",
           linked_to_impl: false,
           eligible_for_perpetual_incentive: false,
           status: "draft",
@@ -296,10 +284,7 @@ export function DealFormDialog({
     const salesHeadName = getEmployeeName(values.sales_head_employee_id);
     const salesEngineeringName = seTeamMode ? "" : getEmployeeName(values.sales_engineering_employee_id);
     const salesEngineeringHeadName = getEmployeeName(values.sales_engineering_head_employee_id);
-    const productSpecialistName = getEmployeeName(values.product_specialist_employee_id);
-    const productSpecialistHeadName = getEmployeeName(values.product_specialist_head_employee_id);
     const solutionManagerName = smTeamMode ? "" : getEmployeeName(values.solution_manager_employee_id);
-    const solutionManagerHeadName = getEmployeeName(values.solution_manager_head_employee_id);
 
     // Build team assignment overrides
     const teamOverrides: Record<string, any> = {};
@@ -326,13 +311,8 @@ export function DealFormDialog({
         sales_head_name: salesHeadName || undefined,
         sales_engineering_name: salesEngineeringName || undefined,
         sales_engineering_head_name: salesEngineeringHeadName || undefined,
-        product_specialist_name: productSpecialistName || undefined,
-        product_specialist_head_employee_id: values.product_specialist_head_employee_id || undefined,
-        product_specialist_head_name: productSpecialistHeadName || undefined,
         solution_manager_employee_id: smTeamMode ? undefined : (values.solution_manager_employee_id || undefined),
         solution_manager_name: solutionManagerName || undefined,
-        solution_manager_head_employee_id: values.solution_manager_head_employee_id || undefined,
-        solution_manager_head_name: solutionManagerHeadName || undefined,
         participants,
         ...teamOverrides,
       } as any);
@@ -364,14 +344,8 @@ export function DealFormDialog({
         sales_engineering_name: salesEngineeringName || undefined,
         sales_engineering_head_employee_id: values.sales_engineering_head_employee_id || undefined,
         sales_engineering_head_name: salesEngineeringHeadName || undefined,
-        product_specialist_employee_id: values.product_specialist_employee_id || undefined,
-        product_specialist_name: productSpecialistName || undefined,
-        product_specialist_head_employee_id: values.product_specialist_head_employee_id || undefined,
-        product_specialist_head_name: productSpecialistHeadName || undefined,
         solution_manager_employee_id: smTeamMode ? undefined : (values.solution_manager_employee_id || undefined),
         solution_manager_name: solutionManagerName || undefined,
-        solution_manager_head_employee_id: values.solution_manager_head_employee_id || undefined,
-        solution_manager_head_name: solutionManagerHeadName || undefined,
         linked_to_impl: values.linked_to_impl,
         eligible_for_perpetual_incentive: values.eligible_for_perpetual_incentive,
         status: values.status,
@@ -867,60 +841,10 @@ export function DealFormDialog({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="product_specialist_employee_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Product Specialist</FormLabel>
-                      <FormControl>
-                        <SearchableSelect
-                          value={field.value || "_none"}
-                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
-                          options={[
-                            { value: "_none", label: "None" },
-                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
-                              value: emp.employee_id,
-                              label: `${emp.full_name} (${emp.employee_id})`,
-                            })),
-                          ]}
-                          placeholder="Select employee"
-                          searchPlaceholder="Search employees..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="product_specialist_head_employee_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Product Specialist Head</FormLabel>
-                      <FormControl>
-                        <SearchableSelect
-                          value={field.value || "_none"}
-                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
-                          options={[
-                            { value: "_none", label: "None" },
-                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
-                              value: emp.employee_id,
-                              label: `${emp.full_name} (${emp.employee_id})`,
-                            })),
-                          ]}
-                          placeholder="Select employee"
-                          searchPlaceholder="Search employees..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {/* Solution Manager: Team-or-Individual toggle */}
+                {/* Solution Manager ID: Team-or-Individual toggle */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Solution Manager</span>
+                    <span className="text-sm font-medium">Solution Manager ID</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">{smTeamMode ? "Team" : "Individual"}</span>
                       <Switch checked={smTeamMode} onCheckedChange={(checked) => {
@@ -968,31 +892,6 @@ export function DealFormDialog({
                     />
                   )}
                 </div>
-                <FormField
-                  control={form.control}
-                  name="solution_manager_head_employee_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Solution Manager Head</FormLabel>
-                      <FormControl>
-                        <SearchableSelect
-                          value={field.value || "_none"}
-                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
-                          options={[
-                            { value: "_none", label: "None" },
-                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
-                              value: emp.employee_id,
-                              label: `${emp.full_name} (${emp.employee_id})`,
-                            })),
-                          ]}
-                          placeholder="Select employee"
-                          searchPlaceholder="Search employees..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
             </div>
 

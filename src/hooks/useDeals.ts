@@ -129,10 +129,7 @@ export const PARTICIPANT_ROLES = [
   { value: "sales_head", label: "Sales Head" },
   { value: "sales_engineering", label: "Sales Engineering" },
   { value: "sales_engineering_head", label: "Sales Engineering Head" },
-  { value: "product_specialist", label: "Product Specialist" },
-  { value: "product_specialist_head", label: "Product Specialist Head" },
   { value: "solution_manager", label: "Solution Manager" },
-  { value: "solution_manager_head", label: "Solution Manager Head" },
 ] as const;
 
 export const DEAL_STATUSES = [
