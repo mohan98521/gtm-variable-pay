@@ -56,6 +56,39 @@ async function checkOverlappingAssignments(
   return { hasOverlap: false };
 }
 
+// Fetch employee tenure dates
+async function fetchEmployeeTenure(userId: string): Promise<{ date_of_hire: string | null; departure_date: string | null }> {
+  const { data, error } = await supabase
+    .from("employees")
+    .select("date_of_hire, departure_date")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return { date_of_hire: data?.date_of_hire ?? null, departure_date: data?.departure_date ?? null };
+}
+
+// Validate and clamp assignment dates against employee tenure
+function validateTenureBoundary(
+  startDate: string,
+  endDate: string,
+  tenure: { date_of_hire: string | null; departure_date: string | null }
+): { clampedEndDate: string; warnings: string[] } {
+  const warnings: string[] = [];
+  let clampedEndDate = endDate;
+
+  if (tenure.date_of_hire && startDate < tenure.date_of_hire) {
+    warnings.push(`Assignment start date is before employee's joining date (${tenure.date_of_hire}). It will only be effective from their joining date.`);
+  }
+
+  if (tenure.departure_date && endDate > tenure.departure_date) {
+    clampedEndDate = tenure.departure_date;
+    warnings.push(`Assignment end date was clamped to employee's departure date (${tenure.departure_date}).`);
+  }
+
+  return { clampedEndDate, warnings };
+}
+
 export interface PlanAssignment {
   id: string;
   user_id: string;
@@ -188,11 +221,20 @@ export function useCreatePlanAssignment() {
 
   return useMutation({
     mutationFn: async (input: CreatePlanAssignmentInput) => {
+      // Tenure validation
+      const tenure = await fetchEmployeeTenure(input.user_id);
+      const { clampedEndDate, warnings } = validateTenureBoundary(
+        input.effective_start_date,
+        input.effective_end_date,
+        tenure
+      );
+      const effectiveEndDate = clampedEndDate;
+
       // Check for overlapping assignments before inserting
       const overlapCheck = await checkOverlappingAssignments(
         input.user_id,
         input.effective_start_date,
-        input.effective_end_date
+        effectiveEndDate
       );
 
       if (overlapCheck.hasOverlap && overlapCheck.conflictingPlan) {
@@ -210,7 +252,7 @@ export function useCreatePlanAssignment() {
           user_id: input.user_id,
           plan_id: input.plan_id,
           effective_start_date: input.effective_start_date,
-          effective_end_date: input.effective_end_date,
+          effective_end_date: effectiveEndDate,
           target_value_annual: input.target_value_annual,
           currency: input.currency,
           target_bonus_percent: input.target_bonus_percent,
@@ -224,6 +266,12 @@ export function useCreatePlanAssignment() {
         .single();
 
       if (error) throw error;
+
+      // Show tenure warnings after success
+      if (warnings.length > 0) {
+        warnings.forEach(w => toast.warning(w));
+      }
+
       return data;
     },
     onSuccess: (_, variables) => {
@@ -244,12 +292,21 @@ export function useUpdatePlanAssignment() {
 
   return useMutation({
     mutationFn: async (input: CreatePlanAssignmentInput & { id: string }) => {
+      // Tenure validation
+      const tenure = await fetchEmployeeTenure(input.user_id);
+      const { clampedEndDate, warnings } = validateTenureBoundary(
+        input.effective_start_date,
+        input.effective_end_date,
+        tenure
+      );
+      const effectiveEndDate = clampedEndDate;
+
       // Check for overlapping assignments before updating (exclude current assignment)
       const overlapCheck = await checkOverlappingAssignments(
         input.user_id,
         input.effective_start_date,
-        input.effective_end_date,
-        input.id // Exclude current assignment from overlap check
+        effectiveEndDate,
+        input.id
       );
 
       if (overlapCheck.hasOverlap && overlapCheck.conflictingPlan) {
@@ -266,7 +323,7 @@ export function useUpdatePlanAssignment() {
         .update({
           plan_id: input.plan_id,
           effective_start_date: input.effective_start_date,
-          effective_end_date: input.effective_end_date,
+          effective_end_date: effectiveEndDate,
           target_value_annual: input.target_value_annual,
           currency: input.currency,
           target_bonus_percent: input.target_bonus_percent,
@@ -281,6 +338,12 @@ export function useUpdatePlanAssignment() {
         .single();
 
       if (error) throw error;
+
+      // Show tenure warnings after success
+      if (warnings.length > 0) {
+        warnings.forEach(w => toast.warning(w));
+      }
+
       return data;
     },
     onSuccess: (_, variables) => {

@@ -370,6 +370,71 @@ export function PlanAssignmentDialog({
               />
             </div>
 
+            {/* Tenure boundary warnings */}
+            {(() => {
+              const startDate = form.watch("effective_start_date");
+              const endDate = form.watch("effective_end_date");
+              const joiningDate = employee?.date_of_hire ? new Date(employee.date_of_hire) : null;
+              const departureDate = employee?.departure_date ? new Date(employee.departure_date) : null;
+
+              const isBeforeJoining = joiningDate && startDate && startDate < joiningDate;
+              const isAfterDeparture = departureDate && endDate && endDate > departureDate;
+              const isEntirelyOutside =
+                (departureDate && startDate && startDate > departureDate) ||
+                (joiningDate && endDate && endDate < joiningDate);
+
+              return (
+                <>
+                  {isEntirelyOutside && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        This assignment falls entirely outside the employee's tenure. It will have no effect.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {!isEntirelyOutside && isBeforeJoining && joiningDate && (
+                    <Alert variant="default" className="border-warning bg-warning/10">
+                      <AlertTriangle className="h-4 w-4 text-warning" />
+                      <AlertDescription className="flex items-center justify-between text-warning">
+                        <span>
+                          Start date is before employee's joining date ({format(joiningDate, "MMM d, yyyy")}). The assignment will only be effective from their joining date onward.
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="ml-2 shrink-0 text-xs"
+                          onClick={() => form.setValue("effective_start_date", joiningDate)}
+                        >
+                          Use joining date
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {!isEntirelyOutside && isAfterDeparture && departureDate && (
+                    <Alert variant="default" className="border-warning bg-warning/10">
+                      <AlertTriangle className="h-4 w-4 text-warning" />
+                      <AlertDescription className="flex items-center justify-between text-warning">
+                        <span>
+                          End date is after employee's departure date ({format(departureDate, "MMM d, yyyy")}). The assignment will only be effective until their departure.
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="ml-2 shrink-0 text-xs"
+                          onClick={() => form.setValue("effective_end_date", departureDate)}
+                        >
+                          Use departure date
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
+              );
+            })()}
+
             {/* Currency */}
             <FormField
               control={form.control}
