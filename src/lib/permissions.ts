@@ -18,6 +18,7 @@ export type PermissionKey =
   | "tab:payout_runs"
   | "tab:exchange_rates"
   | "tab:deal_team_spiffs"
+  | "tab:support_teams"
   // Actions
   | "action:create_comp_plan"
   | "action:edit_comp_plan"
@@ -61,6 +62,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "tab:payout_runs", label: "Payout Runs", description: "Manage payout run lifecycle", category: "tab" },
   { key: "tab:exchange_rates", label: "Exchange Rates", description: "Manage exchange rates", category: "tab" },
   { key: "tab:deal_team_spiffs", label: "Deal Team SPIFFs", description: "Access the Deal Team SPIFF management section", category: "tab" },
+  { key: "tab:support_teams", label: "Support Teams", description: "Manage support team attribution for GTM roles", category: "tab" },
   
   // Actions
   { key: "action:create_comp_plan", label: "Create Comp Plan", description: "Create new compensation plans", category: "action" },

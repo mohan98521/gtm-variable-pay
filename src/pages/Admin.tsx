@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Layers, Users, UserCog, Shield, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, type LucideIcon } from "lucide-react";
+import { Layers, Users, UserCog, Shield, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, UsersRound, type LucideIcon } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { CompensationPlansTab } from "@/components/admin/CompensationPlansTab";
@@ -15,6 +15,7 @@ import { ExchangeRateManagement } from "@/components/admin/ExchangeRateManagemen
 import { PayoutRunManagement } from "@/components/admin/PayoutRunManagement";
 import { RoleBuilder } from "@/components/admin/RoleBuilder";
 import { DealTeamSpiffManager } from "@/components/admin/DealTeamSpiffManager";
+import { SupportTeamManagement } from "@/components/admin/SupportTeamManagement";
 
 // --- Section / Item types ---
 interface NavItem {
@@ -54,7 +55,7 @@ const sections: NavSection[] = [
     items: [
       { id: "accounts", label: "Employee Accounts", icon: UserCog, permissionCheck: (c) => c.canAccessTab("tab:employee_accounts") },
       { id: "roles", label: "Role Management", icon: Shield, permissionCheck: (c) => c.canAccessTab("tab:role_management") },
-      
+      { id: "support-teams", label: "Support Teams", icon: UsersRound, permissionCheck: (c) => c.canAccessTab("tab:support_teams") },
     ],
   },
   {
@@ -84,6 +85,7 @@ const contentMap: Record<string, React.ComponentType> = {
   "performance-targets": PerformanceTargetsManagement,
   "accounts": EmployeeAccounts,
   "roles": RoleManagement,
+  "support-teams": SupportTeamManagement,
   
   "exchange-rates": ExchangeRateManagement,
   "payout-runs": PayoutRunManagement,

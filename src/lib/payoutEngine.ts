@@ -25,11 +25,50 @@ import {
 import { calculateDealCommission, calculateTotalCommission, CommissionCalculation } from "./commissions";
 import { calculateNRRPayout, NRRDeal, NRRCalculationResult } from "./nrrCalculation";
 import { calculateAllSpiffs, SpiffConfig, SpiffDeal, SpiffMetric, SpiffDealBreakdown } from "./spiffCalculation";
+import { resolveTeamMembers } from "@/hooks/useSupportTeams";
 
 // ============= HELPERS =============
 
 function ensureFullDate(monthYear: string): string {
   return monthYear.length === 7 ? monthYear + '-01' : monthYear;
+}
+
+/**
+ * Find deal IDs where an employee is credited via support team assignments.
+ * Checks sales_engineering_team_id and solution_manager_team_id columns.
+ */
+async function getTeamAttributedDealIds(
+  employeeId: string,
+  fiscalYearStart: string,
+  monthYear: string
+): Promise<string[]> {
+  // Get all teams this employee belongs to (active, within effective dates)
+  const { data: memberships } = await supabase
+    .from('support_team_members' as any)
+    .select('team_id')
+    .eq('employee_id', employeeId)
+    .eq('is_active', true)
+    .lte('effective_from', monthYear)
+    .or(`effective_to.is.null,effective_to.gte.${monthYear}`);
+
+  if (!memberships || memberships.length === 0) return [];
+
+  const teamIds = (memberships as any[]).map((m: any) => m.team_id);
+
+  // Find deals that reference any of these teams
+  const orParts = teamIds.flatMap((tid: string) => [
+    `sales_engineering_team_id.eq.${tid}`,
+    `solution_manager_team_id.eq.${tid}`,
+  ]);
+
+  const { data: deals } = await supabase
+    .from('deals')
+    .select('id')
+    .or(orParts.join(','))
+    .gte('month_year', fiscalYearStart)
+    .lte('month_year', monthYear);
+
+  return (deals || []).map(d => d.id);
 }
 
 // ============= TYPE DEFINITIONS =============
@@ -514,39 +553,53 @@ async function calculateEmployeeVariablePay(
       };
     } else {
       // Deal-based metric (New Software Booking ARR, Team, or Org)
-      let dealsQuery;
+      let fetchedDeals: any[] = [];
 
       if (isOrgMetric) {
-        // "Org " metrics: fetch ALL deals without any participant filter
-        dealsQuery = supabase
+        const { data } = await supabase
           .from('deals')
           .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
           .gte('month_year', `${ctx.fiscalYear}-01-01`)
           .lte('month_year', ctx.monthYear);
+        fetchedDeals = data || [];
       } else if (isTeamMetric && teamReportIds.length > 0) {
-        // "Team " metrics: fetch subordinates' deals
         const parts: string[] = [];
         teamReportIds.forEach(rid => {
           parts.push(`sales_rep_employee_id.eq.${rid},sales_head_employee_id.eq.${rid},sales_engineering_employee_id.eq.${rid},sales_engineering_head_employee_id.eq.${rid},product_specialist_employee_id.eq.${rid},product_specialist_head_employee_id.eq.${rid},solution_manager_employee_id.eq.${rid},solution_manager_head_employee_id.eq.${rid}`);
         });
-        dealsQuery = supabase
+        const { data } = await supabase
           .from('deals')
           .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
           .or(parts.join(','))
           .gte('month_year', `${ctx.fiscalYear}-01-01`)
           .lte('month_year', ctx.monthYear);
+        fetchedDeals = data || [];
       } else {
-        dealsQuery = supabase
+        // Individual participant filter + support team-attributed deals
+        const { data: directDeals } = await supabase
           .from('deals')
           .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
           .or(participantOrFilter)
           .gte('month_year', `${ctx.fiscalYear}-01-01`)
           .lte('month_year', ctx.monthYear);
+        fetchedDeals = directDeals || [];
+
+        // Also include deals where employee is credited via support team
+        const teamDealIds = await getTeamAttributedDealIds(empId, `${ctx.fiscalYear}-01-01`, ctx.monthYear);
+        if (teamDealIds.length > 0) {
+          const existingIds = new Set(fetchedDeals.map(d => d.id));
+          const missingIds = teamDealIds.filter(id => !existingIds.has(id));
+          if (missingIds.length > 0) {
+            const { data: teamDeals } = await supabase
+              .from('deals')
+              .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
+              .in('id', missingIds);
+            fetchedDeals = fetchedDeals.concat(teamDeals || []);
+          }
+        }
       }
 
-      const { data: deals } = await dealsQuery;
-
-      const validDeals: DealForAttribution[] = (deals || []).map(d => ({
+      const validDeals: DealForAttribution[] = fetchedDeals.map(d => ({
         id: d.id,
         new_software_booking_arr_usd: d.new_software_booking_arr_usd,
         month_year: d.month_year,
@@ -615,14 +668,28 @@ async function calculateEmployeeCommissions(
     return { totalCommUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, calculations: [] };
   }
   
-  // Get deals for this month that qualify for commissions (all 8 participant roles)
-  // Include linked_to_impl flag for override logic
+  // Get deals for this month: direct participant + support team attributed
   const empId = ctx.employee.employee_id;
-  const { data: deals } = await supabase
+  const { data: directDeals } = await supabase
     .from('deals')
     .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl')
     .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`)
     .eq('month_year', ctx.monthYear);
+
+  let allCommDeals = directDeals || [];
+  const teamDealIds = await getTeamAttributedDealIds(empId, ctx.monthYear, ctx.monthYear);
+  if (teamDealIds.length > 0) {
+    const existingIds = new Set(allCommDeals.map(d => d.id));
+    const missingIds = teamDealIds.filter(id => !existingIds.has(id));
+    if (missingIds.length > 0) {
+      const { data: teamDeals } = await supabase
+        .from('deals')
+        .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl')
+        .in('id', missingIds);
+      allCommDeals = allCommDeals.concat(teamDeals || []);
+    }
+  }
+  const deals = allCommDeals;
   
   const calculations: CommissionCalculation[] = [];
   

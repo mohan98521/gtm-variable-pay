@@ -45,6 +45,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
+import { useSupportTeams, SupportTeamWithMembers } from "@/hooks/useSupportTeams";
 
 const dealFormSchema = z.object({
   project_id: z.string().min(1, "Project ID is required"),
@@ -103,10 +104,15 @@ export function DealFormDialog({
   defaultMonth,
 }: DealFormDialogProps) {
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [seTeamMode, setSeTeamMode] = useState(false);
+  const [smTeamMode, setSmTeamMode] = useState(false);
+  const [seTeamId, setSeTeamId] = useState<string>("");
+  const [smTeamId, setSmTeamId] = useState<string>("");
   const createDeal = useCreateDeal();
   const updateDeal = useUpdateDeal();
   const isEditing = !!deal;
   const { selectedYear, getMonthsForYear } = useFiscalYear();
+  const { teams: supportTeams } = useSupportTeams();
 
   const monthOptions = useMemo(() => getMonthsForYear(selectedYear), [selectedYear, getMonthsForYear]);
 
@@ -224,6 +230,22 @@ export function DealFormDialog({
             split_percent: p.split_percent,
           }))
         );
+        // Check if deal has team assignments
+        const dealAny = deal as any;
+        if (dealAny.sales_engineering_team_id) {
+          setSeTeamMode(true);
+          setSeTeamId(dealAny.sales_engineering_team_id);
+        } else {
+          setSeTeamMode(false);
+          setSeTeamId("");
+        }
+        if (dealAny.solution_manager_team_id) {
+          setSmTeamMode(true);
+          setSmTeamId(dealAny.solution_manager_team_id);
+        } else {
+          setSmTeamMode(false);
+          setSmTeamId("");
+        }
       } else {
         const proposalType = defaultProposalType || "amc";
         const defaultMonthValue = defaultMonth || (monthOptions.length > 0 ? monthOptions[new Date().getMonth()]?.value : format(new Date(), "yyyy-MM-01"));
@@ -260,6 +282,10 @@ export function DealFormDialog({
           notes: "",
         });
         setParticipants([]);
+        setSeTeamMode(false);
+        setSeTeamId("");
+        setSmTeamMode(false);
+        setSmTeamId("");
       }
     }
   }, [open, deal, defaultProposalType, defaultMonth, form, monthOptions]);
@@ -268,12 +294,29 @@ export function DealFormDialog({
     // Build participant names from employee IDs
     const salesRepName = getEmployeeName(values.sales_rep_employee_id);
     const salesHeadName = getEmployeeName(values.sales_head_employee_id);
-    const salesEngineeringName = getEmployeeName(values.sales_engineering_employee_id);
+    const salesEngineeringName = seTeamMode ? "" : getEmployeeName(values.sales_engineering_employee_id);
     const salesEngineeringHeadName = getEmployeeName(values.sales_engineering_head_employee_id);
     const productSpecialistName = getEmployeeName(values.product_specialist_employee_id);
     const productSpecialistHeadName = getEmployeeName(values.product_specialist_head_employee_id);
-    const solutionManagerName = getEmployeeName(values.solution_manager_employee_id);
+    const solutionManagerName = smTeamMode ? "" : getEmployeeName(values.solution_manager_employee_id);
     const solutionManagerHeadName = getEmployeeName(values.solution_manager_head_employee_id);
+
+    // Build team assignment overrides
+    const teamOverrides: Record<string, any> = {};
+    if (seTeamMode && seTeamId) {
+      teamOverrides.sales_engineering_team_id = seTeamId;
+      teamOverrides.sales_engineering_employee_id = null;
+      teamOverrides.sales_engineering_name = null;
+    } else {
+      teamOverrides.sales_engineering_team_id = null;
+    }
+    if (smTeamMode && smTeamId) {
+      teamOverrides.solution_manager_team_id = smTeamId;
+      teamOverrides.solution_manager_employee_id = null;
+      teamOverrides.solution_manager_name = null;
+    } else {
+      teamOverrides.solution_manager_team_id = null;
+    }
 
     if (isEditing && deal) {
       await updateDeal.mutateAsync({
@@ -286,12 +329,13 @@ export function DealFormDialog({
         product_specialist_name: productSpecialistName || undefined,
         product_specialist_head_employee_id: values.product_specialist_head_employee_id || undefined,
         product_specialist_head_name: productSpecialistHeadName || undefined,
-        solution_manager_employee_id: values.solution_manager_employee_id || undefined,
+        solution_manager_employee_id: smTeamMode ? undefined : (values.solution_manager_employee_id || undefined),
         solution_manager_name: solutionManagerName || undefined,
         solution_manager_head_employee_id: values.solution_manager_head_employee_id || undefined,
         solution_manager_head_name: solutionManagerHeadName || undefined,
         participants,
-      });
+        ...teamOverrides,
+      } as any);
     } else {
       await createDeal.mutateAsync({
         project_id: values.project_id,
@@ -316,7 +360,7 @@ export function DealFormDialog({
         sales_rep_name: salesRepName || undefined,
         sales_head_employee_id: values.sales_head_employee_id || undefined,
         sales_head_name: salesHeadName || undefined,
-        sales_engineering_employee_id: values.sales_engineering_employee_id || undefined,
+        sales_engineering_employee_id: seTeamMode ? undefined : (values.sales_engineering_employee_id || undefined),
         sales_engineering_name: salesEngineeringName || undefined,
         sales_engineering_head_employee_id: values.sales_engineering_head_employee_id || undefined,
         sales_engineering_head_name: salesEngineeringHeadName || undefined,
@@ -324,7 +368,7 @@ export function DealFormDialog({
         product_specialist_name: productSpecialistName || undefined,
         product_specialist_head_employee_id: values.product_specialist_head_employee_id || undefined,
         product_specialist_head_name: productSpecialistHeadName || undefined,
-        solution_manager_employee_id: values.solution_manager_employee_id || undefined,
+        solution_manager_employee_id: smTeamMode ? undefined : (values.solution_manager_employee_id || undefined),
         solution_manager_name: solutionManagerName || undefined,
         solution_manager_head_employee_id: values.solution_manager_head_employee_id || undefined,
         solution_manager_head_name: solutionManagerHeadName || undefined,
@@ -333,7 +377,8 @@ export function DealFormDialog({
         status: values.status,
         notes: values.notes,
         participants,
-      });
+        ...teamOverrides,
+      } as any);
     }
 
     onOpenChange(false);
@@ -746,31 +791,57 @@ export function DealFormDialog({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="sales_engineering_employee_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Sales Engineering</FormLabel>
-                      <FormControl>
-                        <SearchableSelect
-                          value={field.value || "_none"}
-                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
-                          options={[
-                            { value: "_none", label: "None" },
-                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
-                              value: emp.employee_id,
-                              label: `${emp.full_name} (${emp.employee_id})`,
-                            })),
-                          ]}
-                          placeholder="Select employee"
-                          searchPlaceholder="Search employees..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* Sales Engineering: Team-or-Individual toggle */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Sales Engineering</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{seTeamMode ? "Team" : "Individual"}</span>
+                      <Switch checked={seTeamMode} onCheckedChange={(checked) => {
+                        setSeTeamMode(checked);
+                        if (checked) form.setValue("sales_engineering_employee_id", "");
+                        else setSeTeamId("");
+                      }} />
+                    </div>
+                  </div>
+                  {seTeamMode ? (
+                    <Select value={seTeamId} onValueChange={setSeTeamId}>
+                      <SelectTrigger><SelectValue placeholder="Select support team" /></SelectTrigger>
+                      <SelectContent>
+                        {supportTeams.filter(t => t.team_role === "sales_engineering" && t.is_active).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.team_name} {t.region ? `(${t.region})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="sales_engineering_employee_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <SearchableSelect
+                              value={field.value || "_none"}
+                              onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                              options={[
+                                { value: "_none", label: "None" },
+                                ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                                  value: emp.employee_id,
+                                  label: `${emp.full_name} (${emp.employee_id})`,
+                                })),
+                              ]}
+                              placeholder="Select employee"
+                              searchPlaceholder="Search employees..."
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   )}
-                />
+                </div>
                 <FormField
                   control={form.control}
                   name="sales_engineering_head_employee_id"
@@ -846,31 +917,57 @@ export function DealFormDialog({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="solution_manager_employee_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Solution Manager</FormLabel>
-                      <FormControl>
-                        <SearchableSelect
-                          value={field.value || "_none"}
-                          onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
-                          options={[
-                            { value: "_none", label: "None" },
-                            ...employees.filter(emp => emp.employee_id).map((emp) => ({
-                              value: emp.employee_id,
-                              label: `${emp.full_name} (${emp.employee_id})`,
-                            })),
-                          ]}
-                          placeholder="Select employee"
-                          searchPlaceholder="Search employees..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* Solution Manager: Team-or-Individual toggle */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Solution Manager</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{smTeamMode ? "Team" : "Individual"}</span>
+                      <Switch checked={smTeamMode} onCheckedChange={(checked) => {
+                        setSmTeamMode(checked);
+                        if (checked) form.setValue("solution_manager_employee_id", "");
+                        else setSmTeamId("");
+                      }} />
+                    </div>
+                  </div>
+                  {smTeamMode ? (
+                    <Select value={smTeamId} onValueChange={setSmTeamId}>
+                      <SelectTrigger><SelectValue placeholder="Select support team" /></SelectTrigger>
+                      <SelectContent>
+                        {supportTeams.filter(t => t.team_role === "solution_manager" && t.is_active).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.team_name} {t.region ? `(${t.region})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="solution_manager_employee_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <SearchableSelect
+                              value={field.value || "_none"}
+                              onValueChange={(v) => field.onChange(v === "_none" ? "" : v)}
+                              options={[
+                                { value: "_none", label: "None" },
+                                ...employees.filter(emp => emp.employee_id).map((emp) => ({
+                                  value: emp.employee_id,
+                                  label: `${emp.full_name} (${emp.employee_id})`,
+                                })),
+                              ]}
+                              placeholder="Select employee"
+                              searchPlaceholder="Search employees..."
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   )}
-                />
+                </div>
                 <FormField
                   control={form.control}
                   name="solution_manager_head_employee_id"
