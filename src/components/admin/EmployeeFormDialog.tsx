@@ -56,6 +56,11 @@ const SALES_FUNCTIONS = [
   "APAC Regional SE",
   "MEA Regional SE",
   "Sales Engineering - Head",
+  "Team Lead",
+  "Team Lead - Farmer",
+  "Team Lead - Hunter",
+  "Overlay",
+  "Executive",
 ] as const;
 
 // Full 26-field schema matching bulk upload
