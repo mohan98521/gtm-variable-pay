@@ -252,8 +252,9 @@ export function useMetricTypes() {
       const metricNames = metricsData?.map(m => m.metric_name) || [];
       const commissionTypes = commissionsData?.map(c => c.commission_type) || [];
 
-      // Merge, deduplicate, and sort alphabetically
-      const allMetrics = [...new Set([...metricNames, ...commissionTypes])].sort();
+      // Guarantee CR/ER and Implementation are always available (needed for NRR computation)
+      const GUARANTEED_METRICS = ["CR/ER", "Implementation"];
+      const allMetrics = [...new Set([...GUARANTEED_METRICS, ...metricNames, ...commissionTypes])].sort();
 
       return allMetrics;
     },

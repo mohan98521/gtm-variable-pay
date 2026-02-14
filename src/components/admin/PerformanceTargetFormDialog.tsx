@@ -280,6 +280,16 @@ export function PerformanceTargetFormDialog({
             </p>
           </div>
 
+          {/* NRR Info Note */}
+          {(metricType === "CR/ER" || metricType === "Implementation") && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <p className="text-sm text-primary font-medium">NRR Component</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                This metric contributes to the NRR target computation. NRR Target = CR/ER Target + Implementation Target.
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
             <Button
               type="button"

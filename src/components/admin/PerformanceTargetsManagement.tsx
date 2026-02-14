@@ -79,17 +79,36 @@ export function PerformanceTargetsManagement() {
   // Calculate stats
   const stats = useMemo(() => {
     if (!targets) {
-      return { employeesWithTargets: 0, totalAnnualValue: 0, employeesWithoutTargets: 0 };
+      return { employeesWithTargets: 0, totalAnnualValue: 0, employeesWithoutTargets: 0, nrrEmployeeCount: 0, nrrTotalValue: 0 };
     }
 
     const uniqueEmployees = new Set(targets.map((t) => t.employee_id));
     const totalAnnual = targets.reduce((sum, t) => sum + t.annual, 0);
     const withoutTargets = (totalEmployees || 0) - uniqueEmployees.size;
 
+    // NRR computation: employees who have BOTH CR/ER and Implementation targets
+    const crErByEmployee = new Map<string, number>();
+    const implByEmployee = new Map<string, number>();
+    targets.forEach((t) => {
+      if (t.metric_type === "CR/ER") crErByEmployee.set(t.employee_id, t.annual);
+      if (t.metric_type === "Implementation") implByEmployee.set(t.employee_id, t.annual);
+    });
+    let nrrEmployeeCount = 0;
+    let nrrTotalValue = 0;
+    crErByEmployee.forEach((crErAnnual, empId) => {
+      const implAnnual = implByEmployee.get(empId);
+      if (implAnnual !== undefined) {
+        nrrEmployeeCount++;
+        nrrTotalValue += crErAnnual + implAnnual;
+      }
+    });
+
     return {
       employeesWithTargets: uniqueEmployees.size,
       totalAnnualValue: totalAnnual,
       employeesWithoutTargets: Math.max(0, withoutTargets),
+      nrrEmployeeCount,
+      nrrTotalValue,
     };
   }, [targets, totalEmployees]);
 
@@ -175,7 +194,7 @@ export function PerformanceTargetsManagement() {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
@@ -219,6 +238,27 @@ export function PerformanceTargetsManagement() {
                 <p className="text-2xl font-semibold text-foreground">
                   {isLoading ? "-" : stats.employeesWithoutTargets}
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent/10 text-accent-foreground">
+                <Target className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">NRR Targets</p>
+                <p className="text-2xl font-semibold text-foreground">
+                  {isLoading ? "-" : stats.nrrEmployeeCount}
+                </p>
+                {!isLoading && stats.nrrTotalValue > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {formatCurrency(stats.nrrTotalValue)} total
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
