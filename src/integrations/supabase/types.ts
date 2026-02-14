@@ -915,6 +915,47 @@ export type Database = {
           },
         ]
       }
+      employee_change_log: {
+        Row: {
+          change_reason: string | null
+          change_type: string
+          changed_at: string
+          changed_by: string | null
+          effective_date: string
+          employee_id: string
+          field_changes: Json
+          id: string
+        }
+        Insert: {
+          change_reason?: string | null
+          change_type: string
+          changed_at?: string
+          changed_by?: string | null
+          effective_date?: string
+          employee_id: string
+          field_changes?: Json
+          id?: string
+        }
+        Update: {
+          change_reason?: string | null
+          change_type?: string
+          changed_at?: string
+          changed_by?: string | null
+          effective_date?: string
+          employee_id?: string
+          field_changes?: Json
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_change_log_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           auth_user_id: string | null

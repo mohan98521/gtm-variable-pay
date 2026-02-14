@@ -17,7 +17,8 @@ export type AuditAction =
   | 'rate_mismatch'
   | 'clawback_applied'
   | 'fnf_tranche_calculated'
-  | 'fnf_status_changed';
+  | 'fnf_status_changed'
+  | 'employee_compensation_changed';
 
 interface BaseAuditEntry {
   payoutRunId?: string;
@@ -91,6 +92,38 @@ export async function logFnfEvent(entry: FnFAuditEntry): Promise<void> {
     }]);
   } catch (error) {
     console.error('Failed to log F&F event:', error);
+  }
+}
+
+interface EmployeeChangeAuditEntry {
+  employeeId: string;
+  changeType: string;
+  effectiveDate: string;
+  fieldChanges: Record<string, { old: unknown; new: unknown }>;
+  changeReason?: string;
+}
+
+/**
+ * Log employee compensation change to payout_audit_log
+ */
+export async function logEmployeeChange(entry: EmployeeChangeAuditEntry): Promise<void> {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    await supabase.from('payout_audit_log').insert([{
+      action: 'employee_compensation_changed',
+      entity_type: 'employee',
+      audit_category: 'calculation',
+      employee_id: entry.employeeId,
+      changed_by: userData?.user?.id || null,
+      reason: `${entry.changeType} effective ${entry.effectiveDate}${entry.changeReason ? `: ${entry.changeReason}` : ''}`,
+      metadata: JSON.parse(JSON.stringify({
+        change_type: entry.changeType,
+        effective_date: entry.effectiveDate,
+        field_changes: entry.fieldChanges,
+      })),
+    }]);
+  } catch (error) {
+    console.error('Failed to log employee change:', error);
   }
 }
 
