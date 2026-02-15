@@ -74,6 +74,27 @@ async function getTeamAttributedDealIds(
 
 // ============= TYPE DEFINITIONS =============
 
+export interface MetricPayoutDetail {
+  componentType: 'variable_pay' | 'commission' | 'nrr' | 'spiff' | 'deal_team_spiff' | 'collection_release' | 'year_end_release' | 'clawback';
+  metricName: string;
+  planId: string | null;
+  planName: string | null;
+  targetBonusUsd: number;
+  allocatedOteUsd: number;
+  targetUsd: number;
+  actualUsd: number;
+  achievementPct: number;
+  multiplier: number;
+  ytdEligibleUsd: number;
+  priorPaidUsd: number;
+  thisMonthUsd: number;
+  bookingUsd: number;
+  collectionUsd: number;
+  yearEndUsd: number;
+  notes: string | null;
+}
+
+
 export interface Employee {
   id: string;
   employee_id: string;
@@ -177,6 +198,9 @@ export interface EmployeePayoutResult {
   // Detail breakdowns for persistence
   vpAttributions: DealVariablePayAttribution[];
   commissionCalculations: CommissionCalculation[];
+  
+  // Metric-level detailed workings
+  metricDetails: MetricPayoutDetail[];
 }
 
 export interface PayoutRunResult {
@@ -408,14 +432,28 @@ async function calculateEmployeeVariablePay(
   ctx: EmployeeCalculationContext
 ): Promise<{
   totalVpUsd: number;
+  ytdVpUsd: number;
+  priorVpUsd: number;
   bookingUsd: number;
   collectionUsd: number;
   yearEndUsd: number;
   attributions: DealVariablePayAttribution[];
   vpContext: AggregateVariablePayContext | null;
+  vpMetricDetails: Array<{
+    metricName: string;
+    targetUsd: number;
+    actualUsd: number;
+    achievementPct: number;
+    multiplier: number;
+    allocatedOteUsd: number;
+    ytdEligibleUsd: number;
+    bookingPct: number;
+    collectionPct: number;
+    yearEndPct: number;
+  }>;
 }> {
   if (ctx.metrics.length === 0) {
-    return { totalVpUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, attributions: [], vpContext: null };
+    return { totalVpUsd: 0, ytdVpUsd: 0, priorVpUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, attributions: [], vpContext: null, vpMetricDetails: [] };
   }
 
   const empId = ctx.employee.employee_id;
@@ -427,6 +465,20 @@ async function calculateEmployeeVariablePay(
   let ytdYearEndUsd = 0;
   let allAttributions: DealVariablePayAttribution[] = [];
   let lastContext: AggregateVariablePayContext | null = null;
+  
+  // Track per-metric VP details for the workings report
+  const vpMetricDetails: Array<{
+    metricName: string;
+    targetUsd: number;
+    actualUsd: number;
+    achievementPct: number;
+    multiplier: number;
+    allocatedOteUsd: number;
+    ytdEligibleUsd: number;
+    bookingPct: number;
+    collectionPct: number;
+    yearEndPct: number;
+  }> = [];
 
   // Iterate over ALL plan metrics (e.g., "New Software Booking ARR" + "Closing ARR")
   for (const metric of ctx.metrics) {
@@ -542,6 +594,19 @@ async function calculateEmployeeVariablePay(
       ytdCollectionUsd += vpCalc.totalVariablePay * (collectionPct / 100);
       ytdYearEndUsd += vpCalc.totalVariablePay * (yearEndPct / 100);
 
+      vpMetricDetails.push({
+        metricName: metric.metric_name,
+        targetUsd,
+        actualUsd: totalActualUsd,
+        achievementPct: Math.round(vpCalc.achievementPct * 100) / 100,
+        multiplier: vpCalc.multiplier,
+        allocatedOteUsd: bonusAllocationUsd,
+        ytdEligibleUsd: vpCalc.totalVariablePay,
+        bookingPct,
+        collectionPct,
+        yearEndPct,
+      });
+
       lastContext = {
         totalActualUsd,
         targetUsd,
@@ -625,6 +690,19 @@ async function calculateEmployeeVariablePay(
       ytdYearEndUsd += result.attributions.reduce((sum, a) => sum + a.payoutOnYearEndUsd, 0);
       allAttributions = allAttributions.concat(result.attributions);
       lastContext = result.context;
+      
+      vpMetricDetails.push({
+        metricName: metric.metric_name,
+        targetUsd,
+        actualUsd: result.context.totalActualUsd,
+        achievementPct: result.context.achievementPct,
+        multiplier: result.context.multiplier,
+        allocatedOteUsd: bonusAllocationUsd,
+        ytdEligibleUsd: result.context.totalVariablePayUsd,
+        bookingPct,
+        collectionPct,
+        yearEndPct,
+      });
     }
   }
 
@@ -646,11 +724,14 @@ async function calculateEmployeeVariablePay(
 
   return {
     totalVpUsd: monthlyVpUsd,
+    ytdVpUsd,
+    priorVpUsd: priorVp,
     bookingUsd: monthlyBookingUsd,
     collectionUsd: monthlyCollectionUsd,
     yearEndUsd: monthlyYearEndUsd,
     attributions: allAttributions,
     vpContext: lastContext,
+    vpMetricDetails,
   };
 }
 
@@ -1303,6 +1384,201 @@ export async function calculateMonthlyPayout(
     
     vpAttributions: vpResult.attributions,
     commissionCalculations: commResult.calculations,
+    
+    // Build detailed metric workings
+    metricDetails: (() => {
+      const details: MetricPayoutDetail[] = [];
+      const vpRatio = vpResult.ytdVpUsd > 0 ? vpResult.totalVpUsd / vpResult.ytdVpUsd : 0;
+      
+      // VP metric details
+      for (const md of vpResult.vpMetricDetails) {
+        const thisMonthEligible = md.ytdEligibleUsd * vpRatio;
+        const priorForMetric = md.ytdEligibleUsd - thisMonthEligible;
+        details.push({
+          componentType: 'variable_pay',
+          metricName: md.metricName,
+          planId,
+          planName,
+          targetBonusUsd,
+          allocatedOteUsd: md.allocatedOteUsd,
+          targetUsd: md.targetUsd,
+          actualUsd: md.actualUsd,
+          achievementPct: md.achievementPct,
+          multiplier: md.multiplier,
+          ytdEligibleUsd: md.ytdEligibleUsd,
+          priorPaidUsd: priorForMetric,
+          thisMonthUsd: thisMonthEligible,
+          bookingUsd: thisMonthEligible * (md.bookingPct / 100),
+          collectionUsd: thisMonthEligible * (md.collectionPct / 100),
+          yearEndUsd: thisMonthEligible * (md.yearEndPct / 100),
+          notes: null,
+        });
+      }
+      
+      // Commission details
+      for (const c of commResult.calculations) {
+        if (!c.qualifies) continue;
+        details.push({
+          componentType: 'commission',
+          metricName: c.commissionType,
+          planId,
+          planName,
+          targetBonusUsd: 0,
+          allocatedOteUsd: 0,
+          targetUsd: c.minThresholdUsd || 0,
+          actualUsd: c.tcvUsd,
+          achievementPct: 0,
+          multiplier: c.commissionRatePct / 100,
+          ytdEligibleUsd: c.grossCommission,
+          priorPaidUsd: 0,
+          thisMonthUsd: c.grossCommission,
+          bookingUsd: c.paidAmount,
+          collectionUsd: c.holdbackAmount,
+          yearEndUsd: c.yearEndHoldback,
+          notes: null,
+        });
+      }
+      
+      // NRR
+      if (nrrPayoutUsd > 0 && nrrResult) {
+        details.push({
+          componentType: 'nrr',
+          metricName: 'NRR Additional Pay',
+          planId,
+          planName,
+          targetBonusUsd,
+          allocatedOteUsd: targetBonusUsd * (nrrOtePct / 100),
+          targetUsd: nrrResult.nrrTarget,
+          actualUsd: nrrResult.nrrActuals,
+          achievementPct: nrrResult.achievementPct,
+          multiplier: 1,
+          ytdEligibleUsd: nrrResult.payoutUsd,
+          priorPaidUsd: nrrResult.payoutUsd - nrrPayoutUsd,
+          thisMonthUsd: nrrPayoutUsd,
+          bookingUsd: nrrPayoutUsd * nrrBookingPct,
+          collectionUsd: nrrPayoutUsd * nrrCollectionPct,
+          yearEndUsd: nrrPayoutUsd * nrrYearEndPct,
+          notes: null,
+        });
+      }
+      
+      // SPIFF
+      if (spiffPayoutUsd > 0) {
+        details.push({
+          componentType: 'spiff',
+          metricName: 'SPIFF',
+          planId,
+          planName,
+          targetBonusUsd: 0,
+          allocatedOteUsd: 0,
+          targetUsd: 0,
+          actualUsd: 0,
+          achievementPct: 0,
+          multiplier: 0,
+          ytdEligibleUsd: spiffPayoutUsd,
+          priorPaidUsd: 0,
+          thisMonthUsd: spiffPayoutUsd,
+          bookingUsd: spiffBookingUsd,
+          collectionUsd: spiffCollectionUsd,
+          yearEndUsd: spiffYearEndUsd,
+          notes: spiffBreakdowns.map(b => `${b.spiffName}: $${b.spiffPayoutUsd.toLocaleString()}`).join('; '),
+        });
+      }
+      
+      // Deal Team SPIFF
+      if (dealTeamSpiffUsd > 0) {
+        details.push({
+          componentType: 'deal_team_spiff',
+          metricName: 'Deal Team SPIFF',
+          planId,
+          planName,
+          targetBonusUsd: 0,
+          allocatedOteUsd: 0,
+          targetUsd: 0,
+          actualUsd: 0,
+          achievementPct: 0,
+          multiplier: 0,
+          ytdEligibleUsd: dealTeamSpiffUsd,
+          priorPaidUsd: 0,
+          thisMonthUsd: dealTeamSpiffUsd,
+          bookingUsd: dealTeamSpiffUsd,
+          collectionUsd: 0,
+          yearEndUsd: 0,
+          notes: 'Manual allocation - 100% upon booking',
+        });
+      }
+      
+      // Collection Releases
+      if (collectionReleasesUsd > 0) {
+        details.push({
+          componentType: 'collection_release',
+          metricName: 'Collection Releases',
+          planId,
+          planName,
+          targetBonusUsd: 0,
+          allocatedOteUsd: 0,
+          targetUsd: 0,
+          actualUsd: 0,
+          achievementPct: 0,
+          multiplier: 0,
+          ytdEligibleUsd: collectionReleasesUsd,
+          priorPaidUsd: 0,
+          thisMonthUsd: collectionReleasesUsd,
+          bookingUsd: collectionReleasesUsd,
+          collectionUsd: 0,
+          yearEndUsd: 0,
+          notes: 'Released upon collection',
+        });
+      }
+      
+      // Year-End Releases
+      if (yearEndReleasesUsd > 0) {
+        details.push({
+          componentType: 'year_end_release',
+          metricName: 'Year-End Releases',
+          planId,
+          planName,
+          targetBonusUsd: 0,
+          allocatedOteUsd: 0,
+          targetUsd: 0,
+          actualUsd: 0,
+          achievementPct: 0,
+          multiplier: 0,
+          ytdEligibleUsd: yearEndReleasesUsd,
+          priorPaidUsd: 0,
+          thisMonthUsd: yearEndReleasesUsd,
+          bookingUsd: yearEndReleasesUsd,
+          collectionUsd: 0,
+          yearEndUsd: 0,
+          notes: 'December year-end release',
+        });
+      }
+      
+      // Clawback Recovery
+      if (clawbackRecoveryUsd > 0) {
+        details.push({
+          componentType: 'clawback',
+          metricName: 'Clawback Recovery',
+          planId,
+          planName,
+          targetBonusUsd: 0,
+          allocatedOteUsd: 0,
+          targetUsd: 0,
+          actualUsd: 0,
+          achievementPct: 0,
+          multiplier: 0,
+          ytdEligibleUsd: -clawbackRecoveryUsd,
+          priorPaidUsd: 0,
+          thisMonthUsd: -clawbackRecoveryUsd,
+          bookingUsd: -clawbackRecoveryUsd,
+          collectionUsd: 0,
+          yearEndUsd: 0,
+          notes: 'Carry-forward clawback deduction',
+        });
+      }
+      
+      return details;
+    })(),
   };
 }
 
@@ -1876,5 +2152,44 @@ async function persistPayoutResults(
   
   if (attributionRecords.length > 0) {
     await supabase.from('deal_variable_pay_attribution').insert(attributionRecords);
+  }
+  
+  // Delete existing metric details for this run
+  await supabase
+    .from('payout_metric_details' as any)
+    .delete()
+    .eq('payout_run_id', payoutRunId);
+  
+  // Insert metric detail records
+  const metricDetailRecords = employeePayouts.flatMap(emp =>
+    emp.metricDetails.map(md => ({
+      payout_run_id: payoutRunId,
+      employee_id: emp.employeeId,
+      component_type: md.componentType,
+      metric_name: md.metricName,
+      plan_id: md.planId,
+      plan_name: md.planName,
+      target_bonus_usd: md.targetBonusUsd,
+      allocated_ote_usd: md.allocatedOteUsd,
+      target_usd: md.targetUsd,
+      actual_usd: md.actualUsd,
+      achievement_pct: md.achievementPct,
+      multiplier: md.multiplier,
+      ytd_eligible_usd: md.ytdEligibleUsd,
+      prior_paid_usd: md.priorPaidUsd,
+      this_month_usd: md.thisMonthUsd,
+      booking_usd: md.bookingUsd,
+      collection_usd: md.collectionUsd,
+      year_end_usd: md.yearEndUsd,
+      notes: md.notes,
+    }))
+  );
+  
+  if (metricDetailRecords.length > 0) {
+    // Insert in batches of 100 to avoid payload limits
+    for (let i = 0; i < metricDetailRecords.length; i += 100) {
+      const batch = metricDetailRecords.slice(i, i + 100);
+      await supabase.from('payout_metric_details' as any).insert(batch);
+    }
   }
 }

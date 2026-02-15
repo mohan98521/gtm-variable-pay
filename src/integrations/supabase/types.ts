@@ -1671,6 +1671,100 @@ export type Database = {
           },
         ]
       }
+      payout_metric_details: {
+        Row: {
+          achievement_pct: number | null
+          actual_usd: number | null
+          allocated_ote_usd: number | null
+          booking_usd: number | null
+          collection_usd: number | null
+          component_type: string
+          created_at: string
+          employee_id: string
+          id: string
+          metric_name: string
+          multiplier: number | null
+          notes: string | null
+          payout_run_id: string
+          plan_id: string | null
+          plan_name: string | null
+          prior_paid_usd: number | null
+          target_bonus_usd: number | null
+          target_usd: number | null
+          this_month_usd: number | null
+          year_end_usd: number | null
+          ytd_eligible_usd: number | null
+        }
+        Insert: {
+          achievement_pct?: number | null
+          actual_usd?: number | null
+          allocated_ote_usd?: number | null
+          booking_usd?: number | null
+          collection_usd?: number | null
+          component_type: string
+          created_at?: string
+          employee_id: string
+          id?: string
+          metric_name: string
+          multiplier?: number | null
+          notes?: string | null
+          payout_run_id: string
+          plan_id?: string | null
+          plan_name?: string | null
+          prior_paid_usd?: number | null
+          target_bonus_usd?: number | null
+          target_usd?: number | null
+          this_month_usd?: number | null
+          year_end_usd?: number | null
+          ytd_eligible_usd?: number | null
+        }
+        Update: {
+          achievement_pct?: number | null
+          actual_usd?: number | null
+          allocated_ote_usd?: number | null
+          booking_usd?: number | null
+          collection_usd?: number | null
+          component_type?: string
+          created_at?: string
+          employee_id?: string
+          id?: string
+          metric_name?: string
+          multiplier?: number | null
+          notes?: string | null
+          payout_run_id?: string
+          plan_id?: string | null
+          plan_name?: string | null
+          prior_paid_usd?: number | null
+          target_bonus_usd?: number | null
+          target_usd?: number | null
+          this_month_usd?: number | null
+          year_end_usd?: number | null
+          ytd_eligible_usd?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_metric_details_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_metric_details_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "payout_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_metric_details_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "comp_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payout_runs: {
         Row: {
           approved_at: string | null

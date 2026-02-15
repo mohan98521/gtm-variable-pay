@@ -14,9 +14,11 @@ import { useState } from "react";
 import { format, parse } from "date-fns";
 import { PayoutRun } from "@/hooks/usePayoutRuns";
 import { useEmployeePayoutBreakdown, usePayoutSummary, EmployeePayoutSummary } from "@/hooks/useMonthlyPayouts";
+import { usePayoutMetricDetails } from "@/hooks/usePayoutMetricDetails";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -54,6 +56,7 @@ import {
 } from "lucide-react";
 import { generateMultiSheetXLSX, downloadXLSX, SheetData } from "@/lib/xlsxExport";
 import { PayoutAdjustments } from "./PayoutAdjustments";
+import { PayoutRunWorkings } from "./PayoutRunWorkings";
 
 interface PayoutRunDetailProps {
   run: PayoutRun;
@@ -71,8 +74,10 @@ const STATUS_COLORS: Record<string, string> = {
 export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
   const { data: employeeBreakdown, isLoading: loadingEmployees } = useEmployeePayoutBreakdown(run.id);
   const { data: currencySummary, isLoading: loadingSummary } = usePayoutSummary(run.id);
+  const { data: metricDetails } = usePayoutMetricDetails(run.id);
   
   const [currencyFilter, setCurrencyFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<string>("summary");
   
   const formatMonthYear = (monthYear: string) => {
     try {
@@ -244,6 +249,56 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       });
     }
     
+    // Detailed Workings sheet
+    if (metricDetails && metricDetails.length > 0) {
+      const workingsData = metricDetails.flatMap(emp =>
+        emp.allDetails.map((d: any) => ({
+          employeeCode: emp.employeeCode,
+          employeeName: emp.employeeName,
+          componentType: d.component_type,
+          metricName: d.metric_name,
+          planName: d.plan_name || '',
+          targetBonusUsd: d.target_bonus_usd,
+          allocatedOteUsd: d.allocated_ote_usd,
+          targetUsd: d.target_usd,
+          actualUsd: d.actual_usd,
+          achievementPct: d.achievement_pct,
+          multiplier: d.multiplier,
+          ytdEligibleUsd: d.ytd_eligible_usd,
+          priorPaidUsd: d.prior_paid_usd,
+          thisMonthUsd: d.this_month_usd,
+          bookingUsd: d.booking_usd,
+          collectionUsd: d.collection_usd,
+          yearEndUsd: d.year_end_usd,
+          notes: d.notes || '',
+        }))
+      );
+      sheets.push({
+        sheetName: 'Detailed Workings',
+        data: workingsData,
+        columns: [
+          { key: 'employeeCode', header: 'Employee Code' },
+          { key: 'employeeName', header: 'Employee Name' },
+          { key: 'componentType', header: 'Component' },
+          { key: 'metricName', header: 'Metric' },
+          { key: 'planName', header: 'Plan' },
+          { key: 'targetBonusUsd', header: 'Target Bonus (USD)' },
+          { key: 'allocatedOteUsd', header: 'Allocated OTE (USD)' },
+          { key: 'targetUsd', header: 'Target (USD)' },
+          { key: 'actualUsd', header: 'YTD Actuals (USD)' },
+          { key: 'achievementPct', header: 'Achievement %' },
+          { key: 'multiplier', header: 'Multiplier' },
+          { key: 'ytdEligibleUsd', header: 'YTD Eligible (USD)' },
+          { key: 'priorPaidUsd', header: 'Prior Paid (USD)' },
+          { key: 'thisMonthUsd', header: 'This Month (USD)' },
+          { key: 'bookingUsd', header: 'Upon Booking (USD)' },
+          { key: 'collectionUsd', header: 'Upon Collection (USD)' },
+          { key: 'yearEndUsd', header: 'At Year End (USD)' },
+          { key: 'notes', header: 'Notes' },
+        ] as any,
+      });
+    }
+    
     const blob = generateMultiSheetXLSX(sheets);
     downloadXLSX(blob, `payout-run-${run.month_year}.xlsx`);
   };
@@ -411,138 +466,146 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
         </Card>
       )}
       
-      {/* Employee Breakdown */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Employee Payouts</CardTitle>
-            <CardDescription>
-              Three-way split breakdown with collection releases
-            </CardDescription>
-          </div>
-          {currencies.length > 1 && (
-            <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="All currencies" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Currencies</SelectItem>
-                {currencies.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredEmployees && filteredEmployees.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Currency</TableHead>
-                    <TableHead className="text-right">VP (USD)</TableHead>
-                    <TableHead className="text-right">Comm (USD)</TableHead>
-                    <TableHead className="text-right">DT SPIFF</TableHead>
-                    <TableHead className="text-right">Total Eligible</TableHead>
-                    <TableHead className="text-right">Upon Booking</TableHead>
-                    <TableHead className="text-right">Upon Collection</TableHead>
-                    <TableHead className="text-right">At Year End</TableHead>
-                    <TableHead className="text-right">Coll. Releases</TableHead>
-                    <TableHead className="text-right">Payable This Month</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEmployees.map((emp) => (
-                    <TableRow key={emp.employeeId}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{emp.employeeName}</p>
-                          <p className="text-sm text-muted-foreground">{emp.employeeCode}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{emp.planName || '-'}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{emp.localCurrency}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{formatCurrency(emp.variablePayUsd)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(emp.commissionsUsd)}</TableCell>
-                      <TableCell className="text-right">
-                        {emp.dealTeamSpiffUsd > 0 ? formatCurrency(emp.dealTeamSpiffUsd) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(emp.totalEligibleUsd)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(emp.totalBookingUsd)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(emp.totalCollectionUsd)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(emp.totalYearEndUsd)}</TableCell>
-                      <TableCell className="text-right">
-                        {emp.collectionReleasesUsd > 0 
-                          ? formatCurrency(emp.collectionReleasesUsd) 
-                          : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
-                        {formatCurrency(emp.payableThisMonthUsd)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {/* Totals Row */}
-                  {filteredTotals && (
-                    <TableRow className="bg-muted/50 font-medium">
-                      <TableCell colSpan={3}>
-                        Total ({filteredEmployees.length} employees)
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.variablePayUsd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.commissionsUsd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {filteredTotals.dealTeamSpiffUsd > 0 ? formatCurrency(filteredTotals.dealTeamSpiffUsd) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.totalEligibleUsd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.totalBookingUsd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.totalCollectionUsd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.totalYearEndUsd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(filteredTotals.collectionReleasesUsd)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
-                        {formatCurrency(filteredTotals.payableThisMonthUsd)}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No employee payouts found. Run the calculation to generate payouts.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      
-      {/* Adjustments Section */}
-      <PayoutAdjustments 
-        payoutRunId={run.id} 
-        monthYear={run.month_year} 
-        runStatus={run.run_status} 
+      {/* Tabs: Summary vs Detailed Workings */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="summary">Summary</TabsTrigger>
+          <TabsTrigger value="workings">Detailed Workings</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="summary" className="space-y-6">
+          {/* Employee Breakdown */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Employee Payouts</CardTitle>
+                <CardDescription>
+                  Three-way split breakdown with collection releases
+                </CardDescription>
+              </div>
+              {currencies.length > 1 && (
+                <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="All currencies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Currencies</SelectItem>
+                    {currencies.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredEmployees && filteredEmployees.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Plan</TableHead>
+                        <TableHead>Currency</TableHead>
+                        <TableHead className="text-right">VP (USD)</TableHead>
+                        <TableHead className="text-right">Comm (USD)</TableHead>
+                        <TableHead className="text-right">DT SPIFF</TableHead>
+                        <TableHead className="text-right">Total Eligible</TableHead>
+                        <TableHead className="text-right">Upon Booking</TableHead>
+                        <TableHead className="text-right">Upon Collection</TableHead>
+                        <TableHead className="text-right">At Year End</TableHead>
+                        <TableHead className="text-right">Coll. Releases</TableHead>
+                        <TableHead className="text-right">Payable This Month</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredEmployees.map((emp) => (
+                        <TableRow key={emp.employeeId}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{emp.employeeName}</p>
+                              <p className="text-sm text-muted-foreground">{emp.employeeCode}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">{emp.planName || '-'}</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{emp.localCurrency}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.variablePayUsd)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.commissionsUsd)}</TableCell>
+                          <TableCell className="text-right">
+                            {emp.dealTeamSpiffUsd > 0 ? formatCurrency(emp.dealTeamSpiffUsd) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(emp.totalEligibleUsd)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.totalBookingUsd)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.totalCollectionUsd)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(emp.totalYearEndUsd)}</TableCell>
+                          <TableCell className="text-right">
+                            {emp.collectionReleasesUsd > 0 
+                              ? formatCurrency(emp.collectionReleasesUsd) 
+                              : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
+                            {formatCurrency(emp.payableThisMonthUsd)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {/* Totals Row */}
+                      {filteredTotals && (
+                        <TableRow className="bg-muted/50 font-medium">
+                          <TableCell colSpan={3}>
+                            Total ({filteredEmployees.length} employees)
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(filteredTotals.variablePayUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(filteredTotals.commissionsUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {filteredTotals.dealTeamSpiffUsd > 0 ? formatCurrency(filteredTotals.dealTeamSpiffUsd) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(filteredTotals.totalEligibleUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(filteredTotals.totalBookingUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(filteredTotals.totalCollectionUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(filteredTotals.totalYearEndUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(filteredTotals.collectionReleasesUsd)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
+                            {formatCurrency(filteredTotals.payableThisMonthUsd)}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No employee payouts found. Run the calculation to generate payouts.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          
+          {/* Adjustments Section */}
+          <PayoutAdjustments 
+            payoutRunId={run.id} 
+            monthYear={run.month_year} 
+            runStatus={run.run_status}
       />
       
       {/* Notes */}
