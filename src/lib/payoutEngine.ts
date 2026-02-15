@@ -219,12 +219,13 @@ export async function validatePayoutRunPrerequisites(
   const { data: employees } = await supabase
     .from('employees')
     .select('id, employee_id, full_name, local_currency, compensation_exchange_rate')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .not('sales_function', 'is', null);
   
   if (!employees || employees.length === 0) {
     errors.push({
       type: 'no_employees',
-      message: 'No active employees found',
+      message: 'No active sales-eligible employees found',
     });
     return { isValid: false, errors, warnings };
   }
@@ -1570,10 +1571,11 @@ async function executePayoutCalculation(
   const { data: employees } = await supabase
     .from('employees')
     .select('id, employee_id, full_name, email, local_currency, compensation_exchange_rate, tvp_usd, is_active, sales_function')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .not('sales_function', 'is', null);
   
   if (!employees || employees.length === 0) {
-    throw new Error('No active employees found');
+    throw new Error('No active sales-eligible employees found');
   }
   
   const employeePayouts: EmployeePayoutResult[] = [];

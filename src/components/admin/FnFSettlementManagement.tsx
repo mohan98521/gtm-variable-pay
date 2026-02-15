@@ -32,6 +32,7 @@ function useEmployeesForFnf() {
       const { data, error } = await supabase
         .from("employees")
         .select("id, employee_id, full_name, is_active, departure_date")
+        .not("sales_function", "is", null)
         .order("full_name");
       if (error) throw error;
       return data || [];
