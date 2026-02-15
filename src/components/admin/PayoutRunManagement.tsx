@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { 
   Plus, 
   Calculator, 
@@ -101,6 +102,7 @@ export function PayoutRunManagement() {
   const [viewingRun, setViewingRun] = useState<PayoutRun | null>(null);
   const [deletingRun, setDeletingRun] = useState<PayoutRun | null>(null);
   const [calculatingRun, setCalculatingRun] = useState<PayoutRun | null>(null);
+  const [calcProgress, setCalcProgress] = useState<{ current: number; total: number } | null>(null);
   
   // Generate month options for the selected year
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
@@ -136,10 +138,16 @@ export function PayoutRunManagement() {
   
   const handleCalculate = async (run: PayoutRun) => {
     setCalculatingRun(run);
+    setCalcProgress(null);
     try {
-      await calculateMutation.mutateAsync({ runId: run.id, monthYear: run.month_year });
+      await calculateMutation.mutateAsync({ 
+        runId: run.id, 
+        monthYear: run.month_year,
+        onProgress: (current, total) => setCalcProgress({ current, total }),
+      });
     } finally {
       setCalculatingRun(null);
+      setCalcProgress(null);
     }
   };
   
@@ -256,7 +264,11 @@ export function PayoutRunManagement() {
                                 ) : (
                                   <Calculator className="h-4 w-4" />
                                 )}
-                                <span className="ml-1">{run.run_status === 'calculating' ? 'Calculating...' : 'Calculate'}</span>
+                                <span className="ml-1">
+                                  {isCalculating && calcProgress
+                                    ? `Processing ${calcProgress.current}/${calcProgress.total}...`
+                                    : run.run_status === 'calculating' ? 'Calculating...' : 'Calculate'}
+                                </span>
                               </Button>
                               <Button
                                 variant="ghost"
