@@ -1,40 +1,66 @@
 
 
-## Add Deal-Level Workings to XLSX Export
+## Fix Deal-Level Workings: Column Labels, NRR Pro-Rata, and SPIFF Splits
 
-### Problem
-The "Export XLSX (Multi-sheet)" button in the Payout Run Detail page exports Summary, Employee Breakdown, and Detailed Workings sheets, but does not include the deal-level data from the "Deals" tab. Users cannot export which deals were eligible or excluded.
+### Problem 1: "Commission %" column is misleading for non-commission components
 
-### Solution
-Add a new "Deal Workings" sheet to the existing multi-sheet XLSX export in `PayoutRunDetail.tsx`.
+The `commission_rate_pct` column currently shows:
+- Commission: the actual commission rate (correct)
+- Variable Pay: the pro-rata proportion % (misleading label)
+- NRR: 0 (meaningless)
+- SPIFF: 0 (meaningless)
+
+**Fix**: Rename the column to "Rate / Mix %" in both the UI table and XLSX export. This label works for all component types -- commission rate for commissions, pro-rata mix for VP, and can be repurposed for SPIFF rate.
+
+Additionally, for SPIFF deals, store the `spiff_rate_pct` in `commission_rate_pct` instead of 0, so users can see the SPIFF rate applied.
+
+### Problem 2: NRR deal details lack pro-rata payout attribution
+
+Currently, NRR deal records store:
+- `gross_commission_usd` = raw eligible value (CR/ER + Impl that passed GP gate)
+- `booking_usd` / `collection_usd` / `year_end_usd` = all zeros
+
+This is incorrect. The total NRR payout should be distributed across eligible deals proportionally (same model as Variable Pay), using the formula:
+
+```
+Deal NRR Payout = Total NRR Payout * (Deal Eligible Value / Total NRR Actuals)
+```
+
+Then apply payout splits (booking/collection/year_end) to each deal's share.
+
+**Fix in `persistPayoutResults`**: After persisting NRR deal details, calculate pro-rata share of the total NRR payout for each eligible deal and apply the NRR booking/collection/year-end split percentages.
+
+### Problem 3: SPIFF deal details missing payout splits
+
+Currently, SPIFF deal records store:
+- `gross_commission_usd` = individual deal SPIFF payout (correct)
+- `booking_usd` / `collection_usd` / `year_end_usd` = all zeros (incorrect)
+
+**Fix in `persistPayoutResults`**: Apply the SPIFF payout split percentages to each deal's SPIFF payout.
 
 ### Technical Details
 
-**File to modify: `src/components/admin/PayoutRunDetail.tsx`**
+**Files to modify:**
 
-1. Import `usePayoutDealDetails` hook (already used by the Deals tab component)
-2. Call the hook with the current `payoutRunId` to fetch deal-level data
-3. After the "Detailed Workings" sheet block (around line 390), add a new "Deal Workings" sheet with the following columns:
+1. **`src/lib/payoutEngine.ts`** (persistPayoutResults, lines ~2300-2345)
+   - NRR section: Calculate each deal's pro-rata share of total NRR payout, apply booking/collection/year-end splits
+   - SPIFF section: Apply spiff booking/collection/year-end splits to each deal's payout, store spiff_rate_pct in commission_rate_pct
 
-| Column Header | Source Field |
-|---|---|
-| Employee Code | employee_code |
-| Employee Name | employee_name |
-| Component | component_type |
-| Project ID | project_id |
-| Customer | customer_name |
-| Commission Type | commission_type |
-| Deal Value (USD) | deal_value_usd |
-| GP Margin % | gp_margin_pct |
-| Min GP % | min_gp_margin_pct |
-| Eligible | is_eligible (Yes/No) |
-| Exclusion Reason | exclusion_reason |
-| Commission % | commission_rate_pct |
-| Gross Commission (USD) | gross_commission_usd |
-| Upon Booking (USD) | booking_usd |
-| Upon Collection (USD) | collection_usd |
-| At Year End (USD) | year_end_usd |
+2. **`src/components/admin/PayoutRunDealWorkings.tsx`** (line 166, 207)
+   - Rename column header from "Commission %" to "Rate / Mix %"
+   - Conditionally format the display based on component_type
 
-4. The sheet will export all deal records (both eligible and excluded), matching what the Deals tab shows without filters applied.
+3. **`src/components/admin/PayoutRunDetail.tsx`** (line 411)
+   - Rename XLSX export column header from "Commission %" to "Rate / Mix %"
 
-This is a small, self-contained change -- just fetching the data and appending one more sheet to the existing export logic.
+### Column value mapping after fix
+
+| Field | Commission | Variable Pay | NRR | SPIFF |
+|---|---|---|---|---|
+| commission_rate_pct | Commission rate | Pro-rata % | Pro-rata % of NRR actuals | SPIFF rate % |
+| gross_commission_usd | Gross commission | VP split | Pro-rata NRR payout share | Deal SPIFF payout |
+| booking_usd | Booking split | Booking split | NRR booking split | SPIFF booking split |
+| collection_usd | Collection split | Collection split | NRR collection split | SPIFF collection split |
+| year_end_usd | Year-end split | Year-end split | NRR year-end split | SPIFF year-end split |
+
+No changes to core calculation logic -- only the persistence and display layers are updated.
