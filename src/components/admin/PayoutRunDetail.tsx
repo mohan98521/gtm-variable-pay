@@ -606,7 +606,13 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
             payoutRunId={run.id} 
             monthYear={run.month_year} 
             runStatus={run.run_status}
-      />
+          />
+        </TabsContent>
+        
+        <TabsContent value="workings">
+          <PayoutRunWorkings payoutRunId={run.id} />
+        </TabsContent>
+      </Tabs>
       
       {/* Notes */}
       {run.notes && (
