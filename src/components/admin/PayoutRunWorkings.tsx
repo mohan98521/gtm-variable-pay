@@ -88,7 +88,7 @@ function getColumnLayout(groupKey: string): ColumnLayout {
 
 function getRowLayout(componentType: string): ColumnLayout {
   if (componentType === 'commission') return 'commission';
-  if (componentType === 'spiff' || componentType === 'deal_team_spiff') return 'spiff';
+  if (componentType === 'deal_team_spiff') return 'spiff';
   return 'variable_pay';
 }
 
@@ -328,14 +328,12 @@ function EmployeeWorkingsCard({ emp }: { emp: EmployeeWorkings }) {
 }
 
 function getGroupLayout(group: { key: string; rows: PayoutMetricDetailRow[] }): ColumnLayout {
-  // For 'additional' group, NRR uses variable_pay layout but spiff uses spiff layout
-  // Use the dominant type in the group
   if (group.key === 'comm') return 'commission';
   if (group.key === 'additional') {
-    // If any NRR rows, use variable_pay; if only spiffs, use spiff
-    const hasNrr = group.rows.some(r => r.component_type === 'nrr');
-    if (hasNrr) return 'variable_pay';
-    return 'spiff';
+    // Both NRR and SPIFF use variable_pay layout; only deal_team_spiff uses spiff
+    const hasDealTeamSpiffOnly = group.rows.every(r => r.component_type === 'deal_team_spiff');
+    if (hasDealTeamSpiffOnly) return 'spiff';
+    return 'variable_pay';
   }
   return 'variable_pay';
 }

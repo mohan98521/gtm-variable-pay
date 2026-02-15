@@ -28,7 +28,7 @@ import {
 } from "./dealVariablePayAttribution";
 import { calculateDealCommission, calculateTotalCommission, CommissionCalculation } from "./commissions";
 import { calculateNRRPayout, NRRDeal, NRRCalculationResult, NRRDealBreakdown } from "./nrrCalculation";
-import { calculateAllSpiffs, SpiffConfig, SpiffDeal, SpiffMetric, SpiffDealBreakdown } from "./spiffCalculation";
+import { calculateAllSpiffs, SpiffConfig, SpiffDeal, SpiffMetric, SpiffDealBreakdown, SpiffAggregateResult } from "./spiffCalculation";
 import { resolveTeamMembers } from "@/hooks/useSupportTeams";
 import { calculateBlendedProRata, BlendedProRataSegment } from "./compensation";
 
@@ -1291,6 +1291,7 @@ export function calculateMonthlyPayoutFromPrefetch(
   // === SPIFF Calculations ===
   let spiffPayoutUsd = 0;
   let spiffBreakdowns: SpiffDealBreakdown[] = [];
+  let spiffResult: SpiffAggregateResult = { totalSpiffUsd: 0, breakdowns: [], softwareTargetUsd: 0, eligibleActualsUsd: 0, softwareVariableOteUsd: 0, spiffRatePct: 0 };
   
   const planSpiffs = prefetched.allPlanSpiffs.filter((s: any) => s.plan_id === planId);
   
@@ -1314,7 +1315,7 @@ export function calculateMonthlyPayoutFromPrefetch(
       }
     }
     
-    const spiffResult = calculateAllSpiffs(
+    spiffResult = calculateAllSpiffs(
       planSpiffs as SpiffConfig[],
       spiffDeals as SpiffDeal[],
       spiffMetrics,
@@ -1516,19 +1517,23 @@ export function calculateMonthlyPayoutFromPrefetch(
       
       // SPIFF
       if (spiffPayoutUsd > 0) {
+        const spiffAllocatedOte = spiffResult.softwareVariableOteUsd * (spiffResult.spiffRatePct / 100);
+        const spiffAchPct = spiffResult.softwareTargetUsd > 0
+          ? (spiffResult.eligibleActualsUsd / spiffResult.softwareTargetUsd) * 100
+          : 0;
         details.push({
           componentType: 'spiff',
           metricName: 'SPIFF',
           planId,
           planName,
-          targetBonusUsd: 0,
-          allocatedOteUsd: 0,
-          targetUsd: 0,
-          actualUsd: 0,
-          achievementPct: 0,
-          multiplier: 0,
-          ytdEligibleUsd: spiffPayoutUsd,
-          priorPaidUsd: 0,
+          targetBonusUsd,
+          allocatedOteUsd: Math.round(spiffAllocatedOte * 100) / 100,
+          targetUsd: spiffResult.softwareTargetUsd,
+          actualUsd: spiffResult.eligibleActualsUsd,
+          achievementPct: Math.round(spiffAchPct * 10000) / 10000,
+          multiplier: 1,
+          ytdEligibleUsd: spiffResult.totalSpiffUsd,
+          priorPaidUsd: spiffResult.totalSpiffUsd - spiffPayoutUsd,
           thisMonthUsd: spiffPayoutUsd,
           bookingUsd: spiffBookingUsd,
           collectionUsd: spiffCollectionUsd,
