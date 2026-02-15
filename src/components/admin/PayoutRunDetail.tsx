@@ -15,6 +15,7 @@ import { format, parse } from "date-fns";
 import { PayoutRun } from "@/hooks/usePayoutRuns";
 import { useEmployeePayoutBreakdown, usePayoutSummary, EmployeePayoutSummary } from "@/hooks/useMonthlyPayouts";
 import { usePayoutMetricDetails } from "@/hooks/usePayoutMetricDetails";
+import { usePayoutDealDetails } from "@/hooks/usePayoutDealDetails";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +76,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
   const { data: employeeBreakdown, isLoading: loadingEmployees } = useEmployeePayoutBreakdown(run.id);
   const { data: currencySummary, isLoading: loadingSummary } = usePayoutSummary(run.id);
   const { data: metricDetails } = usePayoutMetricDetails(run.id);
+  const { data: dealDetails } = usePayoutDealDetails(run.id);
   
   const [currencyFilter, setCurrencyFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<string>("summary");
@@ -386,6 +388,32 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
         sheetName: 'Detailed Workings',
         data: workingsData,
         columns: workingsColumns,
+      });
+    }
+    
+    // Deal Workings sheet
+    if (dealDetails && dealDetails.length > 0) {
+      sheets.push({
+        sheetName: 'Deal Workings',
+        data: dealDetails,
+        columns: [
+          { key: 'employee_code', header: 'Employee Code', getValue: (r: any) => r.employee_code || '' },
+          { key: 'employee_name', header: 'Employee Name', getValue: (r: any) => r.employee_name || '' },
+          { key: 'component_type', header: 'Component', getValue: (r: any) => r.component_type || '' },
+          { key: 'project_id', header: 'Project ID' },
+          { key: 'customer_name', header: 'Customer' },
+          { key: 'commission_type', header: 'Commission Type' },
+          { key: 'deal_value_usd', header: 'Deal Value (USD)' },
+          { key: 'gp_margin_pct', header: 'GP Margin %' },
+          { key: 'min_gp_margin_pct', header: 'Min GP %' },
+          { key: 'is_eligible', header: 'Eligible', getValue: (r: any) => r.is_eligible ? 'Yes' : 'No' },
+          { key: 'exclusion_reason', header: 'Exclusion Reason' },
+          { key: 'commission_rate_pct', header: 'Commission %' },
+          { key: 'gross_commission_usd', header: 'Gross Commission (USD)' },
+          { key: 'booking_usd', header: 'Upon Booking (USD)' },
+          { key: 'collection_usd', header: 'Upon Collection (USD)' },
+          { key: 'year_end_usd', header: 'At Year End (USD)' },
+        ] as any,
       });
     }
     
