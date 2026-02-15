@@ -36,6 +36,8 @@ export interface SpiffDealBreakdown {
   dealArrUsd: number;
   spiffPayoutUsd: number;
   spiffName: string;
+  isEligible: boolean;
+  exclusionReason: string | null;
 }
 
 export interface SpiffCalculationResult {
@@ -88,12 +90,22 @@ export function calculateSpiffPayout(
   for (const deal of deals) {
     const dealArr = deal.new_software_booking_arr_usd || 0;
 
+    if (dealArr <= 0) continue;
+
     // Check minimum deal value threshold
     if (spiff.min_deal_value_usd && dealArr < spiff.min_deal_value_usd) {
+      dealBreakdowns.push({
+        dealId: deal.id,
+        projectId: deal.project_id,
+        customerName: deal.customer_name,
+        dealArrUsd: dealArr,
+        spiffPayoutUsd: 0,
+        spiffName: spiff.spiff_name,
+        isEligible: false,
+        exclusionReason: `Deal ARR $${dealArr.toLocaleString()} below minimum $${spiff.min_deal_value_usd.toLocaleString()}`,
+      });
       continue;
     }
-
-    if (dealArr <= 0) continue;
 
     // Deal SPIFF = Software Variable OTE * (Deal ARR / Software Target) * SPIFF Rate %
     const spiffPayoutUsd = softwareVariableOteUsd * (dealArr / softwareTargetUsd) * (spiff.spiff_rate_pct / 100);
@@ -107,6 +119,8 @@ export function calculateSpiffPayout(
       dealArrUsd: dealArr,
       spiffPayoutUsd: roundedPayout,
       spiffName: spiff.spiff_name,
+      isEligible: true,
+      exclusionReason: null,
     });
   }
 

@@ -9,6 +9,7 @@ export interface PayoutDealDetailRow {
   project_id: string | null;
   customer_name: string | null;
   commission_type: string;
+  component_type: string;
   deal_value_usd: number;
   gp_margin_pct: number | null;
   min_gp_margin_pct: number | null;

@@ -1677,6 +1677,7 @@ export type Database = {
           collection_usd: number
           commission_rate_pct: number
           commission_type: string
+          component_type: string
           created_at: string
           customer_name: string | null
           deal_id: string
@@ -1697,6 +1698,7 @@ export type Database = {
           collection_usd?: number
           commission_rate_pct?: number
           commission_type: string
+          component_type?: string
           created_at?: string
           customer_name?: string | null
           deal_id: string
@@ -1717,6 +1719,7 @@ export type Database = {
           collection_usd?: number
           commission_rate_pct?: number
           commission_type?: string
+          component_type?: string
           created_at?: string
           customer_name?: string | null
           deal_id?: string

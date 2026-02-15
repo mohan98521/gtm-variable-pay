@@ -23,7 +23,7 @@ import {
   AggregateVariablePayContext 
 } from "./dealVariablePayAttribution";
 import { calculateDealCommission, calculateTotalCommission, CommissionCalculation } from "./commissions";
-import { calculateNRRPayout, NRRDeal, NRRCalculationResult } from "./nrrCalculation";
+import { calculateNRRPayout, NRRDeal, NRRCalculationResult, NRRDealBreakdown } from "./nrrCalculation";
 import { calculateAllSpiffs, SpiffConfig, SpiffDeal, SpiffMetric, SpiffDealBreakdown } from "./spiffCalculation";
 import { resolveTeamMembers } from "@/hooks/useSupportTeams";
 import { calculateBlendedProRata, BlendedProRataSegment } from "./compensation";
@@ -199,6 +199,8 @@ export interface EmployeePayoutResult {
   // Detail breakdowns for persistence
   vpAttributions: DealVariablePayAttribution[];
   commissionCalculations: CommissionCalculation[];
+  nrrDealBreakdowns: NRRDealBreakdown[];
+  spiffDealBreakdowns: SpiffDealBreakdown[];
   
   // Metric-level detailed workings
   metricDetails: MetricPayoutDetail[];
@@ -1402,6 +1404,8 @@ export async function calculateMonthlyPayout(
     
     vpAttributions: vpResult.attributions,
     commissionCalculations: commResult.calculations,
+    nrrDealBreakdowns: nrrResult?.dealBreakdowns ?? [],
+    spiffDealBreakdowns: spiffBreakdowns,
     
     // Build detailed metric workings
     metricDetails: (() => {
@@ -2213,38 +2217,49 @@ async function persistPayoutResults(
     }
   }
 
-  // ===== Persist Deal-Level Commission Details =====
+  // ===== Persist Deal-Level Details (All Component Types) =====
   // Delete existing deal details for this run
   await supabase
     .from('payout_deal_details' as any)
     .delete()
     .eq('payout_run_id', payoutRunId);
 
-  // Collect all deal IDs from commission calculations to fetch metadata
-  const allDealIds = [...new Set(
-    employeePayouts.flatMap(emp => emp.commissionCalculations.map(c => c.dealId))
-  )];
+  // Collect all deal IDs to fetch metadata in bulk
+  const allDealIds = [...new Set([
+    ...employeePayouts.flatMap(emp => emp.commissionCalculations.map(c => c.dealId)),
+    ...employeePayouts.flatMap(emp => emp.vpAttributions.map(a => a.dealId)),
+    ...employeePayouts.flatMap(emp => emp.nrrDealBreakdowns.map(b => b.dealId)),
+    ...employeePayouts.flatMap(emp => emp.spiffDealBreakdowns.map(b => b.dealId)),
+  ])];
 
   // Fetch deal metadata (project_id, customer_name) in bulk
   let dealMetaMap = new Map<string, { project_id: string; customer_name: string | null }>();
   if (allDealIds.length > 0) {
-    const { data: dealMeta } = await supabase
-      .from('deals')
-      .select('id, project_id, customer_name')
-      .in('id', allDealIds);
-    (dealMeta || []).forEach(d => dealMetaMap.set(d.id, { project_id: d.project_id, customer_name: d.customer_name }));
+    // Fetch in batches of 200 to avoid URL length limits
+    for (let i = 0; i < allDealIds.length; i += 200) {
+      const batch = allDealIds.slice(i, i + 200);
+      const { data: dealMeta } = await supabase
+        .from('deals')
+        .select('id, project_id, customer_name')
+        .in('id', batch);
+      (dealMeta || []).forEach(d => dealMetaMap.set(d.id, { project_id: d.project_id, customer_name: d.customer_name }));
+    }
   }
 
-  const dealDetailRecords = employeePayouts.flatMap(emp =>
-    emp.commissionCalculations.map(c => {
+  const dealDetailRecords: any[] = [];
+
+  for (const emp of employeePayouts) {
+    // Commission deal details
+    for (const c of emp.commissionCalculations) {
       const meta = dealMetaMap.get(c.dealId);
-      return {
+      dealDetailRecords.push({
         payout_run_id: payoutRunId,
         employee_id: emp.employeeId,
         deal_id: c.dealId,
         project_id: meta?.project_id || null,
         customer_name: meta?.customer_name || null,
         commission_type: c.commissionType,
+        component_type: 'commission',
         deal_value_usd: c.tcvUsd,
         gp_margin_pct: c.gpMarginPct ?? null,
         min_gp_margin_pct: c.minGpMarginPct ?? null,
@@ -2255,9 +2270,80 @@ async function persistPayoutResults(
         booking_usd: c.paidAmount,
         collection_usd: c.holdbackAmount,
         year_end_usd: c.yearEndHoldback,
-      };
-    })
-  );
+      });
+    }
+
+    // Variable Pay deal details (all eligible by definition)
+    for (const attr of emp.vpAttributions) {
+      const meta = dealMetaMap.get(attr.dealId);
+      dealDetailRecords.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        deal_id: attr.dealId,
+        project_id: meta?.project_id || null,
+        customer_name: meta?.customer_name || null,
+        commission_type: attr.metricName,
+        component_type: 'variable_pay',
+        deal_value_usd: attr.dealValueUsd,
+        gp_margin_pct: null,
+        min_gp_margin_pct: null,
+        commission_rate_pct: attr.proportionPct,
+        is_eligible: true,
+        exclusion_reason: null,
+        gross_commission_usd: attr.variablePaySplitUsd,
+        booking_usd: attr.payoutOnBookingUsd,
+        collection_usd: attr.payoutOnCollectionUsd,
+        year_end_usd: attr.payoutOnYearEndUsd,
+      });
+    }
+
+    // NRR deal details
+    for (const nrr of emp.nrrDealBreakdowns) {
+      const meta = dealMetaMap.get(nrr.dealId);
+      dealDetailRecords.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        deal_id: nrr.dealId,
+        project_id: meta?.project_id || null,
+        customer_name: meta?.customer_name || null,
+        commission_type: 'NRR',
+        component_type: 'nrr',
+        deal_value_usd: nrr.crErUsd + nrr.implUsd,
+        gp_margin_pct: nrr.gpMarginPct,
+        min_gp_margin_pct: null, // thresholds vary by CR/ER vs Impl
+        commission_rate_pct: 0,
+        is_eligible: nrr.isEligible,
+        exclusion_reason: nrr.exclusionReason,
+        gross_commission_usd: nrr.eligibleValueUsd,
+        booking_usd: 0,
+        collection_usd: 0,
+        year_end_usd: 0,
+      });
+    }
+
+    // SPIFF deal details
+    for (const spiff of emp.spiffDealBreakdowns) {
+      dealDetailRecords.push({
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        deal_id: spiff.dealId,
+        project_id: spiff.projectId || null,
+        customer_name: spiff.customerName || null,
+        commission_type: spiff.spiffName,
+        component_type: 'spiff',
+        deal_value_usd: spiff.dealArrUsd,
+        gp_margin_pct: null,
+        min_gp_margin_pct: null,
+        commission_rate_pct: 0,
+        is_eligible: spiff.isEligible,
+        exclusion_reason: spiff.exclusionReason,
+        gross_commission_usd: spiff.spiffPayoutUsd,
+        booking_usd: 0,
+        collection_usd: 0,
+        year_end_usd: 0,
+      });
+    }
+  }
 
   if (dealDetailRecords.length > 0) {
     for (let i = 0; i < dealDetailRecords.length; i += 100) {

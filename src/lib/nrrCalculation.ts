@@ -15,6 +15,17 @@ export interface NRRDeal {
   gp_margin_percent: number | null;
 }
 
+export interface NRRDealBreakdown {
+  dealId: string;
+  crErUsd: number;
+  implUsd: number;
+  gpMarginPct: number | null;
+  isEligible: boolean;
+  exclusionReason: string | null;
+  /** The deal value that counted toward NRR actuals (0 if excluded) */
+  eligibleValueUsd: number;
+}
+
 export interface NRRCalculationResult {
   eligibleCrErUsd: number;
   totalCrErUsd: number;
@@ -24,6 +35,7 @@ export interface NRRCalculationResult {
   nrrTarget: number;
   achievementPct: number;
   payoutUsd: number;
+  dealBreakdowns: NRRDealBreakdown[];
 }
 
 /**
@@ -50,6 +62,7 @@ export function calculateNRRPayout(
       nrrTarget,
       achievementPct: 0,
       payoutUsd: 0,
+      dealBreakdowns: [],
     };
   }
 
@@ -57,27 +70,62 @@ export function calculateNRRPayout(
   let totalCrErUsd = 0;
   let eligibleImplUsd = 0;
   let totalImplUsd = 0;
+  const dealBreakdowns: NRRDealBreakdown[] = [];
 
   for (const deal of deals) {
     const crEr = (deal.cr_usd || 0) + (deal.er_usd || 0);
     const impl = deal.implementation_usd || 0;
-    const gpMargin = deal.gp_margin_percent || 0;
+    const gpMargin = deal.gp_margin_percent;
 
-    // CR/ER
+    // Skip deals with no NRR-relevant values
+    if (crEr <= 0 && impl <= 0) continue;
+
+    let isEligible = true;
+    let exclusionReason: string | null = null;
+    let eligibleValue = 0;
+
+    // CR/ER eligibility
     if (crEr > 0) {
       totalCrErUsd += crEr;
-      if (gpMargin >= crErMinGpMargin) {
+      if (gpMargin != null && gpMargin >= crErMinGpMargin) {
         eligibleCrErUsd += crEr;
+        eligibleValue += crEr;
+      } else {
+        isEligible = false;
+        exclusionReason = `GP margin ${gpMargin ?? 'N/A'}% below CR/ER minimum ${crErMinGpMargin}%`;
       }
     }
 
-    // Implementation
+    // Implementation eligibility
     if (impl > 0) {
       totalImplUsd += impl;
-      if (gpMargin >= implMinGpMargin) {
+      if (gpMargin != null && gpMargin >= implMinGpMargin) {
         eligibleImplUsd += impl;
+        eligibleValue += impl;
+      } else {
+        // If CR/ER was eligible but impl is not, mark partially
+        if (isEligible && crEr <= 0) {
+          isEligible = false;
+        }
+        const implReason = `GP margin ${gpMargin ?? 'N/A'}% below Implementation minimum ${implMinGpMargin}%`;
+        exclusionReason = exclusionReason ? `${exclusionReason}; ${implReason}` : implReason;
       }
     }
+
+    // A deal is "eligible" if any part contributed
+    if (eligibleValue > 0) {
+      isEligible = true;
+    }
+
+    dealBreakdowns.push({
+      dealId: deal.id,
+      crErUsd: crEr,
+      implUsd: impl,
+      gpMarginPct: gpMargin,
+      isEligible: eligibleValue > 0,
+      exclusionReason: eligibleValue > 0 ? null : exclusionReason,
+      eligibleValueUsd: eligibleValue,
+    });
   }
 
   const nrrActuals = eligibleCrErUsd + eligibleImplUsd;
@@ -93,5 +141,6 @@ export function calculateNRRPayout(
     nrrTarget,
     achievementPct: Math.round(achievementPct * 100) / 100,
     payoutUsd: Math.round(payoutUsd * 100) / 100,
+    dealBreakdowns,
   };
 }

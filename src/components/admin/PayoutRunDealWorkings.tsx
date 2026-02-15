@@ -34,6 +34,7 @@ export function PayoutRunDealWorkings({ payoutRunId }: PayoutRunDealWorkingsProp
   const [search, setSearch] = useState("");
   const [eligibilityFilter, setEligibilityFilter] = useState<"all" | "eligible" | "excluded">("all");
   const [commTypeFilter, setCommTypeFilter] = useState<string>("all");
+  const [componentFilter, setComponentFilter] = useState<string>("all");
 
   const commissionTypes = useMemo(() => {
     if (!deals) return [];
@@ -54,9 +55,10 @@ export function PayoutRunDealWorkings({ payoutRunId }: PayoutRunDealWorkingsProp
       if (eligibilityFilter === "eligible" && !d.is_eligible) return false;
       if (eligibilityFilter === "excluded" && d.is_eligible) return false;
       if (commTypeFilter !== "all" && d.commission_type !== commTypeFilter) return false;
+      if (componentFilter !== "all" && d.component_type !== componentFilter) return false;
       return true;
     });
-  }, [deals, search, eligibilityFilter, commTypeFilter]);
+  }, [deals, search, eligibilityFilter, commTypeFilter, componentFilter]);
 
   const summary = useMemo(() => {
     if (!deals) return { total: 0, eligible: 0, excluded: 0 };
@@ -132,6 +134,18 @@ export function PayoutRunDealWorkings({ payoutRunId }: PayoutRunDealWorkingsProp
             ))}
           </SelectContent>
         </Select>
+        <Select value={componentFilter} onValueChange={setComponentFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Component" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Components</SelectItem>
+            <SelectItem value="commission">Commission</SelectItem>
+            <SelectItem value="variable_pay">Variable Pay</SelectItem>
+            <SelectItem value="nrr">NRR</SelectItem>
+            <SelectItem value="spiff">SPIFF</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Table */}
@@ -140,6 +154,7 @@ export function PayoutRunDealWorkings({ payoutRunId }: PayoutRunDealWorkingsProp
           <TableHeader>
             <TableRow>
               <TableHead>Employee</TableHead>
+              <TableHead>Component</TableHead>
               <TableHead>Project ID</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Commission Type</TableHead>
@@ -161,6 +176,11 @@ export function PayoutRunDealWorkings({ payoutRunId }: PayoutRunDealWorkingsProp
                 <TableCell className="font-medium whitespace-nowrap">
                   {d.employee_name}
                   <span className="text-xs text-muted-foreground ml-1">({d.employee_code})</span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className="text-xs capitalize">
+                    {(d.component_type || 'commission').replace('_', ' ')}
+                  </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-xs">{d.project_id || '-'}</TableCell>
                 <TableCell>{d.customer_name || '-'}</TableCell>
@@ -193,7 +213,7 @@ export function PayoutRunDealWorkings({ payoutRunId }: PayoutRunDealWorkingsProp
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
                   No deals match the current filters.
                 </TableCell>
               </TableRow>
