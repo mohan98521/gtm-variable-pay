@@ -22,6 +22,9 @@ export interface CommissionCalculation {
   paidAmount: number;        // payout_on_booking_pct of gross
   holdbackAmount: number;    // payout_on_collection_pct of gross
   yearEndHoldback: number;   // payout_on_year_end_pct of gross
+  exclusionReason?: string;
+  gpMarginPct?: number | null;
+  minGpMarginPct?: number | null;
 }
 
 /**

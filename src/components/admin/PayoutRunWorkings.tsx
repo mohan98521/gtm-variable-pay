@@ -19,6 +19,7 @@ import {
 import { Loader2, Search } from "lucide-react";
 import { usePayoutMetricDetails, EmployeeWorkings, PayoutMetricDetailRow } from "@/hooks/usePayoutMetricDetails";
 import { PayoutRunWorkingsSummary } from "./PayoutRunWorkingsSummary";
+import { PayoutRunDealWorkings } from "./PayoutRunDealWorkings";
 
 interface PayoutRunWorkingsProps {
   payoutRunId: string;
@@ -342,7 +343,7 @@ function getGroupLayout(group: { key: string; rows: PayoutMetricDetailRow[] }): 
 export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
   const { data: employeeWorkings, isLoading } = usePayoutMetricDetails(payoutRunId);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"summary" | "detail">("summary");
+  const [view, setView] = useState<"summary" | "detail" | "deals">("summary");
   
   const filtered = employeeWorkings?.filter(emp =>
     !search || 
@@ -369,10 +370,11 @@ export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <Tabs value={view} onValueChange={(v) => setView(v as "summary" | "detail")}>
+        <Tabs value={view} onValueChange={(v) => setView(v as "summary" | "detail" | "deals")}>
           <TabsList>
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="detail">Detail</TabsTrigger>
+            <TabsTrigger value="deals">Deals</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="relative max-w-sm">
@@ -388,6 +390,8 @@ export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
 
       {view === "summary" ? (
         <PayoutRunWorkingsSummary employees={filtered} />
+      ) : view === "deals" ? (
+        <PayoutRunDealWorkings payoutRunId={payoutRunId} />
       ) : (
         <Accordion type="multiple" className="space-y-2">
           {filtered.map((emp) => (
