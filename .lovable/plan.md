@@ -1,34 +1,28 @@
 
 
-## Fix Detailed Workings Export to Match Summary View
+## Restrict Team Metric Subordinate Matching to sales_rep_employee_id Only
 
 ### Problem
-The XLSX export still uses the old `flatMap` approach, generating multiple rows per employee (one per metric). The UI now shows a pivoted one-row-per-employee summary, but the export doesn't match.
+Currently, when calculating "Team New Software Booking ARR" for Team Leads, the system checks if a subordinate's employee_id matches **any** of the 9 participant role columns on a deal. This means a deal gets counted toward a Team Lead's team metric even if the subordinate is only tagged as a Sales Engineer or Solution Architect on that deal -- not the primary sales rep.
 
-### Solution
-Replace the "Detailed Workings" sheet in the XLSX export with a pivoted layout that mirrors the Summary view -- one row per employee, with dynamically generated metric column groups.
+### Change
+Restrict the subordinate deal matching to only check `sales_rep_employee_id`. A deal will only count toward the "Team" metric if a direct report is the **primary sales rep** on that deal.
 
-### Export Layout
+### Files to Modify
 
-```text
-Emp Code | Emp Name | Plan | Ccy | [Metric 1] Target | [Metric 1] Actuals | [Metric 1] Ach% | ... (12 cols per metric) | Grand Total Incr Eligible | Grand Total Booking | Grand Total Collection | Grand Total Year-End
-```
+**1. `src/lib/payoutEngine.ts` (line ~633-636)**
+- The `.or()` filter currently builds a long string checking all 8 participant columns per subordinate
+- Change to only check `sales_rep_employee_id.eq.{rid}` for each subordinate
 
-Each metric gets 12 columns with the header format: `[Metric Name] - Target`, `[Metric Name] - Actuals`, etc.
+**2. `src/hooks/useTeamCompensation.ts` (lines ~293-296)**
+- Currently uses `PARTICIPANT_ROLES.some(role => subReportIds.includes(deal[role]))`
+- Change to `subReportIds.includes(deal.sales_rep_employee_id)`
 
-### Technical Details
+**3. `src/hooks/useCurrentUserCompensation.ts` (lines ~282-284)**
+- Same pattern as above
+- Change to `reportIds.includes(deal.sales_rep_employee_id)`
 
-**File: `src/components/admin/PayoutRunDetail.tsx`** (lines 252-299)
-
-1. Reuse the `discoverMetrics` function from `PayoutRunWorkingsSummary.tsx` (or extract it as a shared utility) to determine the dynamic metric columns in the same order as the UI.
-
-2. Replace the current `flatMap` logic with a pivoted export builder:
-   - For each employee, create a single flat object with keys like `[MetricName]_Target`, `[MetricName]_Actuals`, etc.
-   - Build the columns array dynamically: 4 fixed columns (Code, Name, Plan, Ccy) + 12 columns per metric + 4 grand total columns.
-
-3. Update column headers to match the UI labels: "Eligible Till Last Month" and "Incremental Eligible" (not "Prior Paid" / "This Month").
-
-4. The 12 sub-columns per metric will be: Target, Actuals, Ach %, OTE %, Allocated OTE, Multiplier, YTD Eligible, Eligible Till Last Month, Incremental Eligible, Booking, Collection, Year-End.
-
-**No new files or dependencies needed.** The metric discovery logic from `PayoutRunWorkingsSummary.tsx` will be extracted into a shared helper or inlined in the export function.
-
+### Impact
+- Only deals where a subordinate is the **sales rep** will be aggregated into the Team Lead's "Team New Software Booking ARR" metric
+- Closing ARR subordinate matching (which uses `sales_rep_employee_id` and `sales_head_employee_id`) remains unchanged
+- Individual employee metrics (non-team) remain unchanged -- they still check all participant roles for the employee's own deals
