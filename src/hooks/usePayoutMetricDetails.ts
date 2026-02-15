@@ -85,7 +85,7 @@ export function usePayoutMetricDetails(payoutRunId: string | null) {
             employeeCode: emp?.employee_id || '',
             localCurrency: emp?.local_currency || 'USD',
             planName: row.plan_name,
-            targetBonusUsd: row.target_bonus_usd || 0,
+            targetBonusUsd: 0,
             dateOfHire: emp?.date_of_hire || null,
             departureDate: emp?.departure_date || null,
             isActive: emp?.is_active ?? true,
@@ -114,6 +114,12 @@ export function usePayoutMetricDetails(payoutRunId: string | null) {
         } else {
           entry.otherDetails.push(enrichedRow);
         }
+      }
+
+      for (const entry of grouped.values()) {
+        entry.targetBonusUsd = Math.max(
+          ...entry.allDetails.map(d => d.target_bonus_usd || 0)
+        );
       }
       
       return Array.from(grouped.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
