@@ -291,9 +291,7 @@ export function useTeamCompensation() {
           }
           // Team metrics: aggregate subordinate deals
           if (hasTeamMetrics && subReportIds.length > 0) {
-            const isSubordinateDeal = PARTICIPANT_ROLES.some(role =>
-              subReportIds.includes(deal[role])
-            );
+            const isSubordinateDeal = subReportIds.includes(deal.sales_rep_employee_id);
             if (isSubordinateDeal) {
               teamNewBookingYtd += deal.new_software_booking_arr_usd || 0;
             }

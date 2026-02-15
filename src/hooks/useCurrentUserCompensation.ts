@@ -279,9 +279,7 @@ export function useCurrentUserCompensation() {
         if (reportIds.length > 0) {
           // Aggregate subordinate deals for "Team " metrics
           (deals || []).forEach((deal: any) => {
-            const isSubordinateDeal = PARTICIPANT_ROLES.some(role =>
-              reportIds.includes(deal[role])
-            );
+            const isSubordinateDeal = reportIds.includes(deal.sales_rep_employee_id);
             if (isSubordinateDeal) {
               teamNewBookingYtd += deal.new_software_booking_arr_usd || 0;
             }

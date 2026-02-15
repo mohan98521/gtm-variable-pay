@@ -632,7 +632,7 @@ async function calculateEmployeeVariablePay(
       } else if (isTeamMetric && teamReportIds.length > 0) {
         const parts: string[] = [];
         teamReportIds.forEach(rid => {
-          parts.push(`sales_rep_employee_id.eq.${rid},sales_head_employee_id.eq.${rid},sales_engineering_employee_id.eq.${rid},sales_engineering_head_employee_id.eq.${rid},product_specialist_employee_id.eq.${rid},product_specialist_head_employee_id.eq.${rid},solution_manager_employee_id.eq.${rid},solution_manager_head_employee_id.eq.${rid}`);
+          parts.push(`sales_rep_employee_id.eq.${rid}`);
         });
         const { data } = await supabase
           .from('deals')
