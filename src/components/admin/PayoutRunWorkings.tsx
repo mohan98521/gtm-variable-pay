@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Accordion,
   AccordionContent,
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2, Search } from "lucide-react";
 import { usePayoutMetricDetails, EmployeeWorkings, PayoutMetricDetailRow } from "@/hooks/usePayoutMetricDetails";
+import { PayoutRunWorkingsSummary } from "./PayoutRunWorkingsSummary";
 
 interface PayoutRunWorkingsProps {
   payoutRunId: string;
@@ -175,6 +177,7 @@ function EmployeeWorkingsCard({ emp }: { emp: EmployeeWorkings }) {
 export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
   const { data: employeeWorkings, isLoading } = usePayoutMetricDetails(payoutRunId);
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<"summary" | "detail">("summary");
   
   const filtered = employeeWorkings?.filter(emp =>
     !search || 
@@ -200,40 +203,52 @@ export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
 
   return (
     <div className="space-y-4">
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search employees..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex items-center gap-4">
+        <Tabs value={view} onValueChange={(v) => setView(v as "summary" | "detail")}>
+          <TabsList>
+            <TabsTrigger value="summary">Summary</TabsTrigger>
+            <TabsTrigger value="detail">Detail</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </div>
 
-      <Accordion type="multiple" className="space-y-2">
-        {filtered.map((emp) => (
-          <AccordionItem key={emp.employeeId} value={emp.employeeId} className="border rounded-lg px-4">
-            <AccordionTrigger className="hover:no-underline">
-              <div className="flex items-center gap-3 text-left">
-                <div>
-                  <span className="font-semibold">{emp.employeeName}</span>
-                  <span className="text-sm text-muted-foreground ml-2">({emp.employeeCode})</span>
+      {view === "summary" ? (
+        <PayoutRunWorkingsSummary employees={filtered} />
+      ) : (
+        <Accordion type="multiple" className="space-y-2">
+          {filtered.map((emp) => (
+            <AccordionItem key={emp.employeeId} value={emp.employeeId} className="border rounded-lg px-4">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-3 text-left">
+                  <div>
+                    <span className="font-semibold">{emp.employeeName}</span>
+                    <span className="text-sm text-muted-foreground ml-2">({emp.employeeCode})</span>
+                  </div>
+                  {emp.planName && (
+                    <Badge variant="outline" className="text-xs">{emp.planName}</Badge>
+                  )}
+                  <Badge variant="outline" className="text-xs">{emp.localCurrency}</Badge>
+                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400 ml-auto mr-4">
+                    {formatCurrency(emp.allDetails.reduce((s, d) => s + d.this_month_usd, 0))}
+                  </span>
                 </div>
-                {emp.planName && (
-                  <Badge variant="outline" className="text-xs">{emp.planName}</Badge>
-                )}
-                <Badge variant="outline" className="text-xs">{emp.localCurrency}</Badge>
-                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400 ml-auto mr-4">
-                  {formatCurrency(emp.allDetails.reduce((s, d) => s + d.this_month_usd, 0))}
-                </span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <EmployeeWorkingsCard emp={emp} />
-            </AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+              </AccordionTrigger>
+              <AccordionContent>
+                <EmployeeWorkingsCard emp={emp} />
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
     </div>
   );
 }
