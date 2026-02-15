@@ -65,7 +65,8 @@ export function useManagementSummary(year: number) {
       const { data: employees, error: empError } = await supabase
         .from("employees")
         .select("employee_id, sales_function")
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .not("sales_function", "is", null);
       
       if (empError) throw empError;
       
