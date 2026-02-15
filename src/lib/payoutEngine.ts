@@ -11,6 +11,10 @@
  * - Releases collection amounts for deals collected this month
  * - Releases year-end reserves in December
  * - Orchestrates batch calculations for all employees
+ * 
+ * PERFORMANCE: Uses bulk prefetching + parallel employee processing.
+ * All shared data is fetched once upfront (~15 queries) then filtered
+ * in-memory per employee, reducing 600+ round-trips to ~20 total.
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -34,42 +38,229 @@ function ensureFullDate(monthYear: string): string {
   return monthYear.length === 7 ? monthYear + '-01' : monthYear;
 }
 
+// ============= PREFETCHED DATA =============
+
 /**
- * Find deal IDs where an employee is credited via support team assignments.
- * Checks sales_engineering_team_id and solution_manager_team_id columns.
+ * All bulk-fetched data used during payout calculation.
+ * Fetched once before the employee loop, then filtered in-memory per employee.
  */
-async function getTeamAttributedDealIds(
-  employeeId: string,
-  fiscalYearStart: string,
-  monthYear: string
-): Promise<string[]> {
-  // Get all teams this employee belongs to (active, within effective dates)
-  const { data: memberships } = await supabase
-    .from('support_team_members' as any)
-    .select('team_id')
-    .eq('employee_id', employeeId)
-    .eq('is_active', true)
-    .lte('effective_from', monthYear)
-    .or(`effective_to.is.null,effective_to.gte.${monthYear}`);
+export interface PrefetchedData {
+  // All deals for the fiscal year (all employees)
+  allDeals: any[];
+  // All closing ARR actuals for the fiscal year
+  allClosingArr: any[];
+  // All performance targets for the fiscal year
+  allPerformanceTargets: any[];
+  // All exchange rates for the current month
+  allExchangeRates: any[];
+  // All user_targets with comp_plans for the fiscal year
+  allUserTargets: any[];
+  // All plan metrics with multiplier grids (keyed by plan_id)
+  allPlanMetrics: any[];
+  // All multiplier grids
+  allMultiplierGrids: any[];
+  // All plan commissions
+  allPlanCommissions: any[];
+  // All plan spiffs
+  allPlanSpiffs: any[];
+  // All prior month payouts (VP, NRR, SPIFF) for the fiscal year up to current month
+  allPriorPayouts: any[];
+  // All deal collections
+  allDealCollections: any[];
+  // All support team memberships
+  allTeamMemberships: any[];
+  // All deal team SPIFF allocations for the current month
+  allDealTeamSpiffAllocations: any[];
+  // All clawback ledger entries (pending/partial)
+  allClawbackLedger: any[];
+  // All closing ARR renewal multipliers
+  allRenewalMultipliers: any[];
+  // All deal variable pay attributions for the fiscal year
+  allVpAttributions: any[];
+  // All monthly payouts for commission releases
+  allMonthlyPayouts: any[];
+  // All employees (for team report lookups)
+  allEmployees: any[];
+  // All deal participants (unused currently but available)
+  // Deals with full commission fields (for the current month only)
+  allCommissionDeals: any[];
+}
 
-  if (!memberships || memberships.length === 0) return [];
+/**
+ * Prefetch all shared data needed for payout calculation.
+ * Runs ~15-20 queries in parallel, replacing 25+ queries per employee.
+ */
+async function prefetchPayoutData(
+  monthYear: string,
+  fiscalYear: number
+): Promise<PrefetchedData> {
+  const fullMonthYear = ensureFullDate(monthYear);
+  const fiscalYearStart = `${fiscalYear}-01-01`;
+  const fiscalYearEnd = `${fiscalYear}-12-31`;
 
-  const teamIds = (memberships as any[]).map((m: any) => m.team_id);
+  // Run all queries in parallel
+  const [
+    dealsResult,
+    closingArrResult,
+    perfTargetsResult,
+    exchangeRatesResult,
+    userTargetsResult,
+    planMetricsResult,
+    multiplierGridsResult,
+    planCommissionsResult,
+    planSpiffsResult,
+    priorPayoutsResult,
+    collectionsResult,
+    teamMembershipsResult,
+    dtsAllocationsResult,
+    clawbackLedgerResult,
+    renewalMultipliersResult,
+    vpAttributionsResult,
+    monthlyPayoutsResult,
+    employeesResult,
+    commissionDealsResult,
+  ] = await Promise.all([
+    // All deals for fiscal year (with all fields needed for VP, commission, NRR, SPIFF)
+    supabase
+      .from('deals')
+      .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id, solution_architect_employee_id, channel_sales_employee_id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive, sales_engineering_team_id, solution_manager_team_id')
+      .gte('month_year', fiscalYearStart)
+      .lte('month_year', fullMonthYear),
 
-  // Find deals that reference any of these teams
-  const orParts = teamIds.flatMap((tid: string) => [
-    `sales_engineering_team_id.eq.${tid}`,
-    `solution_manager_team_id.eq.${tid}`,
+    // All closing ARR actuals for fiscal year
+    supabase
+      .from('closing_arr_actuals')
+      .select('id, month_year, closing_arr, end_date, is_multi_year, renewal_years, sales_rep_employee_id, sales_head_employee_id')
+      .gte('month_year', fiscalYearStart)
+      .lte('month_year', fullMonthYear),
+
+    // All performance targets for fiscal year
+    supabase
+      .from('performance_targets')
+      .select('employee_id, metric_type, target_value_usd, effective_year')
+      .eq('effective_year', fiscalYear),
+
+    // Exchange rates for current month
+    supabase
+      .from('exchange_rates')
+      .select('currency_code, rate_to_usd')
+      .eq('month_year', fullMonthYear),
+
+    // All user_targets with comp_plans for fiscal year
+    supabase
+      .from('user_targets')
+      .select(`
+        *,
+        comp_plans (id, name, is_clawback_exempt, nrr_ote_percent, cr_er_min_gp_margin_pct, impl_min_gp_margin_pct, nrr_payout_on_booking_pct, nrr_payout_on_collection_pct, nrr_payout_on_year_end_pct, clawback_period_days)
+      `)
+      .lte('effective_start_date', fiscalYearEnd)
+      .gte('effective_end_date', fiscalYearStart),
+
+    // All plan metrics
+    supabase
+      .from('plan_metrics')
+      .select('*'),
+
+    // All multiplier grids
+    supabase
+      .from('multiplier_grids')
+      .select('*')
+      .order('min_pct'),
+
+    // All plan commissions
+    supabase
+      .from('plan_commissions')
+      .select('*'),
+
+    // All active plan spiffs
+    supabase
+      .from('plan_spiffs')
+      .select('*')
+      .eq('is_active', true),
+
+    // Prior month payouts (VP, NRR, SPIFF) for fiscal year up to current month
+    supabase
+      .from('monthly_payouts')
+      .select('employee_id, payout_type, calculated_amount_usd, month_year, payout_run_id, collection_amount_usd, deal_id, year_end_amount_usd')
+      .gte('month_year', fiscalYearStart)
+      .lte('month_year', `${fiscalYear}-12-01`)
+      .not('payout_run_id', 'is', null),
+
+    // All deal collections
+    supabase
+      .from('deal_collections')
+      .select('id, deal_id, collection_month, is_collected, booking_month, deal_value_usd, first_milestone_due_date, project_id, customer_name, is_clawback_triggered'),
+
+    // All support team memberships
+    supabase
+      .from('support_team_members' as any)
+      .select('team_id, employee_id, is_active, effective_from, effective_to'),
+
+    // Deal team SPIFF allocations for current month
+    supabase
+      .from('deal_team_spiff_allocations' as any)
+      .select('employee_id, allocated_amount_usd, payout_month, status')
+      .eq('status', 'approved')
+      .eq('payout_month', fullMonthYear),
+
+    // Clawback ledger (pending/partial)
+    supabase
+      .from('clawback_ledger' as any)
+      .select('id, employee_id, deal_id, deal_collection_id, original_amount_usd, recovered_amount_usd, remaining_amount_usd, status, triggered_month')
+      .in('status', ['pending', 'partial']),
+
+    // All closing ARR renewal multipliers
+    supabase
+      .from('closing_arr_renewal_multipliers' as any)
+      .select('*')
+      .order('min_years'),
+
+    // All VP attributions for fiscal year (for collection releases)
+    supabase
+      .from('deal_variable_pay_attribution')
+      .select('deal_id, employee_id, payout_on_collection_usd, variable_pay_split_usd, is_clawback_triggered, fiscal_year, plan_id, payout_on_booking_usd, local_currency, compensation_exchange_rate')
+      .eq('fiscal_year', fiscalYear),
+
+    // All monthly payouts (for commission releases - broader query)
+    supabase
+      .from('monthly_payouts')
+      .select('employee_id, payout_type, collection_amount_usd, deal_id, year_end_amount_usd, month_year')
+      .gte('month_year', fiscalYearStart)
+      .lte('month_year', `${fiscalYear}-12-01`),
+
+    // All employees (for team report lookups)
+    supabase
+      .from('employees')
+      .select('id, employee_id, full_name, email, local_currency, compensation_exchange_rate, tvp_usd, is_active, sales_function, manager_employee_id'),
+
+    // All deals for current month only (for commission calculation with full fields)
+    supabase
+      .from('deals')
+      .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive, project_id, customer_name, sales_rep_employee_id, sales_head_employee_id, sales_engineering_employee_id, sales_engineering_head_employee_id, product_specialist_employee_id, product_specialist_head_employee_id, solution_manager_employee_id, solution_manager_head_employee_id, solution_architect_employee_id, sales_engineering_team_id, solution_manager_team_id')
+      .eq('month_year', fullMonthYear),
   ]);
 
-  const { data: deals } = await supabase
-    .from('deals')
-    .select('id')
-    .or(orParts.join(','))
-    .gte('month_year', fiscalYearStart)
-    .lte('month_year', monthYear);
-
-  return (deals || []).map(d => d.id);
+  return {
+    allDeals: dealsResult.data || [],
+    allClosingArr: closingArrResult.data || [],
+    allPerformanceTargets: perfTargetsResult.data || [],
+    allExchangeRates: exchangeRatesResult.data || [],
+    allUserTargets: userTargetsResult.data || [],
+    allPlanMetrics: planMetricsResult.data || [],
+    allMultiplierGrids: multiplierGridsResult.data || [],
+    allPlanCommissions: planCommissionsResult.data || [],
+    allPlanSpiffs: planSpiffsResult.data || [],
+    allPriorPayouts: priorPayoutsResult.data || [],
+    allDealCollections: collectionsResult.data || [],
+    allTeamMemberships: (teamMembershipsResult.data as any[]) || [],
+    allDealTeamSpiffAllocations: (dtsAllocationsResult.data as any[]) || [],
+    allClawbackLedger: (clawbackLedgerResult.data as any[]) || [],
+    allRenewalMultipliers: (renewalMultipliersResult.data as any[]) || [],
+    allVpAttributions: vpAttributionsResult.data || [],
+    allMonthlyPayouts: monthlyPayoutsResult.data || [],
+    allEmployees: employeesResult.data || [],
+    allCommissionDeals: commissionDealsResult.data || [],
+  };
 }
 
 // ============= TYPE DEFINITIONS =============
@@ -320,22 +511,15 @@ export async function validatePayoutRunPrerequisites(
 // ============= EXCHANGE RATE HELPERS =============
 
 /**
- * Get market exchange rate for a currency and month
+ * Get market exchange rate from prefetched data
  */
-async function getMarketExchangeRate(
+function getMarketExchangeRateFromPrefetch(
   currencyCode: string,
-  monthYear: string
-): Promise<number> {
+  prefetched: PrefetchedData
+): number {
   if (currencyCode === 'USD') return 1;
-  
-  const { data } = await supabase
-    .from('exchange_rates')
-    .select('rate_to_usd')
-    .eq('currency_code', currencyCode)
-    .eq('month_year', ensureFullDate(monthYear))
-    .maybeSingle();
-  
-  return data?.rate_to_usd ?? 1;
+  const rate = prefetched.allExchangeRates.find(r => r.currency_code === currencyCode);
+  return rate?.rate_to_usd ?? 1;
 }
 
 /**
@@ -353,6 +537,78 @@ function convertCommissionToLocal(amountUsd: number, marketRate: number): number
   return amountUsd * marketRate;
 }
 
+// ============= IN-MEMORY FILTER HELPERS =============
+
+/**
+ * Get team-attributed deal IDs from prefetched data
+ */
+function getTeamAttributedDealIdsFromPrefetch(
+  employeeId: string,
+  monthYear: string,
+  prefetched: PrefetchedData
+): string[] {
+  // Find teams this employee belongs to
+  const memberships = prefetched.allTeamMemberships.filter((m: any) =>
+    m.employee_id === employeeId &&
+    m.is_active === true &&
+    m.effective_from <= monthYear &&
+    (m.effective_to === null || m.effective_to >= monthYear)
+  );
+
+  if (memberships.length === 0) return [];
+  const teamIds = new Set(memberships.map((m: any) => m.team_id));
+
+  // Find deals that reference any of these teams
+  const matchingDeals = prefetched.allDeals.filter(d =>
+    (d.sales_engineering_team_id && teamIds.has(d.sales_engineering_team_id)) ||
+    (d.solution_manager_team_id && teamIds.has(d.solution_manager_team_id))
+  );
+
+  return matchingDeals.map(d => d.id);
+}
+
+/**
+ * Filter deals where employee is a participant
+ */
+function getEmployeeDeals(
+  empCode: string,
+  deals: any[]
+): any[] {
+  return deals.filter(d =>
+    d.sales_rep_employee_id === empCode ||
+    d.sales_head_employee_id === empCode ||
+    d.sales_engineering_employee_id === empCode ||
+    d.sales_engineering_head_employee_id === empCode ||
+    d.product_specialist_employee_id === empCode ||
+    d.product_specialist_head_employee_id === empCode ||
+    d.solution_manager_employee_id === empCode ||
+    d.solution_manager_head_employee_id === empCode ||
+    d.solution_architect_employee_id === empCode
+  );
+}
+
+/**
+ * Get prior months' payout sum from prefetched data
+ */
+function getPriorMonthsPayoutFromPrefetch(
+  employeeId: string,
+  fiscalYear: number,
+  currentMonthYear: string,
+  payoutType: string,
+  prefetched: PrefetchedData
+): number {
+  const currentFull = ensureFullDate(currentMonthYear);
+  return prefetched.allPriorPayouts
+    .filter(p =>
+      p.employee_id === employeeId &&
+      p.payout_type === payoutType &&
+      p.month_year >= `${fiscalYear}-01-01` &&
+      p.month_year < currentFull &&
+      p.payout_run_id !== null
+    )
+    .reduce((sum: number, p: any) => sum + (p.calculated_amount_usd || 0), 0);
+}
+
 // ============= EMPLOYEE PAYOUT CALCULATION =============
 
 interface EmployeeCalculationContext {
@@ -366,74 +622,15 @@ interface EmployeeCalculationContext {
   targetBonusUsd: number;
   marketRate: number;
   isClawbackExempt: boolean;
+  prefetched: PrefetchedData;
 }
 
 /**
- * Get sum of prior months' VP for incremental calculation
+ * Calculate Variable Pay for a single employee using prefetched data
  */
-async function getPriorMonthsVp(
-  employeeId: string,
-  fiscalYear: number,
-  currentMonthYear: string
-): Promise<number> {
-  const { data } = await supabase
-    .from('monthly_payouts')
-    .select('calculated_amount_usd')
-    .eq('employee_id', employeeId)
-    .eq('payout_type', 'Variable Pay')
-    .gte('month_year', `${fiscalYear}-01-01`)
-    .lt('month_year', ensureFullDate(currentMonthYear))
-    .not('payout_run_id', 'is', null);
-  
-  return (data || []).reduce((sum, p) => sum + (p.calculated_amount_usd || 0), 0);
-}
-
-/**
- * Get sum of prior months' NRR Additional Pay for incremental calculation
- */
-async function getPriorMonthsNrr(
-  employeeId: string,
-  fiscalYear: number,
-  currentMonthYear: string
-): Promise<number> {
-  const { data } = await supabase
-    .from('monthly_payouts')
-    .select('calculated_amount_usd')
-    .eq('employee_id', employeeId)
-    .eq('payout_type', 'NRR Additional Pay')
-    .gte('month_year', `${fiscalYear}-01-01`)
-    .lt('month_year', ensureFullDate(currentMonthYear))
-    .not('payout_run_id', 'is', null);
-  
-  return (data || []).reduce((sum, p) => sum + (p.calculated_amount_usd || 0), 0);
-}
-
-/**
- * Get sum of prior months' SPIFF payouts for incremental calculation
- */
-async function getPriorMonthsSpiff(
-  employeeId: string,
-  fiscalYear: number,
-  currentMonthYear: string
-): Promise<number> {
-  const { data } = await supabase
-    .from('monthly_payouts')
-    .select('calculated_amount_usd')
-    .eq('employee_id', employeeId)
-    .eq('payout_type', 'SPIFF')
-    .gte('month_year', `${fiscalYear}-01-01`)
-    .lt('month_year', ensureFullDate(currentMonthYear))
-    .not('payout_run_id', 'is', null);
-  
-  return (data || []).reduce((sum, p) => sum + (p.calculated_amount_usd || 0), 0);
-}
-
-/**
- * Calculate Variable Pay for a single employee
- */
-async function calculateEmployeeVariablePay(
+function calculateEmployeeVariablePay(
   ctx: EmployeeCalculationContext
-): Promise<{
+): {
   totalVpUsd: number;
   ytdVpUsd: number;
   priorVpUsd: number;
@@ -454,13 +651,12 @@ async function calculateEmployeeVariablePay(
     collectionPct: number;
     yearEndPct: number;
   }>;
-}> {
+} {
   if (ctx.metrics.length === 0) {
     return { totalVpUsd: 0, ytdVpUsd: 0, priorVpUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, attributions: [], vpContext: null, vpMetricDetails: [] };
   }
 
   const empId = ctx.employee.employee_id;
-  const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId},solution_architect_employee_id.eq.${empId}`;
 
   let ytdVpUsd = 0;
   let ytdBookingUsd = 0;
@@ -469,7 +665,6 @@ async function calculateEmployeeVariablePay(
   let allAttributions: DealVariablePayAttribution[] = [];
   let lastContext: AggregateVariablePayContext | null = null;
   
-  // Track per-metric VP details for the workings report
   const vpMetricDetails: Array<{
     metricName: string;
     targetUsd: number;
@@ -483,84 +678,61 @@ async function calculateEmployeeVariablePay(
     yearEndPct: number;
   }> = [];
 
-  // Iterate over ALL plan metrics (e.g., "New Software Booking ARR" + "Closing ARR")
   for (const metric of ctx.metrics) {
-    // Get employee's target for this metric
-    const { data: perfTarget } = await supabase
-      .from('performance_targets')
-      .select('target_value_usd')
-      .eq('employee_id', empId)
-      .eq('effective_year', ctx.fiscalYear)
-      .eq('metric_type', metric.metric_name)
-      .maybeSingle();
+    // Get employee's target for this metric from prefetched data
+    const perfTarget = ctx.prefetched.allPerformanceTargets.find(
+      t => t.employee_id === empId && t.effective_year === ctx.fiscalYear && t.metric_type === metric.metric_name
+    );
 
     const targetUsd = perfTarget?.target_value_usd ?? 0;
     if (targetUsd === 0) continue;
 
     const bonusAllocationUsd = (ctx.targetBonusUsd * metric.weightage_percent) / 100;
 
-    // Determine actuals based on metric type
     const isClosingArr = metric.metric_name.toLowerCase().includes('closing arr');
     const isTeamMetric = metric.metric_name.startsWith("Team ");
     const isOrgMetric = metric.metric_name.startsWith("Org ");
 
-    // Get payout split percentages from metric config
     const bookingPct = metric.payout_on_booking_pct ?? 0;
     const collectionPct = metric.payout_on_collection_pct ?? 100;
     const yearEndPct = metric.payout_on_year_end_pct ?? 0;
 
-    // For "Team " prefix metrics, fetch subordinate employee IDs
+    // For "Team " prefix metrics, get subordinate employee IDs from prefetched data
     let teamReportIds: string[] = [];
     if (isTeamMetric) {
-      const { data: subReports } = await supabase
-        .from('employees')
-        .select('employee_id')
-        .eq('manager_employee_id', empId)
-        .eq('is_active', true);
-      teamReportIds = (subReports || []).map(e => e.employee_id);
+      teamReportIds = ctx.prefetched.allEmployees
+        .filter(e => e.manager_employee_id === empId && e.is_active)
+        .map(e => e.employee_id);
     }
 
     if (isClosingArr) {
-      // Closing ARR: fetch from closing_arr_actuals table (latest month snapshot, eligible only)
-      // For Team Leads with team metrics: include subordinate records for combined portfolio
-      let closingArrOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId}`;
-      
-      // Check if this employee is a Team Lead — extend Closing ARR to include team
+      // Closing ARR: filter from prefetched closing_arr_actuals
       const isTeamLead = (ctx.employee.sales_function || "").startsWith("Team Lead");
+      
+      let closingArrFilter: (arr: any) => boolean;
       if (isTeamLead && ctx.metrics.some(m => m.metric_name.startsWith("Team "))) {
-        // Fetch sub-reports if not already fetched
         let tlReportIds = teamReportIds;
         if (tlReportIds.length === 0) {
-          const { data: subReports } = await supabase
-            .from('employees')
-            .select('employee_id')
-            .eq('manager_employee_id', empId)
-            .eq('is_active', true);
-          tlReportIds = (subReports || []).map(e => e.employee_id);
+          tlReportIds = ctx.prefetched.allEmployees
+            .filter(e => e.manager_employee_id === empId && e.is_active)
+            .map(e => e.employee_id);
         }
-        tlReportIds.forEach(rid => {
-          closingArrOrFilter += `,sales_rep_employee_id.eq.${rid},sales_head_employee_id.eq.${rid}`;
-        });
+        const allIds = new Set([empId, ...tlReportIds]);
+        closingArrFilter = (arr: any) =>
+          (allIds.has(arr.sales_rep_employee_id) || allIds.has(arr.sales_head_employee_id)) &&
+          arr.end_date > `${ctx.fiscalYear}-12-31`;
+      } else {
+        closingArrFilter = (arr: any) =>
+          (arr.sales_rep_employee_id === empId || arr.sales_head_employee_id === empId) &&
+          arr.end_date > `${ctx.fiscalYear}-12-31`;
       }
 
-      const { data: closingArr } = await supabase
-        .from('closing_arr_actuals')
-        .select('month_year, closing_arr, end_date, is_multi_year, renewal_years')
-        .or(closingArrOrFilter)
-        .gte('month_year', `${ctx.fiscalYear}-01-01`)
-        .lte('month_year', ctx.monthYear)
-        .gt('end_date', `${ctx.fiscalYear}-12-31`);
+      const closingArr = ctx.prefetched.allClosingArr.filter(closingArrFilter);
 
-      // Fetch renewal multipliers for the current plan
-      const { data: renewalMultipliers } = await supabase
-        .from('closing_arr_renewal_multipliers' as any)
-        .select('*')
-        .eq('plan_id', ctx.planId)
-        .order('min_years');
+      // Get renewal multipliers for plan from prefetched data
+      const multiplierTiers = ctx.prefetched.allRenewalMultipliers
+        .filter((m: any) => m.plan_id === ctx.planId);
 
-      const multiplierTiers = (renewalMultipliers || []) as any[];
-
-      // Helper to find matching multiplier
       const findMultiplier = (years: number): number => {
         for (const m of multiplierTiers) {
           if (years >= m.min_years && (m.max_years === null || years <= m.max_years)) {
@@ -570,12 +742,10 @@ async function calculateEmployeeVariablePay(
         return 1.0;
       };
 
-      // Group by month and use the latest month snapshot, applying renewal multipliers
       const closingByMonth = new Map<string, number>();
-      (closingArr || []).forEach((arr: any) => {
+      closingArr.forEach((arr: any) => {
         const monthKey = arr.month_year?.substring(0, 7) || '';
         let value = arr.closing_arr || 0;
-        // Apply renewal multiplier if multi-year
         if (arr.is_multi_year && arr.renewal_years > 0) {
           value = value * findMultiplier(arr.renewal_years);
         }
@@ -588,8 +758,7 @@ async function calculateEmployeeVariablePay(
 
       if (totalActualUsd === 0) continue;
 
-      // Use the aggregate VP calculation (no per-deal attribution for Closing ARR)
-      const { calculateAggregateVariablePay } = await import('./dealVariablePayAttribution');
+      const { calculateAggregateVariablePay } = require('./dealVariablePayAttribution');
       const vpCalc = calculateAggregateVariablePay(totalActualUsd, targetUsd, bonusAllocationUsd, metric);
 
       ytdVpUsd += vpCalc.totalVariablePay;
@@ -622,50 +791,26 @@ async function calculateEmployeeVariablePay(
         calculationMonth: ensureFullDate(ctx.monthYear),
       };
     } else {
-      // Deal-based metric (New Software Booking ARR, Team, or Org)
-      let fetchedDeals: any[] = [];
+      // Deal-based metric
+      let fetchedDeals: any[];
 
       if (isOrgMetric) {
-        const { data } = await supabase
-          .from('deals')
-          .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
-          .gte('month_year', `${ctx.fiscalYear}-01-01`)
-          .lte('month_year', ctx.monthYear);
-        fetchedDeals = data || [];
+        fetchedDeals = ctx.prefetched.allDeals;
       } else if (isTeamMetric && teamReportIds.length > 0) {
-        const parts: string[] = [];
-        teamReportIds.forEach(rid => {
-          parts.push(`sales_rep_employee_id.eq.${rid}`);
-        });
-        const { data } = await supabase
-          .from('deals')
-          .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
-          .or(parts.join(','))
-          .gte('month_year', `${ctx.fiscalYear}-01-01`)
-          .lte('month_year', ctx.monthYear);
-        fetchedDeals = data || [];
+        const teamIdSet = new Set(teamReportIds);
+        fetchedDeals = ctx.prefetched.allDeals.filter(d => teamIdSet.has(d.sales_rep_employee_id));
       } else {
         // Individual participant filter + support team-attributed deals
-        const { data: directDeals } = await supabase
-          .from('deals')
-          .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
-          .or(participantOrFilter)
-          .gte('month_year', `${ctx.fiscalYear}-01-01`)
-          .lte('month_year', ctx.monthYear);
-        fetchedDeals = directDeals || [];
-
-        // Also include deals where employee is credited via support team
-        const teamDealIds = await getTeamAttributedDealIds(empId, `${ctx.fiscalYear}-01-01`, ctx.monthYear);
+        const directDeals = getEmployeeDeals(empId, ctx.prefetched.allDeals);
+        const teamDealIds = getTeamAttributedDealIdsFromPrefetch(empId, ctx.monthYear, ctx.prefetched);
+        
         if (teamDealIds.length > 0) {
-          const existingIds = new Set(fetchedDeals.map(d => d.id));
+          const existingIds = new Set(directDeals.map(d => d.id));
           const missingIds = teamDealIds.filter(id => !existingIds.has(id));
-          if (missingIds.length > 0) {
-            const { data: teamDeals } = await supabase
-              .from('deals')
-              .select('id, new_software_booking_arr_usd, month_year, project_id, customer_name')
-              .in('id', missingIds);
-            fetchedDeals = fetchedDeals.concat(teamDeals || []);
-          }
+          const teamDeals = ctx.prefetched.allDeals.filter(d => missingIds.includes(d.id));
+          fetchedDeals = directDeals.concat(teamDeals);
+        } else {
+          fetchedDeals = directDeals;
         }
       }
 
@@ -709,11 +854,10 @@ async function calculateEmployeeVariablePay(
     }
   }
 
-  // Calculate incremental VP (subtract prior months)
-  const priorVp = await getPriorMonthsVp(ctx.employee.id, ctx.fiscalYear, ctx.monthYear);
+  // Calculate incremental VP (subtract prior months) from prefetched data
+  const priorVp = getPriorMonthsPayoutFromPrefetch(ctx.employee.id, ctx.fiscalYear, ctx.monthYear, 'Variable Pay', ctx.prefetched);
   const monthlyVpUsd = Math.max(0, ytdVpUsd - priorVp);
   
-  // Scale splits proportionally to the monthly increment
   const vpRatio = ytdVpUsd > 0 ? monthlyVpUsd / ytdVpUsd : 0;
   let monthlyBookingUsd = ytdBookingUsd * vpRatio;
   let monthlyCollectionUsd = ytdCollectionUsd * vpRatio;
@@ -739,50 +883,41 @@ async function calculateEmployeeVariablePay(
 }
 
 /**
- * Calculate Commissions for a single employee
+ * Calculate Commissions for a single employee using prefetched data
  */
-async function calculateEmployeeCommissions(
+function calculateEmployeeCommissions(
   ctx: EmployeeCalculationContext
-): Promise<{
+): {
   totalCommUsd: number;
   bookingUsd: number;
   collectionUsd: number;
   yearEndUsd: number;
   calculations: CommissionCalculation[];
-}> {
+} {
   if (ctx.commissions.length === 0) {
     return { totalCommUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, calculations: [] };
   }
   
-  // Get deals for this month: direct participant + support team attributed
   const empId = ctx.employee.employee_id;
-  const { data: directDeals } = await supabase
-    .from('deals')
-     .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive, project_id, customer_name')
-     .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`)
-     .eq('month_year', ctx.monthYear);
-
-  let allCommDeals = directDeals || [];
-  const teamDealIds = await getTeamAttributedDealIds(empId, ctx.monthYear, ctx.monthYear);
+  
+  // Get deals for current month from prefetched commission deals
+  let directDeals = getEmployeeDeals(empId, ctx.prefetched.allCommissionDeals);
+  
+  // Also include team-attributed deals
+  const teamDealIds = getTeamAttributedDealIdsFromPrefetch(empId, ctx.monthYear, ctx.prefetched);
   if (teamDealIds.length > 0) {
-    const existingIds = new Set(allCommDeals.map(d => d.id));
+    const existingIds = new Set(directDeals.map(d => d.id));
     const missingIds = teamDealIds.filter(id => !existingIds.has(id));
-    if (missingIds.length > 0) {
-       const { data: teamDeals } = await supabase
-         .from('deals')
-         .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive, project_id, customer_name')
-         .in('id', missingIds);
-      allCommDeals = allCommDeals.concat(teamDeals || []);
-    }
+    const teamDeals = ctx.prefetched.allCommissionDeals.filter(d => missingIds.includes(d.id));
+    directDeals = directDeals.concat(teamDeals);
   }
-  const deals = allCommDeals;
+  const deals = directDeals;
   
   const calculations: CommissionCalculation[] = [];
   
-  for (const deal of deals || []) {
+  for (const deal of deals) {
     const isLinkedToImpl = deal.linked_to_impl === true;
     
-    // Helper to get split values, respecting linked_to_impl override and clawback exemption
     const getSplits = (comm: PlanCommission) => {
       if (isLinkedToImpl) {
         return { booking: 0, collection: 100, yearEnd: 0 };
@@ -791,7 +926,6 @@ async function calculateEmployeeCommissions(
       let collection = comm.payout_on_collection_pct ?? 100;
       const yearEnd = comm.payout_on_year_end_pct ?? 0;
       
-      // For clawback-exempt plans, merge booking + collection into immediate booking
       if (ctx.isClawbackExempt) {
         booking = booking + collection;
         collection = 0;
@@ -800,85 +934,58 @@ async function calculateEmployeeCommissions(
       return { booking, collection, yearEnd };
     };
 
-    // Perpetual License — uses deal flag instead of TCV threshold
+    // Perpetual License
     if (deal.perpetual_license_usd && deal.perpetual_license_usd > 0 && deal.eligible_for_perpetual_incentive === true) {
       const comm = ctx.commissions.find(c => c.commission_type === 'Perpetual License' && c.is_active);
       if (comm) {
         const splits = getSplits(comm);
         const result = calculateDealCommission(
-          deal.perpetual_license_usd,
-          comm.commission_rate_pct,
-          null, // threshold ignored; eligibility via deal flag
-          splits.booking,
-          splits.collection,
-          splits.yearEnd
+          deal.perpetual_license_usd, comm.commission_rate_pct, null,
+          splits.booking, splits.collection, splits.yearEnd
         );
         calculations.push({
-          dealId: deal.id,
-          commissionType: 'Perpetual License',
-          tcvUsd: deal.perpetual_license_usd,
-          commissionRatePct: comm.commission_rate_pct,
-          minThresholdUsd: null,
-          qualifies: result.qualifies,
-          grossCommission: result.gross,
-          paidAmount: result.paid,
-          holdbackAmount: result.holdback,
-          yearEndHoldback: result.yearEndHoldback,
+          dealId: deal.id, commissionType: 'Perpetual License',
+          tcvUsd: deal.perpetual_license_usd, commissionRatePct: comm.commission_rate_pct,
+          minThresholdUsd: null, qualifies: result.qualifies,
+          grossCommission: result.gross, paidAmount: result.paid,
+          holdbackAmount: result.holdback, yearEndHoldback: result.yearEndHoldback,
         });
       }
     }
     
-     // Managed Services — requires GP margin >= min_gp_margin_pct (if configured)
-     if (deal.managed_services_usd && deal.managed_services_usd > 0) {
-       const comm = ctx.commissions.find(c => c.commission_type === 'Managed Services' && c.is_active);
-       if (comm) {
-         // GP margin eligibility check
-         const minGpMargin = (comm as any).min_gp_margin_pct;
-         const dealGpMargin = deal.gp_margin_percent;
-         const gpMarginQualifies = minGpMargin == null || (dealGpMargin != null && dealGpMargin >= minGpMargin);
-         
-         if (gpMarginQualifies) {
-           const splits = getSplits(comm);
-           const result = calculateDealCommission(
-             deal.managed_services_usd,
-             comm.commission_rate_pct,
-             comm.min_threshold_usd,
-             splits.booking,
-             splits.collection,
-             splits.yearEnd
-           );
-           calculations.push({
-             dealId: deal.id,
-             commissionType: 'Managed Services',
-             tcvUsd: deal.managed_services_usd,
-             commissionRatePct: comm.commission_rate_pct,
-             minThresholdUsd: comm.min_threshold_usd,
-             qualifies: result.qualifies,
-             grossCommission: result.gross,
-             paidAmount: result.paid,
-             holdbackAmount: result.holdback,
-             yearEndHoldback: result.yearEndHoldback,
-           });
-         } else {
-           // Push excluded deal record for audit trail
-           calculations.push({
-             dealId: deal.id,
-             commissionType: 'Managed Services',
-             tcvUsd: deal.managed_services_usd,
-             commissionRatePct: comm.commission_rate_pct,
-             minThresholdUsd: comm.min_threshold_usd,
-             qualifies: false,
-             grossCommission: 0,
-             paidAmount: 0,
-             holdbackAmount: 0,
-             yearEndHoldback: 0,
-             exclusionReason: `GP margin ${dealGpMargin ?? 'N/A'}% below minimum ${minGpMargin}%`,
-             gpMarginPct: dealGpMargin,
-             minGpMarginPct: minGpMargin,
-           });
-         }
-       }
-     }
+    // Managed Services
+    if (deal.managed_services_usd && deal.managed_services_usd > 0) {
+      const comm = ctx.commissions.find(c => c.commission_type === 'Managed Services' && c.is_active);
+      if (comm) {
+        const minGpMargin = (comm as any).min_gp_margin_pct;
+        const dealGpMargin = deal.gp_margin_percent;
+        const gpMarginQualifies = minGpMargin == null || (dealGpMargin != null && dealGpMargin >= minGpMargin);
+        
+        if (gpMarginQualifies) {
+          const splits = getSplits(comm);
+          const result = calculateDealCommission(
+            deal.managed_services_usd, comm.commission_rate_pct, comm.min_threshold_usd,
+            splits.booking, splits.collection, splits.yearEnd
+          );
+          calculations.push({
+            dealId: deal.id, commissionType: 'Managed Services',
+            tcvUsd: deal.managed_services_usd, commissionRatePct: comm.commission_rate_pct,
+            minThresholdUsd: comm.min_threshold_usd, qualifies: result.qualifies,
+            grossCommission: result.gross, paidAmount: result.paid,
+            holdbackAmount: result.holdback, yearEndHoldback: result.yearEndHoldback,
+          });
+        } else {
+          calculations.push({
+            dealId: deal.id, commissionType: 'Managed Services',
+            tcvUsd: deal.managed_services_usd, commissionRatePct: comm.commission_rate_pct,
+            minThresholdUsd: comm.min_threshold_usd, qualifies: false,
+            grossCommission: 0, paidAmount: 0, holdbackAmount: 0, yearEndHoldback: 0,
+            exclusionReason: `GP margin ${dealGpMargin ?? 'N/A'}% below minimum ${minGpMargin}%`,
+            gpMarginPct: dealGpMargin, minGpMarginPct: minGpMargin,
+          });
+        }
+      }
+    }
     
     // Implementation
     if (deal.implementation_usd && deal.implementation_usd > 0) {
@@ -886,24 +993,15 @@ async function calculateEmployeeCommissions(
       if (comm) {
         const splits = getSplits(comm);
         const result = calculateDealCommission(
-          deal.implementation_usd,
-          comm.commission_rate_pct,
-          comm.min_threshold_usd,
-          splits.booking,
-          splits.collection,
-          splits.yearEnd
+          deal.implementation_usd, comm.commission_rate_pct, comm.min_threshold_usd,
+          splits.booking, splits.collection, splits.yearEnd
         );
         calculations.push({
-          dealId: deal.id,
-          commissionType: 'Implementation',
-          tcvUsd: deal.implementation_usd,
-          commissionRatePct: comm.commission_rate_pct,
-          minThresholdUsd: comm.min_threshold_usd,
-          qualifies: result.qualifies,
-          grossCommission: result.gross,
-          paidAmount: result.paid,
-          holdbackAmount: result.holdback,
-          yearEndHoldback: result.yearEndHoldback,
+          dealId: deal.id, commissionType: 'Implementation',
+          tcvUsd: deal.implementation_usd, commissionRatePct: comm.commission_rate_pct,
+          minThresholdUsd: comm.min_threshold_usd, qualifies: result.qualifies,
+          grossCommission: result.gross, paidAmount: result.paid,
+          holdbackAmount: result.holdback, yearEndHoldback: result.yearEndHoldback,
         });
       }
     }
@@ -915,24 +1013,15 @@ async function calculateEmployeeCommissions(
       if (comm) {
         const splits = getSplits(comm);
         const result = calculateDealCommission(
-          crErUsd,
-          comm.commission_rate_pct,
-          comm.min_threshold_usd,
-          splits.booking,
-          splits.collection,
-          splits.yearEnd
+          crErUsd, comm.commission_rate_pct, comm.min_threshold_usd,
+          splits.booking, splits.collection, splits.yearEnd
         );
         calculations.push({
-          dealId: deal.id,
-          commissionType: 'CR/ER',
-          tcvUsd: crErUsd,
-          commissionRatePct: comm.commission_rate_pct,
-          minThresholdUsd: comm.min_threshold_usd,
-          qualifies: result.qualifies,
-          grossCommission: result.gross,
-          paidAmount: result.paid,
-          holdbackAmount: result.holdback,
-          yearEndHoldback: result.yearEndHoldback,
+          dealId: deal.id, commissionType: 'CR/ER',
+          tcvUsd: crErUsd, commissionRatePct: comm.commission_rate_pct,
+          minThresholdUsd: comm.min_threshold_usd, qualifies: result.qualifies,
+          grossCommission: result.gross, paidAmount: result.paid,
+          holdbackAmount: result.holdback, yearEndHoldback: result.yearEndHoldback,
         });
       }
     }
@@ -952,143 +1041,133 @@ async function calculateEmployeeCommissions(
 // ============= COLLECTION RELEASES =============
 
 /**
- * Calculate collection releases for deals collected in the current month.
- * Looks up VP attributions and commission holdbacks from prior months.
+ * Calculate collection releases using prefetched data.
  */
-async function calculateCollectionReleases(
+function calculateCollectionReleasesFromPrefetch(
   employeeId: string,
   employeeCode: string,
   monthYear: string,
-  fiscalYear: number
-): Promise<{ vpReleaseUsd: number; commReleaseUsd: number; clawbackReversedDealIds: string[] }> {
-  // Find deals collected this month
-  const { data: collections } = await supabase
-    .from('deal_collections')
-    .select('deal_id')
-    .eq('collection_month', ensureFullDate(monthYear))
-    .eq('is_collected', true);
+  fiscalYear: number,
+  prefetched: PrefetchedData
+): { vpReleaseUsd: number; commReleaseUsd: number; clawbackReversedDealIds: string[] } {
+  const fullMonthYear = ensureFullDate(monthYear);
   
-  if (!collections || collections.length === 0) {
+  // Find deals collected this month
+  const collections = prefetched.allDealCollections.filter(
+    c => c.collection_month === fullMonthYear && c.is_collected === true
+  );
+  
+  if (collections.length === 0) {
     return { vpReleaseUsd: 0, commReleaseUsd: 0, clawbackReversedDealIds: [] };
   }
   
-  const collectedDealIds = collections.map(c => c.deal_id);
+  const collectedDealIds = new Set(collections.map(c => c.deal_id));
   
-  // VP releases: check clawback status to determine release amount
-  // For clawback-triggered deals: release full variable_pay_split_usd (100%)
-  // For normal deals: release payout_on_collection_usd only
-  const { data: vpAttrs } = await supabase
-    .from('deal_variable_pay_attribution')
-    .select('deal_id, payout_on_collection_usd, variable_pay_split_usd, is_clawback_triggered')
-    .eq('employee_id', employeeId)
-    .eq('fiscal_year', fiscalYear)
-    .in('deal_id', collectedDealIds);
+  // VP releases from prefetched VP attributions
+  const vpAttrs = prefetched.allVpAttributions.filter(
+    a => a.employee_id === employeeId && a.fiscal_year === fiscalYear && collectedDealIds.has(a.deal_id)
+  );
   
-  const vpReleaseUsd = (vpAttrs || []).reduce((sum, a) => {
+  const vpReleaseUsd = vpAttrs.reduce((sum: number, a: any) => {
     if (a.is_clawback_triggered) {
-      // Full release: deal becomes 100% payable upon collection after clawback
       return sum + (a.variable_pay_split_usd || 0);
     }
     return sum + (a.payout_on_collection_usd || 0);
   }, 0);
   
-  // Resolve clawback ledger entries for clawback-triggered deals that are now collected
-  const clawbackTriggeredDealIds = (vpAttrs || [])
-    .filter(a => a.is_clawback_triggered)
-    .map(a => a.deal_id);
+  const clawbackReversedDealIds = vpAttrs
+    .filter((a: any) => a.is_clawback_triggered)
+    .map((a: any) => a.deal_id);
   
-  if (clawbackTriggeredDealIds.length > 0) {
-    const { data: ledgerEntries } = await supabase
+  // Commission releases from prefetched monthly payouts
+  const commPayouts = prefetched.allMonthlyPayouts.filter(
+    p => p.employee_id === employeeId &&
+      p.payout_type !== 'Variable Pay' &&
+      p.payout_type !== 'Clawback' &&
+      p.payout_type !== 'Collection Release' &&
+      p.payout_type !== 'Year-End Release' &&
+      collectedDealIds.has(p.deal_id)
+  );
+  
+  const commReleaseUsd = commPayouts.reduce((sum: number, p: any) => sum + (p.collection_amount_usd || 0), 0);
+  
+  return { vpReleaseUsd, commReleaseUsd, clawbackReversedDealIds };
+}
+
+/**
+ * Apply clawback ledger resolutions for collected deals (mutates DB)
+ */
+async function resolveClawbacksForCollectedDeals(
+  employeeId: string,
+  clawbackReversedDealIds: string[],
+  monthYear: string,
+  prefetched: PrefetchedData
+): Promise<void> {
+  if (clawbackReversedDealIds.length === 0) return;
+  
+  const fullMonthYear = ensureFullDate(monthYear);
+  const ledgerEntries = prefetched.allClawbackLedger.filter(
+    (e: any) => e.employee_id === employeeId &&
+      clawbackReversedDealIds.includes(e.deal_id) &&
+      (e.status === 'pending' || e.status === 'partial')
+  );
+  
+  for (const entry of ledgerEntries) {
+    await supabase
       .from('clawback_ledger')
-      .select('id, original_amount_usd')
-      .eq('employee_id', employeeId)
-      .in('deal_id', clawbackTriggeredDealIds)
-      .in('status', ['pending', 'partial']);
-    
-    for (const entry of (ledgerEntries || [])) {
-      await supabase
-        .from('clawback_ledger')
-        .update({
-          status: 'recovered',
-          recovered_amount_usd: entry.original_amount_usd,
-          last_recovery_month: ensureFullDate(monthYear),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', entry.id);
-    }
+      .update({
+        status: 'recovered',
+        recovered_amount_usd: entry.original_amount_usd,
+        last_recovery_month: fullMonthYear,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', entry.id);
   }
-  
-  // Commission releases: sum collection_amount_usd from monthly_payouts for collected deals
-  const { data: commPayouts } = await supabase
-    .from('monthly_payouts')
-    .select('collection_amount_usd')
-    .eq('employee_id', employeeId)
-    .neq('payout_type', 'Variable Pay')
-    .neq('payout_type', 'Clawback')
-    .neq('payout_type', 'Collection Release')
-    .neq('payout_type', 'Year-End Release')
-    .in('deal_id', collectedDealIds);
-  
-  const commReleaseUsd = (commPayouts || []).reduce((sum, p) => sum + (p.collection_amount_usd || 0), 0);
-  
-  return { vpReleaseUsd, commReleaseUsd, clawbackReversedDealIds: clawbackTriggeredDealIds };
 }
 
 // ============= YEAR-END RELEASES (DECEMBER) =============
 
 /**
- * Calculate year-end releases for December payout run.
- * Sums all year_end_amount_usd from monthly_payouts in the fiscal year.
+ * Calculate year-end releases from prefetched data
  */
-async function calculateYearEndReleases(
+function calculateYearEndReleasesFromPrefetch(
   employeeId: string,
-  fiscalYear: number
-): Promise<number> {
-  const { data } = await supabase
-    .from('monthly_payouts')
-    .select('year_end_amount_usd')
-    .eq('employee_id', employeeId)
-    .gte('month_year', `${fiscalYear}-01-01`)
-    .lte('month_year', `${fiscalYear}-12-01`)
-    .neq('payout_type', 'Year-End Release')
-    .not('year_end_amount_usd', 'is', null);
-  
-  return (data || []).reduce((sum, p) => sum + (p.year_end_amount_usd || 0), 0);
+  fiscalYear: number,
+  prefetched: PrefetchedData
+): number {
+  return prefetched.allMonthlyPayouts
+    .filter(p =>
+      p.employee_id === employeeId &&
+      p.month_year >= `${fiscalYear}-01-01` &&
+      p.month_year <= `${fiscalYear}-12-01` &&
+      p.payout_type !== 'Year-End Release' &&
+      p.year_end_amount_usd != null
+    )
+    .reduce((sum: number, p: any) => sum + (p.year_end_amount_usd || 0), 0);
 }
 
 /**
- * Calculate full monthly payout for a single employee.
- * 
- * MULTI-ASSIGNMENT NOTE: The incremental model naturally handles mid-year
- * compensation changes. Each month fetches its own active assignment (via
- * effective_start_date/end_date range match), so months under Assignment A
- * use A's target_bonus_usd and months under Assignment B use B's. The
- * incremental calculation (YTD VP - sum of prior finalized payouts) ensures
- * no double-counting across assignment boundaries.
+ * Calculate full monthly payout for a single employee using prefetched data.
  */
-export async function calculateMonthlyPayout(
+export function calculateMonthlyPayoutFromPrefetch(
   employee: Employee,
-  monthYear: string
-): Promise<EmployeePayoutResult | null> {
+  monthYear: string,
+  prefetched: PrefetchedData
+): EmployeePayoutResult | null {
   const fiscalYear = parseInt(monthYear.substring(0, 4));
   const currentMonth = parseInt(monthYear.substring(5, 7));
   const isDecember = currentMonth === 12;
+  const fullMonthYear = ensureFullDate(monthYear);
   
-  // Get employee's plan assignment
-  const { data: target } = await supabase
-    .from('user_targets')
-    .select(`
-      plan_id,
-      target_bonus_usd,
-      comp_plans (id, name, is_clawback_exempt, nrr_ote_percent, cr_er_min_gp_margin_pct, impl_min_gp_margin_pct)
-    `)
-    .eq('user_id', employee.id)
-    .lte('effective_start_date', ensureFullDate(monthYear))
-    .gte('effective_end_date', ensureFullDate(monthYear))
-    .maybeSingle();
+  // Get employee's plan assignment from prefetched data
+  const target = prefetched.allUserTargets.find(
+    t => t.user_id === employee.id &&
+      t.effective_start_date <= fullMonthYear &&
+      t.effective_end_date >= fullMonthYear
+  );
   
   if (!target) {
-    return null; // No plan assignment for this period
+    return null;
   }
   
   const planId = target.plan_id;
@@ -1097,19 +1176,18 @@ export async function calculateMonthlyPayout(
   const isClawbackExempt = planData?.is_clawback_exempt === true;
   
   // === BLENDED PRO-RATA TARGET BONUS ===
-  // Fetch ALL assignments for this employee in the fiscal year
-  const { data: allAssignments } = await supabase
-    .from('user_targets')
-    .select('target_bonus_usd, effective_start_date, effective_end_date')
-    .eq('user_id', employee.id)
-    .lte('effective_start_date', `${fiscalYear}-12-31`)
-    .gte('effective_end_date', `${fiscalYear}-01-01`)
-    .order('effective_start_date', { ascending: true });
+  const allAssignments = prefetched.allUserTargets
+    .filter(t =>
+      t.user_id === employee.id &&
+      t.effective_start_date <= `${fiscalYear}-12-31` &&
+      t.effective_end_date >= `${fiscalYear}-01-01`
+    )
+    .sort((a: any, b: any) => a.effective_start_date.localeCompare(b.effective_start_date));
 
   let targetBonusUsd: number;
   
-  if (allAssignments && allAssignments.length > 1) {
-    const segments: BlendedProRataSegment[] = allAssignments.map(a => ({
+  if (allAssignments.length > 1) {
+    const segments: BlendedProRataSegment[] = allAssignments.map((a: any) => ({
       targetBonusUsd: a.target_bonus_usd ?? 0,
       startDate: a.effective_start_date,
       endDate: a.effective_end_date,
@@ -1121,23 +1199,21 @@ export async function calculateMonthlyPayout(
     targetBonusUsd = target.target_bonus_usd ?? employee.tvp_usd ?? 0;
   }
   
-  // Get plan metrics with multiplier grids
-  const { data: metrics } = await supabase
-    .from('plan_metrics')
-    .select(`
-      *,
-      multiplier_grids (*)
-    `)
-    .eq('plan_id', planId);
+  // Get plan metrics with multiplier grids from prefetched data
+  const planMetrics = prefetched.allPlanMetrics.filter((m: any) => m.plan_id === planId);
+  const metricIds = new Set(planMetrics.map((m: any) => m.id));
+  const grids = prefetched.allMultiplierGrids.filter((g: any) => metricIds.has(g.plan_metric_id));
   
-  // Get plan commissions
-  const { data: commissions } = await supabase
-    .from('plan_commissions')
-    .select('*')
-    .eq('plan_id', planId);
+  const metricsWithGrids: PlanMetric[] = planMetrics.map((metric: any) => ({
+    ...metric,
+    multiplier_grids: grids.filter((g: any) => g.plan_metric_id === metric.id),
+  }));
   
-  // Get market rate for commissions
-  const marketRate = await getMarketExchangeRate(employee.local_currency, monthYear);
+  // Get plan commissions from prefetched data
+  const commissions = prefetched.allPlanCommissions.filter((c: any) => c.plan_id === planId) as unknown as PlanCommission[];
+  
+  // Get market rate from prefetched data
+  const marketRate = getMarketExchangeRateFromPrefetch(employee.local_currency, prefetched);
   const compensationRate = employee.compensation_exchange_rate ?? 1;
   
   const ctx: EmployeeCalculationContext = {
@@ -1146,32 +1222,33 @@ export async function calculateMonthlyPayout(
     fiscalYear,
     planId,
     planName,
-    metrics: (metrics || []) as unknown as PlanMetric[],
-    commissions: (commissions || []) as unknown as PlanCommission[],
+    metrics: metricsWithGrids,
+    commissions,
     targetBonusUsd,
     marketRate,
     isClawbackExempt,
+    prefetched,
   };
   
-  // Calculate VP (now returns incremental monthly amount)
-  const vpResult = await calculateEmployeeVariablePay(ctx);
+  // Calculate VP (synchronous now - no DB calls)
+  const vpResult = calculateEmployeeVariablePay(ctx);
   
-  // Calculate Commissions
-  const commResult = await calculateEmployeeCommissions(ctx);
+  // Calculate Commissions (synchronous)
+  const commResult = calculateEmployeeCommissions(ctx);
   
-  // Calculate Collection Releases
-  const collReleases = await calculateCollectionReleases(
-    employee.id, employee.employee_id, monthYear, fiscalYear
+  // Calculate Collection Releases (synchronous)
+  const collReleases = calculateCollectionReleasesFromPrefetch(
+    employee.id, employee.employee_id, monthYear, fiscalYear, prefetched
   );
   const collectionReleasesUsd = collReleases.vpReleaseUsd + collReleases.commReleaseUsd;
   const collectionReleaseNotes = collReleases.clawbackReversedDealIds.length > 0
     ? `Includes full release for clawback-reversed deal(s). Released upon collection of previously held amounts.`
     : 'Released upon collection of previously held amounts';
   
-  // Calculate Year-End Releases (December only)
+  // Calculate Year-End Releases (December only, synchronous)
   let yearEndReleasesUsd = 0;
   if (isDecember) {
-    yearEndReleasesUsd = await calculateYearEndReleases(employee.id, fiscalYear);
+    yearEndReleasesUsd = calculateYearEndReleasesFromPrefetch(employee.id, fiscalYear, prefetched);
   }
 
   // === NRR Additional Pay ===
@@ -1186,34 +1263,18 @@ export async function calculateMonthlyPayout(
   
   if (nrrOtePct > 0) {
     const empId = employee.employee_id;
-    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId},solution_architect_employee_id.eq.${empId}`;
+    const nrrDeals = getEmployeeDeals(empId, prefetched.allDeals);
     
-    const { data: nrrDeals } = await supabase
-      .from('deals')
-      .select('id, cr_usd, er_usd, implementation_usd, gp_margin_percent')
-      .or(participantOrFilter)
-      .gte('month_year', `${fiscalYear}-01-01`)
-      .lte('month_year', monthYear);
-    
-    // Get CR/ER and Implementation targets
-    const { data: crErTarget } = await supabase
-      .from('performance_targets')
-      .select('target_value_usd')
-      .eq('employee_id', empId)
-      .eq('effective_year', fiscalYear)
-      .eq('metric_type', 'CR/ER')
-      .maybeSingle();
-    
-    const { data: implTarget } = await supabase
-      .from('performance_targets')
-      .select('target_value_usd')
-      .eq('employee_id', empId)
-      .eq('effective_year', fiscalYear)
-      .eq('metric_type', 'Implementation')
-      .maybeSingle();
+    // Get targets from prefetched data
+    const crErTarget = prefetched.allPerformanceTargets.find(
+      t => t.employee_id === empId && t.effective_year === fiscalYear && t.metric_type === 'CR/ER'
+    );
+    const implTarget = prefetched.allPerformanceTargets.find(
+      t => t.employee_id === empId && t.effective_year === fiscalYear && t.metric_type === 'Implementation'
+    );
     
     nrrResult = calculateNRRPayout(
-      (nrrDeals || []) as NRRDeal[],
+      nrrDeals as NRRDeal[],
       crErTarget?.target_value_usd ?? 0,
       implTarget?.target_value_usd ?? 0,
       nrrOtePct,
@@ -1222,8 +1283,8 @@ export async function calculateMonthlyPayout(
       implMinGp
     );
     
-    // Apply incremental logic: subtract prior months' NRR
-    const priorNrr = await getPriorMonthsNrr(employee.id, fiscalYear, monthYear);
+    // Apply incremental logic from prefetched data
+    const priorNrr = getPriorMonthsPayoutFromPrefetch(employee.id, fiscalYear, monthYear, 'NRR Additional Pay', prefetched);
     nrrPayoutUsd = Math.max(0, nrrResult.payoutUsd - priorNrr);
   }
 
@@ -1231,25 +1292,14 @@ export async function calculateMonthlyPayout(
   let spiffPayoutUsd = 0;
   let spiffBreakdowns: SpiffDealBreakdown[] = [];
   
-  const { data: planSpiffs } = await supabase
-    .from('plan_spiffs')
-    .select('*')
-    .eq('plan_id', planId)
-    .eq('is_active', true);
+  const planSpiffs = prefetched.allPlanSpiffs.filter((s: any) => s.plan_id === planId);
   
-  if (planSpiffs && planSpiffs.length > 0) {
+  if (planSpiffs.length > 0) {
     const empId = employee.employee_id;
-    const participantOrFilter = `sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId},solution_architect_employee_id.eq.${empId}`;
+    const spiffDeals = getEmployeeDeals(empId, prefetched.allDeals);
     
-    const { data: spiffDeals } = await supabase
-      .from('deals')
-      .select('id, new_software_booking_arr_usd, project_id, customer_name')
-      .or(participantOrFilter)
-      .gte('month_year', `${fiscalYear}-01-01`)
-      .lte('month_year', monthYear);
-    
-    // Build targets by metric
-    const spiffMetrics: SpiffMetric[] = ((metrics || []) as any[]).map(m => ({
+    // Build targets by metric from prefetched data
+    const spiffMetrics: SpiffMetric[] = metricsWithGrids.map(m => ({
       metric_name: m.metric_name,
       weightage_percent: m.weightage_percent,
     }));
@@ -1257,44 +1307,29 @@ export async function calculateMonthlyPayout(
     const targetsByMetric: Record<string, number> = {};
     for (const spiff of planSpiffs) {
       if (!targetsByMetric[spiff.linked_metric_name]) {
-        const { data: perfTarget } = await supabase
-          .from('performance_targets')
-          .select('target_value_usd')
-          .eq('employee_id', employee.employee_id)
-          .eq('effective_year', fiscalYear)
-          .eq('metric_type', spiff.linked_metric_name)
-          .maybeSingle();
+        const perfTarget = prefetched.allPerformanceTargets.find(
+          t => t.employee_id === empId && t.effective_year === fiscalYear && t.metric_type === spiff.linked_metric_name
+        );
         targetsByMetric[spiff.linked_metric_name] = perfTarget?.target_value_usd ?? 0;
       }
     }
     
     const spiffResult = calculateAllSpiffs(
       planSpiffs as SpiffConfig[],
-      (spiffDeals || []) as SpiffDeal[],
+      spiffDeals as SpiffDeal[],
       spiffMetrics,
       targetBonusUsd,
       targetsByMetric
     );
-    // Apply incremental logic: subtract prior months' SPIFF
-    const priorSpiff = await getPriorMonthsSpiff(employee.id, fiscalYear, monthYear);
+    const priorSpiff = getPriorMonthsPayoutFromPrefetch(employee.id, fiscalYear, monthYear, 'SPIFF', prefetched);
     spiffPayoutUsd = Math.max(0, spiffResult.totalSpiffUsd - priorSpiff);
     spiffBreakdowns = spiffResult.breakdowns;
   }
 
   // === Deal Team SPIFF (manual allocations) ===
-  let dealTeamSpiffUsd = 0;
-  {
-    const { data: dtsAllocations } = await supabase
-      .from('deal_team_spiff_allocations' as any)
-      .select('allocated_amount_usd')
-      .eq('employee_id', employee.employee_id)
-      .eq('status', 'approved')
-      .eq('payout_month', ensureFullDate(monthYear));
-    
-    dealTeamSpiffUsd = ((dtsAllocations as any[]) || []).reduce(
-      (sum: number, a: any) => sum + (a.allocated_amount_usd || 0), 0
-    );
-  }
+  const dealTeamSpiffUsd = prefetched.allDealTeamSpiffAllocations
+    .filter((a: any) => a.employee_id === employee.employee_id)
+    .reduce((sum: number, a: any) => sum + (a.allocated_amount_usd || 0), 0);
   
   // Convert to local currency
   const vpLocal = convertVPToLocal(vpResult.totalVpUsd, compensationRate);
@@ -1314,16 +1349,15 @@ export async function calculateMonthlyPayout(
   const spiffPayoutLocal = convertVPToLocal(spiffPayoutUsd, compensationRate);
   const dealTeamSpiffLocal = convertVPToLocal(dealTeamSpiffUsd, compensationRate);
   
-  // Payable This Month = Upon Booking + Collection Releases + Year-End Releases + NRR booking portion + SPIFF booking portions + Deal Team SPIFF (100% booking)
+  // Payable This Month
   const nrrBookingUsd = nrrPayoutUsd * nrrBookingPct;
   
-  // Calculate SPIFF booking portion from individual spiff splits
   let spiffBookingUsd = 0;
   let spiffCollectionUsd = 0;
   let spiffYearEndUsd = 0;
-  if (planSpiffs && planSpiffs.length > 0) {
+  if (planSpiffs.length > 0) {
     for (const breakdown of spiffBreakdowns) {
-      const matchingSpiff = planSpiffs.find(s => s.spiff_name === breakdown.spiffName);
+      const matchingSpiff = planSpiffs.find((s: any) => s.spiff_name === breakdown.spiffName);
       const bkPct = (matchingSpiff as any)?.payout_on_booking_pct ?? 0;
       const coPct = (matchingSpiff as any)?.payout_on_collection_pct ?? 100;
       const yePct = (matchingSpiff as any)?.payout_on_year_end_pct ?? 0;
@@ -1333,14 +1367,9 @@ export async function calculateMonthlyPayout(
     }
   }
   
-  let payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrBookingUsd + spiffBookingUsd + dealTeamSpiffUsd;
+  const payableThisMonthUsd = vpResult.bookingUsd + commResult.bookingUsd + collectionReleasesUsd + yearEndReleasesUsd + nrrBookingUsd + spiffBookingUsd + dealTeamSpiffUsd;
   
-  // Apply clawback carry-forward recoveries
-  let clawbackRecoveryUsd = 0;
-  const clawbackRecovery = await applyClawbackRecoveries(employee.id, payableThisMonthUsd, monthYear);
-  payableThisMonthUsd = clawbackRecovery.adjustedPayableUsd;
-  clawbackRecoveryUsd = clawbackRecovery.totalRecoveredUsd;
-  
+  // Note: clawback recovery will be applied after this function returns (needs async DB mutation)
   const payableThisMonthLocal = convertVPToLocal(payableThisMonthUsd, compensationRate);
   
   return {
@@ -1577,29 +1606,6 @@ export async function calculateMonthlyPayout(
         });
       }
       
-      // Clawback Recovery
-      if (clawbackRecoveryUsd > 0) {
-        details.push({
-          componentType: 'clawback',
-          metricName: 'Clawback Recovery',
-          planId,
-          planName,
-          targetBonusUsd: 0,
-          allocatedOteUsd: 0,
-          targetUsd: 0,
-          actualUsd: 0,
-          achievementPct: 0,
-          multiplier: 0,
-          ytdEligibleUsd: -clawbackRecoveryUsd,
-          priorPaidUsd: 0,
-          thisMonthUsd: -clawbackRecoveryUsd,
-          bookingUsd: -clawbackRecoveryUsd,
-          collectionUsd: 0,
-          yearEndUsd: 0,
-          notes: 'Carry-forward clawback deduction',
-        });
-      }
-      
       return details;
     })(),
   };
@@ -1648,8 +1654,6 @@ export async function checkAndApplyClawbacks(
   let clawbackCount = 0;
   
   for (const collection of pendingCollections) {
-    // Determine clawback deadline based on plan's clawback_period_days
-    // First, find the employee(s) associated with this deal to get their plan
     const { data: attributions } = await supabase
       .from('deal_variable_pay_attribution')
       .select('employee_id, payout_on_booking_usd, local_currency, compensation_exchange_rate, plan_id')
@@ -1657,9 +1661,8 @@ export async function checkAndApplyClawbacks(
     
     if (!attributions || attributions.length === 0) continue;
     
-    // Get the plan's clawback period (use first attribution's plan)
     const planId = attributions[0].plan_id;
-    let clawbackPeriodDays = 180; // default
+    let clawbackPeriodDays = 180;
     let isClawbackExempt = false;
     
     if (planId) {
@@ -1675,16 +1678,13 @@ export async function checkAndApplyClawbacks(
       }
     }
     
-    // Skip clawback-exempt plans
     if (isClawbackExempt) continue;
     
-    // Calculate deadline: end of booking month + clawback_period_days
     const bookingDate = new Date(collection.booking_month);
-    const bookingMonthEnd = new Date(bookingDate.getFullYear(), bookingDate.getMonth() + 1, 0); // last day of booking month
+    const bookingMonthEnd = new Date(bookingDate.getFullYear(), bookingDate.getMonth() + 1, 0);
     const clawbackDeadline = new Date(bookingMonthEnd);
     clawbackDeadline.setDate(clawbackDeadline.getDate() + clawbackPeriodDays);
     
-    // If first_milestone_due_date is set, use the earlier deadline
     let effectiveDeadline = clawbackDeadline;
     if (collection.first_milestone_due_date) {
       const milestoneDate = new Date(collection.first_milestone_due_date);
@@ -1693,15 +1693,12 @@ export async function checkAndApplyClawbacks(
       }
     }
     
-    // Check if past deadline
     if (today <= effectiveDeadline) continue;
     
-    // This deal is overdue — trigger clawback
     const clawbackAmount = attributions.reduce((sum, attr) => sum + attr.payout_on_booking_usd, 0);
     totalClawbacksUsd += clawbackAmount;
     clawbackCount++;
     
-    // Create clawback payout records (negative amounts) and clawback_ledger entries
     for (const attr of attributions) {
       const localAmount = attr.payout_on_booking_usd * (attr.compensation_exchange_rate || 1);
       
@@ -1718,10 +1715,9 @@ export async function checkAndApplyClawbacks(
         clawback_amount_usd: attr.payout_on_booking_usd,
         clawback_amount_local: localAmount,
         status: 'calculated',
-        notes: `Clawback for deal ${collection.project_id} - ${collection.customer_name || 'Unknown'} (${clawbackPeriodDays}-day period exceeded)`,
+        notes: `Clawback for deal (${clawbackPeriodDays}-day period exceeded)`,
       });
       
-      // Insert into clawback_ledger for carry-forward tracking
       await supabase.from('clawback_ledger' as any).insert({
         employee_id: attr.employee_id,
         deal_id: collection.deal_id,
@@ -1733,7 +1729,6 @@ export async function checkAndApplyClawbacks(
       });
     }
     
-    // Update deal_variable_pay_attribution records
     await supabase
       .from('deal_variable_pay_attribution')
       .update({
@@ -1744,7 +1739,6 @@ export async function checkAndApplyClawbacks(
       })
       .eq('deal_id', collection.deal_id);
     
-    // Update the collection record
     await supabase
       .from('deal_collections')
       .update({
@@ -1764,8 +1758,6 @@ export async function checkAndApplyClawbacks(
 
 /**
  * Apply clawback carry-forward deductions from an employee's payable amount.
- * Checks the clawback_ledger for pending/partial entries and deducts from payable.
- * Returns the adjusted payable amount after deductions.
  */
 export async function applyClawbackRecoveries(
   employeeId: string,
@@ -1776,7 +1768,6 @@ export async function applyClawbackRecoveries(
     return { adjustedPayableUsd: payableAmountUsd, totalRecoveredUsd: 0 };
   }
 
-  // Fetch pending/partial clawback ledger entries for this employee
   const { data: pendingClawbacks } = await supabase
     .from('clawback_ledger' as any)
     .select('id, remaining_amount_usd, recovered_amount_usd')
@@ -1823,14 +1814,19 @@ export async function applyClawbackRecoveries(
 // ============= BATCH CALCULATION =============
 
 /**
+ * Progress callback for reporting calculation progress
+ */
+export type ProgressCallback = (current: number, total: number) => void;
+
+/**
  * Run full payout calculation for all employees
  */
 export async function runPayoutCalculation(
   payoutRunId: string,
-  monthYear: string
+  monthYear: string,
+  onProgress?: ProgressCallback
 ): Promise<PayoutRunResult> {
   // === Calculation Lock: prevent concurrent runs ===
-  // Use CAS pattern: only proceed if current status is 'draft' or 'review'
   const { data: lockResult, error: lockError } = await supabase
     .from('payout_runs')
     .update({ run_status: 'calculating', updated_at: new Date().toISOString() })
@@ -1844,9 +1840,8 @@ export async function runPayoutCalculation(
   }
   
   try {
-    return await executePayoutCalculation(payoutRunId, monthYear);
+    return await executePayoutCalculation(payoutRunId, monthYear, onProgress);
   } catch (error) {
-    // Reset status back to draft on failure
     await supabase
       .from('payout_runs')
       .update({ run_status: 'draft', updated_at: new Date().toISOString() })
@@ -1858,7 +1853,8 @@ export async function runPayoutCalculation(
 
 async function executePayoutCalculation(
   payoutRunId: string,
-  monthYear: string
+  monthYear: string,
+  onProgress?: ProgressCallback
 ): Promise<PayoutRunResult> {
   const calculatedAt = new Date().toISOString();
   const fiscalYear = parseInt(monthYear.substring(0, 4));
@@ -1866,25 +1862,85 @@ async function executePayoutCalculation(
   // First, check and apply any clawbacks
   const clawbackResult = await checkAndApplyClawbacks(payoutRunId, monthYear);
   
-  // Fetch all active employees
-  const { data: employees } = await supabase
-    .from('employees')
-    .select('id, employee_id, full_name, email, local_currency, compensation_exchange_rate, tvp_usd, is_active, sales_function')
-    .eq('is_active', true)
-    .not('sales_function', 'is', null);
+  // === PREFETCH ALL DATA ===
+  const prefetched = await prefetchPayoutData(monthYear, fiscalYear);
   
-  if (!employees || employees.length === 0) {
+  // Filter active sales-eligible employees from prefetched data
+  const employees = prefetched.allEmployees.filter(
+    (e: any) => e.is_active === true && e.sales_function != null
+  ) as Employee[];
+  
+  if (employees.length === 0) {
     throw new Error('No active sales-eligible employees found');
   }
   
   const employeePayouts: EmployeePayoutResult[] = [];
+  let processedCount = 0;
   
-  // Calculate payout for each employee
-  for (const emp of employees) {
-    const result = await calculateMonthlyPayout(emp as Employee, monthYear);
-    if (result) {
-      employeePayouts.push(result);
+  // Process employees in parallel batches of 5
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < employees.length; i += BATCH_SIZE) {
+    const batch = employees.slice(i, i + BATCH_SIZE);
+    
+    const batchResults = await Promise.all(
+      batch.map(async (emp) => {
+        const result = calculateMonthlyPayoutFromPrefetch(emp, monthYear, prefetched);
+        
+        if (result) {
+          // Apply clawback carry-forward recoveries (async - DB mutation)
+          const clawbackRecovery = await applyClawbackRecoveries(
+            emp.id, result.payableThisMonthUsd, monthYear
+          );
+          result.payableThisMonthUsd = clawbackRecovery.adjustedPayableUsd;
+          result.payableThisMonthLocal = convertVPToLocal(
+            clawbackRecovery.adjustedPayableUsd,
+            emp.compensation_exchange_rate
+          );
+          
+          // Add clawback metric detail if recovery happened
+          if (clawbackRecovery.totalRecoveredUsd > 0) {
+            result.metricDetails.push({
+              componentType: 'clawback',
+              metricName: 'Clawback Recovery',
+              planId: result.planId,
+              planName: result.planName,
+              targetBonusUsd: 0,
+              allocatedOteUsd: 0,
+              targetUsd: 0,
+              actualUsd: 0,
+              achievementPct: 0,
+              multiplier: 0,
+              ytdEligibleUsd: -clawbackRecovery.totalRecoveredUsd,
+              priorPaidUsd: 0,
+              thisMonthUsd: -clawbackRecovery.totalRecoveredUsd,
+              bookingUsd: -clawbackRecovery.totalRecoveredUsd,
+              collectionUsd: 0,
+              yearEndUsd: 0,
+              notes: 'Carry-forward clawback deduction',
+            });
+          }
+          
+          // Resolve clawbacks for collected deals (async - DB mutation)
+          const collReleases = calculateCollectionReleasesFromPrefetch(
+            emp.id, emp.employee_id, monthYear, fiscalYear, prefetched
+          );
+          await resolveClawbacksForCollectedDeals(
+            emp.id, collReleases.clawbackReversedDealIds, monthYear, prefetched
+          );
+        }
+        
+        return result;
+      })
+    );
+    
+    for (const result of batchResults) {
+      if (result) {
+        employeePayouts.push(result);
+      }
     }
+    
+    processedCount += batch.length;
+    onProgress?.(processedCount, employees.length);
   }
   
   // Calculate totals
@@ -1893,7 +1949,7 @@ async function executePayoutCalculation(
   const totalCommissionsUsd = employeePayouts.reduce((sum, p) => sum + p.commissionsUsd, 0);
   
   // Persist to database
-  await persistPayoutResults(payoutRunId, monthYear, fiscalYear, employeePayouts);
+  await persistPayoutResults(payoutRunId, monthYear, fiscalYear, employeePayouts, prefetched);
   
   // Update payout run totals and status
   await supabase
@@ -1928,7 +1984,8 @@ async function persistPayoutResults(
   payoutRunId: string,
   monthYear: string,
   fiscalYear: number,
-  employeePayouts: EmployeePayoutResult[]
+  employeePayouts: EmployeePayoutResult[],
+  prefetched?: PrefetchedData
 ): Promise<void> {
   // Delete existing payouts for this run (except clawbacks which are created before)
   const { error: deletePayoutsError } = await supabase
@@ -1941,7 +1998,7 @@ async function persistPayoutResults(
     throw new Error(`Failed to clear old payout records: ${deletePayoutsError.message}`);
   }
   
-  // Verify deletion succeeded - check if non-clawback records still exist
+  // Verify deletion succeeded
   const { data: remainingRecords } = await supabase
     .from('monthly_payouts')
     .select('id')
@@ -1989,7 +2046,7 @@ async function persistPayoutResults(
       });
     }
     
-    // Commission records per-deal (with deal_id for correct collection release matching)
+    // Commission records per-deal
     for (const c of emp.commissionCalculations) {
       if (!c.qualifies) continue;
       records.push({
@@ -2110,7 +2167,7 @@ async function persistPayoutResults(
       });
     }
 
-    // Deal Team SPIFF records (100% upon booking, no holdback)
+    // Deal Team SPIFF records
     if (emp.dealTeamSpiffUsd > 0) {
       records.push({
         payout_run_id: payoutRunId,
@@ -2164,7 +2221,6 @@ async function persistPayoutResults(
       local_currency: emp.localCurrency,
       compensation_exchange_rate: emp.vpCompensationRate,
       plan_id: emp.planId,
-      // These are required by the schema - we'll set defaults
       total_actual_usd: 0,
       target_usd: 0,
       achievement_pct: 0,
@@ -2210,7 +2266,6 @@ async function persistPayoutResults(
   );
   
   if (metricDetailRecords.length > 0) {
-    // Insert in batches of 100 to avoid payload limits
     for (let i = 0; i < metricDetailRecords.length; i += 100) {
       const batch = metricDetailRecords.slice(i, i + 100);
       await supabase.from('payout_metric_details' as any).insert(batch);
@@ -2218,13 +2273,12 @@ async function persistPayoutResults(
   }
 
   // ===== Persist Deal-Level Details (All Component Types) =====
-  // Delete existing deal details for this run
   await supabase
     .from('payout_deal_details' as any)
     .delete()
     .eq('payout_run_id', payoutRunId);
 
-  // Collect all deal IDs to fetch metadata in bulk
+  // Collect all deal IDs to fetch metadata
   const allDealIds = [...new Set([
     ...employeePayouts.flatMap(emp => emp.commissionCalculations.map(c => c.dealId)),
     ...employeePayouts.flatMap(emp => emp.vpAttributions.map(a => a.dealId)),
@@ -2232,12 +2286,28 @@ async function persistPayoutResults(
     ...employeePayouts.flatMap(emp => emp.spiffDealBreakdowns.map(b => b.dealId)),
   ])];
 
-  // Fetch deal metadata (project_id, customer_name) in bulk
+  // Build deal metadata map from prefetched data
   let dealMetaMap = new Map<string, { project_id: string; customer_name: string | null }>();
-  if (allDealIds.length > 0) {
-    // Fetch in batches of 200 to avoid URL length limits
-    for (let i = 0; i < allDealIds.length; i += 200) {
-      const batch = allDealIds.slice(i, i + 200);
+  if (prefetched) {
+    // Use prefetched deals for metadata
+    for (const d of prefetched.allDeals) {
+      if (allDealIds.includes(d.id)) {
+        dealMetaMap.set(d.id, { project_id: d.project_id, customer_name: d.customer_name });
+      }
+    }
+    // Also check commission deals (current month only deals might not be in allDeals range)
+    for (const d of prefetched.allCommissionDeals) {
+      if (allDealIds.includes(d.id) && !dealMetaMap.has(d.id)) {
+        dealMetaMap.set(d.id, { project_id: d.project_id, customer_name: d.customer_name });
+      }
+    }
+  }
+  
+  // Fetch any remaining missing metadata (shouldn't happen with prefetch, but safety net)
+  const missingMetaIds = allDealIds.filter(id => !dealMetaMap.has(id));
+  if (missingMetaIds.length > 0) {
+    for (let i = 0; i < missingMetaIds.length; i += 200) {
+      const batch = missingMetaIds.slice(i, i + 200);
       const { data: dealMeta } = await supabase
         .from('deals')
         .select('id, project_id, customer_name')
@@ -2273,7 +2343,7 @@ async function persistPayoutResults(
       });
     }
 
-    // Variable Pay deal details (all eligible by definition)
+    // Variable Pay deal details
     for (const attr of emp.vpAttributions) {
       const meta = dealMetaMap.get(attr.dealId);
       dealDetailRecords.push({
@@ -2357,3 +2427,6 @@ async function persistPayoutResults(
     }
   }
 }
+
+// Legacy export for backward compatibility
+export const calculateMonthlyPayout = calculateMonthlyPayoutFromPrefetch;

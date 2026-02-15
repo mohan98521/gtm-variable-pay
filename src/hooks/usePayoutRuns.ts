@@ -156,10 +156,12 @@ export function useRunPayoutCalculation() {
   return useMutation({
     mutationFn: async ({ 
       runId, 
-      monthYear 
+      monthYear,
+      onProgress 
     }: { 
       runId: string; 
       monthYear: string;
+      onProgress?: (current: number, total: number) => void;
     }): Promise<PayoutRunResult> => {
       // First validate
       const validation = await validatePayoutRunPrerequisites(monthYear);
@@ -168,8 +170,8 @@ export function useRunPayoutCalculation() {
         throw new Error(`Validation failed: ${errorMessages}`);
       }
       
-      // Run calculation
-      return await runPayoutCalculation(runId, monthYear);
+      // Run calculation with progress callback
+      return await runPayoutCalculation(runId, monthYear, onProgress);
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["payout_runs"] });
