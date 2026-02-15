@@ -37,6 +37,10 @@ export interface EmployeeWorkings {
   localCurrency: string;
   planName: string | null;
   targetBonusUsd: number;
+  dateOfHire: string | null;
+  departureDate: string | null;
+  isActive: boolean;
+  businessUnit: string | null;
   vpDetails: PayoutMetricDetailRow[];
   commissionDetails: PayoutMetricDetailRow[];
   otherDetails: PayoutMetricDetailRow[];
@@ -64,7 +68,7 @@ export function usePayoutMetricDetails(payoutRunId: string | null) {
       
       const { data: employees } = await supabase
         .from('employees')
-        .select('id, full_name, employee_id, local_currency')
+        .select('id, full_name, employee_id, local_currency, date_of_hire, departure_date, is_active, business_unit')
         .in('id', employeeIds);
       
       const empMap = new Map((employees || []).map(e => [e.id, e]));
@@ -82,6 +86,10 @@ export function usePayoutMetricDetails(payoutRunId: string | null) {
             localCurrency: emp?.local_currency || 'USD',
             planName: row.plan_name,
             targetBonusUsd: row.target_bonus_usd || 0,
+            dateOfHire: emp?.date_of_hire || null,
+            departureDate: emp?.departure_date || null,
+            isActive: emp?.is_active ?? true,
+            businessUnit: emp?.business_unit || null,
             vpDetails: [],
             commissionDetails: [],
             otherDetails: [],
