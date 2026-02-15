@@ -1,71 +1,82 @@
 
 
-## Plan: Deal-Level Payout Workings
+## Extend Deal-Level Workings to All Metrics
 
-### Problem
+### Current Gap
 
-Users currently see only aggregated metric-level totals in the Payout Run Workings view. There is no way to drill into which deals contributed to those numbers, which deals were excluded, and why. This makes it difficult to validate the computation.
+The "Deals" tab in Payout Run Workings currently only shows **Commission** deals. Variable Pay, NRR, and SPIFF deals are calculated by the engine but not persisted to `payout_deal_details`. Users cannot validate which deals contributed to those components.
 
-### Current State of Deal Data
+### What Data Exists Today
 
-| Data Type | Persisted? | Table |
+| Component | Deal Data Available in Engine | Persisted to payout_deal_details? |
 |---|---|---|
-| Variable Pay deal attribution | Yes | `deal_variable_pay_attribution` |
-| Commission deal payouts (qualified) | Yes | `monthly_payouts` (with `deal_id`) |
-| Deals evaluated but excluded | No | Not stored |
+| Commission | Every deal with eligibility + exclusion reason | Yes |
+| Variable Pay | Pro-rata attribution per deal (vpAttributions) | No (stored in separate `deal_variable_pay_attribution` table) |
+| NRR | Only aggregate totals returned; individual deal eligibility not tracked | No |
+| SPIFF | Qualifying deals with payouts (spiffBreakdowns); excluded deals silently skipped | No |
 
-### Solution: Two-Part Implementation
+### Solution
 
-#### Part 1: Persist Deal-Level Commission Workings (including excluded deals)
+#### 1. Add `component_type` column to `payout_deal_details`
 
-Create a new table `payout_deal_details` that captures every deal evaluated during a payout run, with an eligibility status and exclusion reason.
+Add a new column to distinguish deal records by incentive type. This avoids creating separate tables and keeps the UI simple with one unified Deals tab.
 
-**New table: `payout_deal_details`**
+```
+ALTER TABLE payout_deal_details 
+  ADD COLUMN component_type TEXT NOT NULL DEFAULT 'commission';
+```
 
-| Column | Type | Description |
-|---|---|---|
-| id | uuid | Primary key |
-| payout_run_id | uuid | FK to payout_runs |
-| employee_id | uuid | FK to employees |
-| deal_id | uuid | FK to deals |
-| project_id | text | Deal project ID |
-| customer_name | text | Customer name |
-| commission_type | text | e.g., Managed Services, CR/ER |
-| deal_value_usd | numeric | TCV or metric-specific value |
-| gp_margin_pct | numeric | GP margin (if applicable) |
-| min_gp_margin_pct | numeric | Required threshold |
-| commission_rate_pct | numeric | Rate applied |
-| is_eligible | boolean | Whether deal qualified |
-| exclusion_reason | text | Why excluded (e.g., "GP margin 35% below minimum 55%") |
-| gross_commission_usd | numeric | Commission if eligible |
-| booking_usd | numeric | Upon booking portion |
-| collection_usd | numeric | Upon collection portion |
-| year_end_usd | numeric | Year-end holdback |
-| created_at | timestamptz | Auto-populated |
+#### 2. Enhance NRR calculation to return deal-level breakdowns
 
-#### Part 2: Add "Deal Workings" Tab in the Payout Run Detail View
+Currently `calculateNRRPayout()` returns only aggregate totals. Modify it to also return per-deal eligibility records, including deals excluded due to GP margin thresholds.
 
-Add a third tab option ("Deals") alongside the existing Summary and Detail views in the PayoutRunWorkings component. This tab will show:
+**New output per deal:**
+- Deal ID, CR/ER value, Implementation value, GP margin
+- Whether eligible (passed GP margin threshold)
+- Exclusion reason if not eligible (e.g., "GP margin 30% below CR/ER minimum 35%")
 
-- A searchable, filterable table of all deals evaluated per employee
-- Clear visual distinction between eligible (green badge) and excluded (red badge) deals
-- Exclusion reason displayed for ineligible deals
-- Ability to filter by: Employee, Commission Type, Eligibility Status
-- Columns: Project ID, Customer, Commission Type, Deal Value, GP Margin, Threshold, Eligible?, Exclusion Reason, Commission, Booking, Collection, Year-End
+#### 3. Enhance SPIFF calculation to track excluded deals
+
+Currently `calculateSpiffPayout()` silently skips deals below the minimum value threshold. Modify to also return excluded deals with reasons (e.g., "Deal ARR $40,000 below minimum $50,000").
+
+#### 4. Persist all deal types in `persistPayoutResults`
+
+Extend the deal details persistence block to write records for:
+
+- **Variable Pay deals**: From `vpAttributions` -- project_id, customer_name, deal value (ARR), proportion %, VP split, booking/collection/year-end amounts. All VP deals are "eligible" (no exclusion gate).
+- **NRR deals**: From the enhanced NRR result -- deal value (CR/ER + Impl), GP margin, threshold, eligibility, exclusion reason, and the deal's contribution to NRR payout.
+- **SPIFF deals**: From enhanced SPIFF result -- deal ARR, SPIFF name, payout amount, eligibility, exclusion reason (min value threshold).
+
+#### 5. Update UI components
+
+- **`PayoutRunDealWorkings.tsx`**: Add a component_type filter dropdown (All / Variable Pay / Commission / NRR / SPIFF). Show component type as a badge on each row.
+- **`usePayoutDealDetails.ts`**: No schema change needed -- the hook already does `select('*')` so the new column will be included automatically.
 
 ### Technical Details
 
 **Files to modify:**
 
-1. **New migration** -- Create `payout_deal_details` table with RLS policies
-2. **`src/lib/payoutEngine.ts`** -- In the commission calculation loop, persist ALL evaluated deals (both qualified and disqualified) to the new table. Modify the `calculateEmployeeCommissions` function to also track excluded deals with reasons, and add persistence in the `persistPayoutData` function
-3. **`src/hooks/usePayoutMetricDetails.ts`** -- Add a new hook `usePayoutDealDetails` to fetch deal-level data from the new table
-4. **`src/components/admin/PayoutRunWorkings.tsx`** -- Add a "Deals" tab to the existing Summary/Detail toggle, with a new `PayoutRunDealWorkings` component
-5. **New file: `src/components/admin/PayoutRunDealWorkings.tsx`** -- Table component showing deal-level workings with eligibility badges and exclusion reasons
+1. **New migration** -- Add `component_type` column to `payout_deal_details`
+2. **`src/lib/nrrCalculation.ts`** -- Add `NRRDealBreakdown` interface and return per-deal eligibility from `calculateNRRPayout`
+3. **`src/lib/spiffCalculation.ts`** -- Add excluded deals tracking to `calculateSpiffPayout` and `calculateAllSpiffs`
+4. **`src/lib/payoutEngine.ts`** -- In `persistPayoutResults`, extend the deal details block to also write VP, NRR, and SPIFF deal records using the new `component_type` value
+5. **`src/components/admin/PayoutRunDealWorkings.tsx`** -- Add component_type filter and badge display
+6. **`src/hooks/usePayoutDealDetails.ts`** -- Add `component_type` to the interface
 
-**Engine changes (payoutEngine.ts):**
-- Currently, when `gpMarginQualifies` is false, the deal is simply skipped. The fix will push a record with `qualifies: false` and an `exclusionReason` to the calculations array
-- The persistence function will write all calculations (qualified and disqualified) to `payout_deal_details`
-- Variable Pay deal data will also be included by reading from the existing `deal_variable_pay_attribution` table
+**Column mapping per component type:**
 
-**No changes to existing payout calculation logic** -- the actual computation remains identical; we are only adding observability.
+| Column | Commission | Variable Pay | NRR | SPIFF |
+|---|---|---|---|---|
+| component_type | "commission" | "variable_pay" | "nrr" | "spiff" |
+| deal_value_usd | TCV | ARR | CR/ER + Impl | ARR |
+| commission_rate_pct | Rate % | -- | -- | SPIFF Rate % |
+| gp_margin_pct | GP% | -- | GP% | -- |
+| min_gp_margin_pct | Threshold | -- | Threshold | Min deal value |
+| is_eligible | GP gate | Always true | GP gate | Min value gate |
+| exclusion_reason | GP reason | null | GP reason | Min value reason |
+| gross_commission_usd | Commission | VP Split | NRR contribution | SPIFF payout |
+| booking/collection/year_end | Payout splits | Payout splits | Payout splits | Payout splits |
+
+### No changes to existing calculation logic
+
+All payout amounts remain identical. This only adds observability by persisting deal-level audit data that the engine already computes (or will compute with the NRR/SPIFF enhancements).
