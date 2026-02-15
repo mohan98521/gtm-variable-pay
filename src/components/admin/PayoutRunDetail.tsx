@@ -249,53 +249,101 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       });
     }
     
-    // Detailed Workings sheet
+    // Detailed Workings sheet - pivoted one-row-per-employee
     if (metricDetails && metricDetails.length > 0) {
-      const workingsData = metricDetails.flatMap(emp =>
-        emp.allDetails.map((d: any) => ({
-          employeeCode: emp.employeeCode,
-          employeeName: emp.employeeName,
-          componentType: d.component_type,
-          metricName: d.metric_name,
-          planName: d.plan_name || '',
-          targetBonusUsd: d.target_bonus_usd,
-          allocatedOteUsd: d.allocated_ote_usd,
-          targetUsd: d.target_usd,
-          actualUsd: d.actual_usd,
-          achievementPct: d.achievement_pct,
-          multiplier: d.multiplier,
-          ytdEligibleUsd: d.ytd_eligible_usd,
-          priorPaidUsd: d.prior_paid_usd,
-          thisMonthUsd: d.this_month_usd,
-          bookingUsd: d.booking_usd,
-          collectionUsd: d.collection_usd,
-          yearEndUsd: d.year_end_usd,
-          notes: d.notes || '',
-        }))
+      const GROUP_ORDER: Record<string, number> = {
+        variable_pay: 0, commission: 1, nrr: 2, spiff: 3,
+        deal_team_spiff: 4, collection_release: 5, year_end_release: 6, clawback: 7,
+      };
+      const metricsSeen = new Map<string, { metricName: string; componentType: string }>();
+      for (const emp of metricDetails) {
+        for (const d of emp.allDetails) {
+          const key = `${d.component_type}::${d.metric_name}`;
+          if (!metricsSeen.has(key)) {
+            metricsSeen.set(key, { metricName: d.metric_name, componentType: d.component_type });
+          }
+        }
+      }
+      const discoveredMetrics = Array.from(metricsSeen.values()).sort((a, b) => {
+        const ga = GROUP_ORDER[a.componentType] ?? 99;
+        const gb = GROUP_ORDER[b.componentType] ?? 99;
+        if (ga !== gb) return ga - gb;
+        return a.metricName.localeCompare(b.metricName);
+      });
+
+      const SUB_LABELS = [
+        'Target', 'Actuals', 'Ach %', 'OTE %', 'Allocated OTE', 'Multiplier',
+        'YTD Eligible', 'Eligible Till Last Month', 'Incremental Eligible',
+        'Booking', 'Collection', 'Year-End',
+      ];
+
+      const workingsColumns: any[] = [
+        { key: 'empCode', header: 'Emp Code' },
+        { key: 'empName', header: 'Emp Name' },
+        { key: 'plan', header: 'Plan' },
+        { key: 'ccy', header: 'Ccy' },
+      ];
+      for (const mc of discoveredMetrics) {
+        for (const sub of SUB_LABELS) {
+          workingsColumns.push({
+            key: `${mc.componentType}::${mc.metricName}::${sub}`,
+            header: `${mc.metricName} - ${sub}`,
+          });
+        }
+      }
+      workingsColumns.push(
+        { key: 'gt_incr', header: 'Grand Total - Incr Eligible' },
+        { key: 'gt_bkg', header: 'Grand Total - Booking' },
+        { key: 'gt_coll', header: 'Grand Total - Collection' },
+        { key: 'gt_ye', header: 'Grand Total - Year-End' },
       );
+
+      const fmtOtePct = (alloc: number | null, bonus: number | null) => {
+        if (!alloc || !bonus || bonus === 0) return '';
+        return `${((alloc / bonus) * 100).toFixed(2)}%`;
+      };
+
+      const workingsData = metricDetails.map(emp => {
+        const row: Record<string, any> = {
+          empCode: emp.employeeCode,
+          empName: emp.employeeName,
+          plan: emp.planName || '',
+          ccy: emp.localCurrency,
+        };
+        const dm = new Map<string, any>();
+        for (const d of emp.allDetails) dm.set(`${d.component_type}::${d.metric_name}`, d);
+
+        for (const mc of discoveredMetrics) {
+          const key = `${mc.componentType}::${mc.metricName}`;
+          const d = dm.get(key);
+          if (d) {
+            row[`${key}::Target`] = d.target_usd ?? '';
+            row[`${key}::Actuals`] = d.actual_usd ?? '';
+            row[`${key}::Ach %`] = d.achievement_pct != null ? `${d.achievement_pct.toFixed(4)}%` : '';
+            row[`${key}::OTE %`] = fmtOtePct(d.allocated_ote_usd, d.target_bonus_usd);
+            row[`${key}::Allocated OTE`] = d.allocated_ote_usd ?? '';
+            row[`${key}::Multiplier`] = d.multiplier ? `${d.multiplier.toFixed(2)}x` : '';
+            row[`${key}::YTD Eligible`] = d.ytd_eligible_usd ?? '';
+            row[`${key}::Eligible Till Last Month`] = d.prior_paid_usd ?? '';
+            row[`${key}::Incremental Eligible`] = d.this_month_usd ?? '';
+            row[`${key}::Booking`] = d.booking_usd ?? '';
+            row[`${key}::Collection`] = d.collection_usd ?? '';
+            row[`${key}::Year-End`] = d.year_end_usd ?? '';
+          } else {
+            for (const sub of SUB_LABELS) row[`${key}::${sub}`] = '';
+          }
+        }
+        row.gt_incr = emp.allDetails.reduce((s: number, d: any) => s + (d.this_month_usd || 0), 0);
+        row.gt_bkg = emp.allDetails.reduce((s: number, d: any) => s + (d.booking_usd || 0), 0);
+        row.gt_coll = emp.allDetails.reduce((s: number, d: any) => s + (d.collection_usd || 0), 0);
+        row.gt_ye = emp.allDetails.reduce((s: number, d: any) => s + (d.year_end_usd || 0), 0);
+        return row;
+      });
+
       sheets.push({
         sheetName: 'Detailed Workings',
         data: workingsData,
-        columns: [
-          { key: 'employeeCode', header: 'Employee Code' },
-          { key: 'employeeName', header: 'Employee Name' },
-          { key: 'componentType', header: 'Component' },
-          { key: 'metricName', header: 'Metric' },
-          { key: 'planName', header: 'Plan' },
-          { key: 'targetBonusUsd', header: 'Target Bonus (USD)' },
-          { key: 'allocatedOteUsd', header: 'Allocated OTE (USD)' },
-          { key: 'targetUsd', header: 'Target (USD)' },
-          { key: 'actualUsd', header: 'YTD Actuals (USD)' },
-          { key: 'achievementPct', header: 'Achievement %' },
-          { key: 'multiplier', header: 'Multiplier' },
-          { key: 'ytdEligibleUsd', header: 'YTD Eligible (USD)' },
-          { key: 'priorPaidUsd', header: 'Prior Paid (USD)' },
-          { key: 'thisMonthUsd', header: 'This Month (USD)' },
-          { key: 'bookingUsd', header: 'Upon Booking (USD)' },
-          { key: 'collectionUsd', header: 'Upon Collection (USD)' },
-          { key: 'yearEndUsd', header: 'At Year End (USD)' },
-          { key: 'notes', header: 'Notes' },
-        ] as any,
+        columns: workingsColumns,
       });
     }
     
