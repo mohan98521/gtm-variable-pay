@@ -1,46 +1,34 @@
 
 
-## Detailed Workings: One-Row-Per-Employee Summary View
+## Fix Detailed Workings Export to Match Summary View
 
-### What Changes
+### Problem
+The XLSX export still uses the old `flatMap` approach, generating multiple rows per employee (one per metric). The UI now shows a pivoted one-row-per-employee summary, but the export doesn't match.
 
-Add a new **Summary** view to the Detailed Workings tab that displays a flat, horizontally scrollable table where each employee occupies exactly one row. All metrics are represented as column groups across the row. A toggle lets users switch between this new Summary view and the existing Detail (accordion) view.
+### Solution
+Replace the "Detailed Workings" sheet in the XLSX export with a pivoted layout that mirrors the Summary view -- one row per employee, with dynamically generated metric column groups.
 
-### Layout Mockup
+### Export Layout
 
 ```text
-| Emp Code | Emp Name | Plan | Ccy | -- New Software Booking ARR (VP) -- | -- Closing ARR (VP) -- | -- Managed Services (Comm) -- | -- NRR Additional Pay -- | -- SPIFF -- | ... | Grand Total |
-|          |          |      |     | Tgt | Act | Ach% | OTE% | Alloc OTE | Mult | YTD Elig | Elig Last Mo | Incr Elig | Bkg | Coll | YE |  (same 12 cols repeated)  |             | Incr Elig | Bkg | Coll | YE |
-| IN0004   | Farmer 2 | Farmer | USD | $450K | $400K | 88.89% | 60% | $26,666 | 1.00x | $23,703 | $0 | $23,703 | ... | ... | ... | ...repeated... | $X | $Y | $Z | $W |
-| SA0001   | Hunting Sales Rep | Hunter | USD | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | $X | $Y | $Z | $W |
+Emp Code | Emp Name | Plan | Ccy | [Metric 1] Target | [Metric 1] Actuals | [Metric 1] Ach% | ... (12 cols per metric) | Grand Total Incr Eligible | Grand Total Booking | Grand Total Collection | Grand Total Year-End
 ```
 
-- Metrics are discovered dynamically from the data (not hardcoded), so any new component types added to the payout engine will automatically appear as new column groups.
-- Employees missing a particular metric will show dashes in those columns.
-- The table uses a two-row header: top row shows metric names (with colSpan), bottom row shows the 12 sub-column labels.
-
-### Toggle Between Views
-
-A segmented toggle ("Summary" / "Detail") above the search bar lets users switch:
-- **Summary** (new, default): Flat one-row-per-employee table
-- **Detail** (existing): Accordion with per-employee metric breakdown
+Each metric gets 12 columns with the header format: `[Metric Name] - Target`, `[Metric Name] - Actuals`, etc.
 
 ### Technical Details
 
-**File to modify:** `src/components/admin/PayoutRunWorkings.tsx`
+**File: `src/components/admin/PayoutRunDetail.tsx`** (lines 252-299)
 
-1. **Discover all distinct metrics** across all employees in the payout run, ordered by component type group (VP first, then Commissions, then NRR/SPIFF/Deal Team SPIFF, then Releases/Adjustments), then alphabetically within each group.
+1. Reuse the `discoverMetrics` function from `PayoutRunWorkingsSummary.tsx` (or extract it as a shared utility) to determine the dynamic metric columns in the same order as the UI.
 
-2. **Build a pivoted data structure**: For each employee, create a map of metric_name to its detail row. This allows O(1) lookup when rendering each column group.
+2. Replace the current `flatMap` logic with a pivoted export builder:
+   - For each employee, create a single flat object with keys like `[MetricName]_Target`, `[MetricName]_Actuals`, etc.
+   - Build the columns array dynamically: 4 fixed columns (Code, Name, Plan, Ccy) + 12 columns per metric + 4 grand total columns.
 
-3. **Render the summary table** with:
-   - A two-level header: top row has metric names spanning 12 columns each, bottom row has the 12 field labels repeated
-   - One data row per employee with values filled from the pivot map (or dashes if that metric doesn't apply)
-   - A Grand Total column group at the end summing all metrics
+3. Update column headers to match the UI labels: "Eligible Till Last Month" and "Incremental Eligible" (not "Prior Paid" / "This Month").
 
-4. **Add a view toggle** using Tabs or a simple button group above the search input to switch between "Summary" and "Detail" views.
+4. The 12 sub-columns per metric will be: Target, Actuals, Ach %, OTE %, Allocated OTE, Multiplier, YTD Eligible, Eligible Till Last Month, Incremental Eligible, Booking, Collection, Year-End.
 
-5. **Keep the existing `EmployeeWorkingsCard` and accordion code** intact for the Detail view -- no changes needed there.
-
-**No database, hook, or engine changes required.** All data is already available from the existing `usePayoutMetricDetails` hook.
+**No new files or dependencies needed.** The metric discovery logic from `PayoutRunWorkingsSummary.tsx` will be extracted into a shared helper or inlined in the export function.
 
