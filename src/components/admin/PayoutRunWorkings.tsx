@@ -108,9 +108,9 @@ function GroupHeader({ layout }: { layout: ColumnLayout }) {
         <TableHead className="text-right">YTD Eligible</TableHead>
         <TableHead className="text-right">Eligible Till Last Month</TableHead>
         <TableHead className="text-right">Incremental Eligible</TableHead>
-        <TableHead className="text-right">Booking</TableHead>
-        <TableHead className="text-right">Collection</TableHead>
-        <TableHead className="text-right">Year-End</TableHead>
+        <TableHead className="text-right">Upon Booking</TableHead>
+        <TableHead className="text-right">Upon Collection</TableHead>
+        <TableHead className="text-right">At Year End</TableHead>
       </TableRow>
     );
   }
@@ -124,9 +124,9 @@ function GroupHeader({ layout }: { layout: ColumnLayout }) {
         <TableHead className="text-right">YTD Eligible</TableHead>
         <TableHead className="text-right">Eligible Till Last Month</TableHead>
         <TableHead className="text-right">Incremental Eligible</TableHead>
-        <TableHead className="text-right">Booking</TableHead>
-        <TableHead className="text-right">Collection</TableHead>
-        <TableHead className="text-right">Year-End</TableHead>
+        <TableHead className="text-right">Upon Booking</TableHead>
+        <TableHead className="text-right">Upon Collection</TableHead>
+        <TableHead className="text-right">At Year End</TableHead>
       </TableRow>
     );
   }
@@ -142,9 +142,9 @@ function GroupHeader({ layout }: { layout: ColumnLayout }) {
       <TableHead className="text-right">YTD Eligible</TableHead>
       <TableHead className="text-right">Eligible Till Last Month</TableHead>
       <TableHead className="text-right">Incremental Eligible</TableHead>
-      <TableHead className="text-right">Booking</TableHead>
-      <TableHead className="text-right">Collection</TableHead>
-      <TableHead className="text-right">Year-End</TableHead>
+      <TableHead className="text-right">Upon Booking</TableHead>
+      <TableHead className="text-right">Upon Collection</TableHead>
+      <TableHead className="text-right">At Year End</TableHead>
     </TableRow>
   );
 }
@@ -227,16 +227,33 @@ function SubtotalRow({ label, rows, layout }: { label: string; rows: PayoutMetri
 
 function EmployeeWorkingsCard({ emp }: { emp: EmployeeWorkings }) {
   const groups = groupRows(emp.allDetails);
-  const grandTotal = emp.allDetails.reduce((s, d) => s + d.this_month_usd, 0);
 
-  // Find the max column count across all groups for the grand total row
-  const maxColCount = Math.max(...groups.map(g => {
-    const layout = getGroupLayout(g);
-    return LAYOUT_COL_COUNT[layout];
-  }), 12);
+  // Compute grand total derivation
+  const totalUponBooking = emp.allDetails.reduce((s, d) => s + d.booking_usd, 0);
+  const totalUponCollection = emp.allDetails.reduce((s, d) => s + d.collection_usd, 0);
+  const totalAtYearEnd = emp.allDetails.reduce((s, d) => s + d.year_end_usd, 0);
+  
+  // Collection releases, year-end releases, and clawback recovery come from specific component_type rows
+  const collectionReleases = emp.allDetails
+    .filter(d => d.component_type === 'collection_release')
+    .reduce((s, d) => s + d.this_month_usd, 0);
+  const yearEndReleases = emp.allDetails
+    .filter(d => d.component_type === 'year_end_release')
+    .reduce((s, d) => s + d.this_month_usd, 0);
+  const clawbackRecovery = emp.allDetails
+    .filter(d => d.component_type === 'clawback')
+    .reduce((s, d) => s + d.this_month_usd, 0);
+  
+  const currentMonthPayable = totalUponBooking + collectionReleases + yearEndReleases - Math.abs(clawbackRecovery);
 
   return (
     <div className="space-y-4">
+      {/* Total Variable OTE header */}
+      <div className="flex items-center gap-2 px-2 py-1 bg-muted/30 rounded text-sm">
+        <span className="text-muted-foreground">Total Variable OTE:</span>
+        <span className="font-semibold">{formatCurrency(emp.targetBonusUsd)}</span>
+      </div>
+
       {groups.map((group) => {
         const layout = getGroupLayout(group);
         return (
@@ -263,18 +280,44 @@ function EmployeeWorkingsCard({ emp }: { emp: EmployeeWorkings }) {
         );
       })}
 
-      {/* Grand Total */}
+      {/* Grand Total Derivation */}
       <div className="overflow-x-auto">
         <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/30">
+              <TableHead colSpan={2} className="font-semibold text-xs uppercase tracking-wider text-muted-foreground py-2">
+                Payout Derivation
+              </TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
+            <TableRow>
+              <TableCell className="font-medium">Total Upon Booking</TableCell>
+              <TableCell className="text-right">{formatCurrency(totalUponBooking)}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-medium text-muted-foreground">Total Upon Collection (Held)</TableCell>
+              <TableCell className="text-right text-muted-foreground">{formatCurrency(totalUponCollection)}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-medium text-muted-foreground">Total At Year End (Held)</TableCell>
+              <TableCell className="text-right text-muted-foreground">{formatCurrency(totalAtYearEnd)}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-medium">Collection Releases</TableCell>
+              <TableCell className="text-right">{formatCurrency(collectionReleases)}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-medium">Year-End Releases</TableCell>
+              <TableCell className="text-right">{formatCurrency(yearEndReleases)}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-medium text-destructive">Clawback Recovery</TableCell>
+              <TableCell className="text-right text-destructive">{formatCurrency(clawbackRecovery !== 0 ? -Math.abs(clawbackRecovery) : 0)}</TableCell>
+            </TableRow>
             <TableRow className="bg-muted/50 font-semibold border-t-2">
-              <TableCell>Grand Total</TableCell>
-              <TableCell className="text-right text-emerald-700 dark:text-emerald-400">
-                Incr Eligible: {formatCurrency(grandTotal)}
-              </TableCell>
-              <TableCell className="text-right">Booking: {formatCurrency(emp.allDetails.reduce((s, d) => s + d.booking_usd, 0))}</TableCell>
-              <TableCell className="text-right">Collection: {formatCurrency(emp.allDetails.reduce((s, d) => s + d.collection_usd, 0))}</TableCell>
-              <TableCell className="text-right">Year-End: {formatCurrency(emp.allDetails.reduce((s, d) => s + d.year_end_usd, 0))}</TableCell>
+              <TableCell className="font-bold">Current Month Payable</TableCell>
+              <TableCell className="text-right font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(currentMonthPayable)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>
@@ -350,7 +393,7 @@ export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
           {filtered.map((emp) => (
             <AccordionItem key={emp.employeeId} value={emp.employeeId} className="border rounded-lg px-4">
               <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-3 text-left">
+                <div className="flex items-center gap-3 text-left flex-wrap">
                   <div>
                     <span className="font-semibold">{emp.employeeName}</span>
                     <span className="text-sm text-muted-foreground ml-2">({emp.employeeCode})</span>
@@ -358,7 +401,18 @@ export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
                   {emp.planName && (
                     <Badge variant="outline" className="text-xs">{emp.planName}</Badge>
                   )}
-                  <Badge variant="outline" className="text-xs">{emp.localCurrency}</Badge>
+                  <Badge variant={emp.isActive ? "default" : "secondary"} className="text-xs">
+                    {emp.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                  {emp.businessUnit && (
+                    <span className="text-xs text-muted-foreground">BU: {emp.businessUnit}</span>
+                  )}
+                  {emp.dateOfHire && (
+                    <span className="text-xs text-muted-foreground">DOJ: {emp.dateOfHire}</span>
+                  )}
+                  {emp.departureDate && (
+                    <span className="text-xs text-muted-foreground">LWD: {emp.departureDate}</span>
+                  )}
                   <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400 ml-auto mr-4">
                     {formatCurrency(emp.allDetails.reduce((s, d) => s + d.this_month_usd, 0))}
                   </span>

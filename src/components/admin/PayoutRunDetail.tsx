@@ -275,17 +275,17 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       const VP_SUB_LABELS = [
         'Target', 'Actuals', 'Ach %', 'OTE %', 'Allocated OTE', 'Multiplier',
         'YTD Eligible', 'Eligible Till Last Month', 'Incremental Eligible',
-        'Booking', 'Collection', 'Year-End',
+        'Upon Booking', 'Upon Collection', 'At Year End',
       ];
       const COMM_SUB_LABELS = [
         'Commission %', 'Actuals (TCV)',
         'YTD Eligible', 'Eligible Till Last Month', 'Incremental Eligible',
-        'Booking', 'Collection', 'Year-End',
+        'Upon Booking', 'Upon Collection', 'At Year End',
       ];
       const SPIFF_SUB_LABELS = [
         'OTE %', 'Allocated OTE', 'Actuals',
         'YTD Eligible', 'Eligible Till Last Month', 'Incremental Eligible',
-        'Booking', 'Collection', 'Year-End',
+        'Upon Booking', 'Upon Collection', 'At Year End',
       ];
 
       function getSubLabels(componentType: string): string[] {
@@ -297,8 +297,12 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       const workingsColumns: any[] = [
         { key: 'empCode', header: 'Emp Code' },
         { key: 'empName', header: 'Emp Name' },
+        { key: 'dateOfHire', header: 'Date of Joining' },
+        { key: 'departureDate', header: 'Last Working Day' },
+        { key: 'status', header: 'Status' },
+        { key: 'businessUnit', header: 'BU' },
         { key: 'plan', header: 'Plan' },
-        { key: 'ccy', header: 'Ccy' },
+        { key: 'totalVariableOte', header: 'Total Variable OTE' },
       ];
       for (const mc of discoveredMetrics) {
         const subLabels = getSubLabels(mc.componentType);
@@ -311,9 +315,9 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
       }
       workingsColumns.push(
         { key: 'gt_incr', header: 'Grand Total - Incr Eligible' },
-        { key: 'gt_bkg', header: 'Grand Total - Booking' },
-        { key: 'gt_coll', header: 'Grand Total - Collection' },
-        { key: 'gt_ye', header: 'Grand Total - Year-End' },
+        { key: 'gt_current_month_payable', header: 'Grand Total - Current Month Payable' },
+        { key: 'gt_coll_held', header: 'Grand Total - Upon Collection (Held)' },
+        { key: 'gt_ye_held', header: 'Grand Total - At Year End (Held)' },
       );
 
       const fmtOtePct = (alloc: number | null, bonus: number | null) => {
@@ -325,8 +329,12 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
         const row: Record<string, any> = {
           empCode: emp.employeeCode,
           empName: emp.employeeName,
+          dateOfHire: emp.dateOfHire || '',
+          departureDate: emp.departureDate || '',
+          status: emp.isActive ? 'Active' : 'Inactive',
+          businessUnit: emp.businessUnit || '',
           plan: emp.planName || '',
-          ccy: emp.localCurrency,
+          totalVariableOte: emp.targetBonusUsd || 0,
         };
         const dm = new Map<string, any>();
         for (const d of emp.allDetails) dm.set(`${d.component_type}::${d.metric_name}`, d);
@@ -355,17 +363,22 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
             row[`${key}::YTD Eligible`] = d.ytd_eligible_usd ?? '';
             row[`${key}::Eligible Till Last Month`] = d.prior_paid_usd ?? '';
             row[`${key}::Incremental Eligible`] = d.this_month_usd ?? '';
-            row[`${key}::Booking`] = d.booking_usd ?? '';
-            row[`${key}::Collection`] = d.collection_usd ?? '';
-            row[`${key}::Year-End`] = d.year_end_usd ?? '';
+            row[`${key}::Upon Booking`] = d.booking_usd ?? '';
+            row[`${key}::Upon Collection`] = d.collection_usd ?? '';
+            row[`${key}::At Year End`] = d.year_end_usd ?? '';
           } else {
             for (const sub of subLabels) row[`${key}::${sub}`] = '';
           }
         }
         row.gt_incr = emp.allDetails.reduce((s: number, d: any) => s + (d.this_month_usd || 0), 0);
-        row.gt_bkg = emp.allDetails.reduce((s: number, d: any) => s + (d.booking_usd || 0), 0);
-        row.gt_coll = emp.allDetails.reduce((s: number, d: any) => s + (d.collection_usd || 0), 0);
-        row.gt_ye = emp.allDetails.reduce((s: number, d: any) => s + (d.year_end_usd || 0), 0);
+        // Current Month Payable = Upon Booking + Collection Releases + Year-End Releases - Clawback Recovery
+        const totalUponBooking = emp.allDetails.reduce((s: number, d: any) => s + (d.booking_usd || 0), 0);
+        const collReleases = emp.allDetails.filter((d: any) => d.component_type === 'collection_release').reduce((s: number, d: any) => s + (d.this_month_usd || 0), 0);
+        const yeReleases = emp.allDetails.filter((d: any) => d.component_type === 'year_end_release').reduce((s: number, d: any) => s + (d.this_month_usd || 0), 0);
+        const clawback = emp.allDetails.filter((d: any) => d.component_type === 'clawback').reduce((s: number, d: any) => s + Math.abs(d.this_month_usd || 0), 0);
+        row.gt_current_month_payable = totalUponBooking + collReleases + yeReleases - clawback;
+        row.gt_coll_held = emp.allDetails.reduce((s: number, d: any) => s + (d.collection_usd || 0), 0);
+        row.gt_ye_held = emp.allDetails.reduce((s: number, d: any) => s + (d.year_end_usd || 0), 0);
         return row;
       });
 

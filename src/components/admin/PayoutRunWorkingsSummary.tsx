@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 const GROUP_ORDER: Record<string, number> = {
   variable_pay: 0,
@@ -46,6 +47,11 @@ const formatCommissionRate = (value: number | null | undefined) => {
   return `${value.toFixed(2)}%`;
 };
 
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return "-";
+  return value;
+};
+
 // Sub-column definitions per component type
 type SubColDef = { key: string; label: string };
 
@@ -59,9 +65,9 @@ const VP_SUB_COLS: SubColDef[] = [
   { key: "ytd", label: "YTD Eligible" },
   { key: "prior", label: "Elig Last Mo" },
   { key: "incr", label: "Incr Eligible" },
-  { key: "bkg", label: "Booking" },
-  { key: "coll", label: "Collection" },
-  { key: "ye", label: "Year-End" },
+  { key: "bkg", label: "Upon Booking" },
+  { key: "coll", label: "Upon Collection" },
+  { key: "ye", label: "At Year End" },
 ];
 
 const COMM_SUB_COLS: SubColDef[] = [
@@ -70,9 +76,9 @@ const COMM_SUB_COLS: SubColDef[] = [
   { key: "ytd", label: "YTD Eligible" },
   { key: "prior", label: "Elig Last Mo" },
   { key: "incr", label: "Incr Eligible" },
-  { key: "bkg", label: "Booking" },
-  { key: "coll", label: "Collection" },
-  { key: "ye", label: "Year-End" },
+  { key: "bkg", label: "Upon Booking" },
+  { key: "coll", label: "Upon Collection" },
+  { key: "ye", label: "At Year End" },
 ];
 
 const SPIFF_SUB_COLS: SubColDef[] = [
@@ -82,9 +88,9 @@ const SPIFF_SUB_COLS: SubColDef[] = [
   { key: "ytd", label: "YTD Eligible" },
   { key: "prior", label: "Elig Last Mo" },
   { key: "incr", label: "Incr Eligible" },
-  { key: "bkg", label: "Booking" },
-  { key: "coll", label: "Collection" },
-  { key: "ye", label: "Year-End" },
+  { key: "bkg", label: "Upon Booking" },
+  { key: "coll", label: "Upon Collection" },
+  { key: "ye", label: "At Year End" },
 ];
 
 function getSubCols(componentType: string): SubColDef[] {
@@ -148,6 +154,20 @@ function renderSubCells(d: PayoutMetricDetailRow | undefined, subCols: SubColDef
   });
 }
 
+function computeCurrentMonthPayable(emp: EmployeeWorkings): number {
+  const totalUponBooking = emp.allDetails.reduce((s, d) => s + d.booking_usd, 0);
+  const collectionReleases = emp.allDetails
+    .filter(d => d.component_type === 'collection_release')
+    .reduce((s, d) => s + d.this_month_usd, 0);
+  const yearEndReleases = emp.allDetails
+    .filter(d => d.component_type === 'year_end_release')
+    .reduce((s, d) => s + d.this_month_usd, 0);
+  const clawbackRecovery = emp.allDetails
+    .filter(d => d.component_type === 'clawback')
+    .reduce((s, d) => s + Math.abs(d.this_month_usd), 0);
+  return totalUponBooking + collectionReleases + yearEndReleases - clawbackRecovery;
+}
+
 interface Props {
   employees: EmployeeWorkings[];
 }
@@ -165,7 +185,7 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
     pivots.set(emp.employeeId, m);
   }
 
-  const GRAND_TOTAL_COLS = 4; // Incr Elig, Booking, Collection, Year-End
+  const GRAND_TOTAL_COLS = 4; // Current Month Payable, Upon Collection (Held), At Year End (Held), Incr Eligible
 
   return (
     <div className="overflow-x-auto">
@@ -175,8 +195,12 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
           <TableRow>
             <TableHead rowSpan={2} className="sticky left-0 bg-background z-10 min-w-[90px]">Emp Code</TableHead>
             <TableHead rowSpan={2} className="sticky left-[90px] bg-background z-10 min-w-[160px]">Emp Name</TableHead>
+            <TableHead rowSpan={2} className="min-w-[90px]">DOJ</TableHead>
+            <TableHead rowSpan={2} className="min-w-[90px]">LWD</TableHead>
+            <TableHead rowSpan={2} className="min-w-[70px]">Status</TableHead>
+            <TableHead rowSpan={2} className="min-w-[80px]">BU</TableHead>
             <TableHead rowSpan={2} className="min-w-[100px]">Plan</TableHead>
-            <TableHead rowSpan={2} className="min-w-[60px]">Ccy</TableHead>
+            <TableHead rowSpan={2} className="min-w-[110px]">Total Variable OTE</TableHead>
             {metrics.map((mc) => (
               <TableHead
                 key={`${mc.componentType}::${mc.metricName}`}
@@ -203,25 +227,33 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
               ))
             )}
             <TableHead className="text-right text-xs whitespace-nowrap min-w-[110px] border-l">Incr Eligible</TableHead>
-            <TableHead className="text-right text-xs whitespace-nowrap min-w-[100px]">Booking</TableHead>
-            <TableHead className="text-right text-xs whitespace-nowrap min-w-[100px]">Collection</TableHead>
-            <TableHead className="text-right text-xs whitespace-nowrap min-w-[100px]">Year-End</TableHead>
+            <TableHead className="text-right text-xs whitespace-nowrap min-w-[130px]">Current Month Payable</TableHead>
+            <TableHead className="text-right text-xs whitespace-nowrap min-w-[120px]">Upon Collection (Held)</TableHead>
+            <TableHead className="text-right text-xs whitespace-nowrap min-w-[110px]">At Year End (Held)</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {employees.map((emp) => {
             const empPivot = pivots.get(emp.employeeId)!;
             const grandIncr = emp.allDetails.reduce((s, d) => s + d.this_month_usd, 0);
-            const grandBkg = emp.allDetails.reduce((s, d) => s + d.booking_usd, 0);
             const grandColl = emp.allDetails.reduce((s, d) => s + d.collection_usd, 0);
             const grandYe = emp.allDetails.reduce((s, d) => s + d.year_end_usd, 0);
+            const currentMonthPayable = computeCurrentMonthPayable(emp);
 
             return (
               <TableRow key={emp.employeeId}>
                 <TableCell className="sticky left-0 bg-background z-10 font-mono text-xs">{emp.employeeCode}</TableCell>
                 <TableCell className="sticky left-[90px] bg-background z-10 font-medium">{emp.employeeName}</TableCell>
+                <TableCell className="text-xs">{formatDate(emp.dateOfHire)}</TableCell>
+                <TableCell className="text-xs">{formatDate(emp.departureDate)}</TableCell>
+                <TableCell className="text-xs">
+                  <Badge variant={emp.isActive ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+                    {emp.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs">{emp.businessUnit || "-"}</TableCell>
                 <TableCell className="text-xs">{emp.planName || "-"}</TableCell>
-                <TableCell className="text-xs">{emp.localCurrency}</TableCell>
+                <TableCell className="text-right text-xs font-medium">{formatCurrency(emp.targetBonusUsd)}</TableCell>
                 {metrics.map((mc) => {
                   const key = `${mc.componentType}::${mc.metricName}`;
                   return renderSubCells(empPivot.get(key), mc.subCols);
@@ -229,9 +261,9 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
                 <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400 border-l">
                   {formatCurrency(grandIncr)}
                 </TableCell>
-                <TableCell className="text-right">{formatCurrency(grandBkg)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(grandColl)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(grandYe)}</TableCell>
+                <TableCell className="text-right font-semibold">{formatCurrency(currentMonthPayable)}</TableCell>
+                <TableCell className="text-right text-muted-foreground">{formatCurrency(grandColl)}</TableCell>
+                <TableCell className="text-right text-muted-foreground">{formatCurrency(grandYe)}</TableCell>
               </TableRow>
             );
           })}
