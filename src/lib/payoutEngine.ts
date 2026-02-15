@@ -756,9 +756,9 @@ async function calculateEmployeeCommissions(
   const empId = ctx.employee.employee_id;
   const { data: directDeals } = await supabase
     .from('deals')
-    .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive')
-    .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`)
-    .eq('month_year', ctx.monthYear);
+     .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive, project_id, customer_name')
+     .or(`sales_rep_employee_id.eq.${empId},sales_head_employee_id.eq.${empId},sales_engineering_employee_id.eq.${empId},sales_engineering_head_employee_id.eq.${empId},product_specialist_employee_id.eq.${empId},product_specialist_head_employee_id.eq.${empId},solution_manager_employee_id.eq.${empId},solution_manager_head_employee_id.eq.${empId}`)
+     .eq('month_year', ctx.monthYear);
 
   let allCommDeals = directDeals || [];
   const teamDealIds = await getTeamAttributedDealIds(empId, ctx.monthYear, ctx.monthYear);
@@ -766,10 +766,10 @@ async function calculateEmployeeCommissions(
     const existingIds = new Set(allCommDeals.map(d => d.id));
     const missingIds = teamDealIds.filter(id => !existingIds.has(id));
     if (missingIds.length > 0) {
-      const { data: teamDeals } = await supabase
-        .from('deals')
-        .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive')
-        .in('id', missingIds);
+       const { data: teamDeals } = await supabase
+         .from('deals')
+         .select('id, tcv_usd, perpetual_license_usd, managed_services_usd, implementation_usd, cr_usd, er_usd, linked_to_impl, gp_margin_percent, eligible_for_perpetual_incentive, project_id, customer_name')
+         .in('id', missingIds);
       allCommDeals = allCommDeals.concat(teamDeals || []);
     }
   }
@@ -826,40 +826,57 @@ async function calculateEmployeeCommissions(
       }
     }
     
-    // Managed Services — requires GP margin >= min_gp_margin_pct (if configured)
-    if (deal.managed_services_usd && deal.managed_services_usd > 0) {
-      const comm = ctx.commissions.find(c => c.commission_type === 'Managed Services' && c.is_active);
-      if (comm) {
-        // GP margin eligibility check
-        const minGpMargin = (comm as any).min_gp_margin_pct;
-        const dealGpMargin = deal.gp_margin_percent;
-        const gpMarginQualifies = minGpMargin == null || (dealGpMargin != null && dealGpMargin >= minGpMargin);
-        
-        if (gpMarginQualifies) {
-          const splits = getSplits(comm);
-          const result = calculateDealCommission(
-            deal.managed_services_usd,
-            comm.commission_rate_pct,
-            comm.min_threshold_usd,
-            splits.booking,
-            splits.collection,
-            splits.yearEnd
-          );
-          calculations.push({
-            dealId: deal.id,
-            commissionType: 'Managed Services',
-            tcvUsd: deal.managed_services_usd,
-            commissionRatePct: comm.commission_rate_pct,
-            minThresholdUsd: comm.min_threshold_usd,
-            qualifies: result.qualifies,
-            grossCommission: result.gross,
-            paidAmount: result.paid,
-            holdbackAmount: result.holdback,
-            yearEndHoldback: result.yearEndHoldback,
-          });
-        }
-      }
-    }
+     // Managed Services — requires GP margin >= min_gp_margin_pct (if configured)
+     if (deal.managed_services_usd && deal.managed_services_usd > 0) {
+       const comm = ctx.commissions.find(c => c.commission_type === 'Managed Services' && c.is_active);
+       if (comm) {
+         // GP margin eligibility check
+         const minGpMargin = (comm as any).min_gp_margin_pct;
+         const dealGpMargin = deal.gp_margin_percent;
+         const gpMarginQualifies = minGpMargin == null || (dealGpMargin != null && dealGpMargin >= minGpMargin);
+         
+         if (gpMarginQualifies) {
+           const splits = getSplits(comm);
+           const result = calculateDealCommission(
+             deal.managed_services_usd,
+             comm.commission_rate_pct,
+             comm.min_threshold_usd,
+             splits.booking,
+             splits.collection,
+             splits.yearEnd
+           );
+           calculations.push({
+             dealId: deal.id,
+             commissionType: 'Managed Services',
+             tcvUsd: deal.managed_services_usd,
+             commissionRatePct: comm.commission_rate_pct,
+             minThresholdUsd: comm.min_threshold_usd,
+             qualifies: result.qualifies,
+             grossCommission: result.gross,
+             paidAmount: result.paid,
+             holdbackAmount: result.holdback,
+             yearEndHoldback: result.yearEndHoldback,
+           });
+         } else {
+           // Push excluded deal record for audit trail
+           calculations.push({
+             dealId: deal.id,
+             commissionType: 'Managed Services',
+             tcvUsd: deal.managed_services_usd,
+             commissionRatePct: comm.commission_rate_pct,
+             minThresholdUsd: comm.min_threshold_usd,
+             qualifies: false,
+             grossCommission: 0,
+             paidAmount: 0,
+             holdbackAmount: 0,
+             yearEndHoldback: 0,
+             exclusionReason: `GP margin ${dealGpMargin ?? 'N/A'}% below minimum ${minGpMargin}%`,
+             gpMarginPct: dealGpMargin,
+             minGpMarginPct: minGpMargin,
+           });
+         }
+       }
+     }
     
     // Implementation
     if (deal.implementation_usd && deal.implementation_usd > 0) {
@@ -2193,6 +2210,59 @@ async function persistPayoutResults(
     for (let i = 0; i < metricDetailRecords.length; i += 100) {
       const batch = metricDetailRecords.slice(i, i + 100);
       await supabase.from('payout_metric_details' as any).insert(batch);
+    }
+  }
+
+  // ===== Persist Deal-Level Commission Details =====
+  // Delete existing deal details for this run
+  await supabase
+    .from('payout_deal_details' as any)
+    .delete()
+    .eq('payout_run_id', payoutRunId);
+
+  // Collect all deal IDs from commission calculations to fetch metadata
+  const allDealIds = [...new Set(
+    employeePayouts.flatMap(emp => emp.commissionCalculations.map(c => c.dealId))
+  )];
+
+  // Fetch deal metadata (project_id, customer_name) in bulk
+  let dealMetaMap = new Map<string, { project_id: string; customer_name: string | null }>();
+  if (allDealIds.length > 0) {
+    const { data: dealMeta } = await supabase
+      .from('deals')
+      .select('id, project_id, customer_name')
+      .in('id', allDealIds);
+    (dealMeta || []).forEach(d => dealMetaMap.set(d.id, { project_id: d.project_id, customer_name: d.customer_name }));
+  }
+
+  const dealDetailRecords = employeePayouts.flatMap(emp =>
+    emp.commissionCalculations.map(c => {
+      const meta = dealMetaMap.get(c.dealId);
+      return {
+        payout_run_id: payoutRunId,
+        employee_id: emp.employeeId,
+        deal_id: c.dealId,
+        project_id: meta?.project_id || null,
+        customer_name: meta?.customer_name || null,
+        commission_type: c.commissionType,
+        deal_value_usd: c.tcvUsd,
+        gp_margin_pct: c.gpMarginPct ?? null,
+        min_gp_margin_pct: c.minGpMarginPct ?? null,
+        commission_rate_pct: c.commissionRatePct,
+        is_eligible: c.qualifies,
+        exclusion_reason: c.exclusionReason || null,
+        gross_commission_usd: c.grossCommission,
+        booking_usd: c.paidAmount,
+        collection_usd: c.holdbackAmount,
+        year_end_usd: c.yearEndHoldback,
+      };
+    })
+  );
+
+  if (dealDetailRecords.length > 0) {
+    for (let i = 0; i < dealDetailRecords.length; i += 100) {
+      const batch = dealDetailRecords.slice(i, i + 100);
+      await supabase.from('payout_deal_details' as any).insert(batch);
     }
   }
 }

@@ -1671,6 +1671,84 @@ export type Database = {
           },
         ]
       }
+      payout_deal_details: {
+        Row: {
+          booking_usd: number
+          collection_usd: number
+          commission_rate_pct: number
+          commission_type: string
+          created_at: string
+          customer_name: string | null
+          deal_id: string
+          deal_value_usd: number
+          employee_id: string
+          exclusion_reason: string | null
+          gp_margin_pct: number | null
+          gross_commission_usd: number
+          id: string
+          is_eligible: boolean
+          min_gp_margin_pct: number | null
+          payout_run_id: string
+          project_id: string | null
+          year_end_usd: number
+        }
+        Insert: {
+          booking_usd?: number
+          collection_usd?: number
+          commission_rate_pct?: number
+          commission_type: string
+          created_at?: string
+          customer_name?: string | null
+          deal_id: string
+          deal_value_usd?: number
+          employee_id: string
+          exclusion_reason?: string | null
+          gp_margin_pct?: number | null
+          gross_commission_usd?: number
+          id?: string
+          is_eligible?: boolean
+          min_gp_margin_pct?: number | null
+          payout_run_id: string
+          project_id?: string | null
+          year_end_usd?: number
+        }
+        Update: {
+          booking_usd?: number
+          collection_usd?: number
+          commission_rate_pct?: number
+          commission_type?: string
+          created_at?: string
+          customer_name?: string | null
+          deal_id?: string
+          deal_value_usd?: number
+          employee_id?: string
+          exclusion_reason?: string | null
+          gp_margin_pct?: number | null
+          gross_commission_usd?: number
+          id?: string
+          is_eligible?: boolean
+          min_gp_margin_pct?: number | null
+          payout_run_id?: string
+          project_id?: string | null
+          year_end_usd?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_deal_details_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_deal_details_payout_run_id_fkey"
+            columns: ["payout_run_id"]
+            isOneToOne: false
+            referencedRelation: "payout_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payout_metric_details: {
         Row: {
           achievement_pct: number | null
