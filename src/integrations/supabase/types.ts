@@ -1678,6 +1678,7 @@ export type Database = {
           allocated_ote_usd: number | null
           booking_usd: number | null
           collection_usd: number | null
+          commission_rate_pct: number | null
           component_type: string
           created_at: string
           employee_id: string
@@ -1701,6 +1702,7 @@ export type Database = {
           allocated_ote_usd?: number | null
           booking_usd?: number | null
           collection_usd?: number | null
+          commission_rate_pct?: number | null
           component_type: string
           created_at?: string
           employee_id: string
@@ -1724,6 +1726,7 @@ export type Database = {
           allocated_ote_usd?: number | null
           booking_usd?: number | null
           collection_usd?: number | null
+          commission_rate_pct?: number | null
           component_type?: string
           created_at?: string
           employee_id?: string

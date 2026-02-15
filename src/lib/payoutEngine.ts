@@ -92,6 +92,7 @@ export interface MetricPayoutDetail {
   collectionUsd: number;
   yearEndUsd: number;
   notes: string | null;
+  commissionRatePct?: number;
 }
 
 
@@ -1436,6 +1437,7 @@ export async function calculateMonthlyPayout(
           collectionUsd: c.holdbackAmount,
           yearEndUsd: c.yearEndHoldback,
           notes: null,
+          commissionRatePct: c.commissionRatePct,
         });
       }
       
@@ -2182,6 +2184,7 @@ async function persistPayoutResults(
       collection_usd: md.collectionUsd,
       year_end_usd: md.yearEndUsd,
       notes: md.notes,
+      commission_rate_pct: md.commissionRatePct ?? null,
     }))
   );
   
