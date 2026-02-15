@@ -36,6 +36,7 @@ export interface SpiffDealBreakdown {
   dealArrUsd: number;
   spiffPayoutUsd: number;
   spiffName: string;
+  spiffRatePct: number;
   isEligible: boolean;
   exclusionReason: string | null;
 }
@@ -101,6 +102,7 @@ export function calculateSpiffPayout(
         dealArrUsd: dealArr,
         spiffPayoutUsd: 0,
         spiffName: spiff.spiff_name,
+        spiffRatePct: spiff.spiff_rate_pct,
         isEligible: false,
         exclusionReason: `Deal ARR $${dealArr.toLocaleString()} below minimum $${spiff.min_deal_value_usd.toLocaleString()}`,
       });
@@ -119,6 +121,7 @@ export function calculateSpiffPayout(
       dealArrUsd: dealArr,
       spiffPayoutUsd: roundedPayout,
       spiffName: spiff.spiff_name,
+      spiffRatePct: spiff.spiff_rate_pct,
       isEligible: true,
       exclusionReason: null,
     });
