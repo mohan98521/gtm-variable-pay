@@ -1,143 +1,77 @@
 
 
-## Payout Run Detailed Workings Report
+## Detailed Workings Report Modifications
 
-### Problem
-After running a payout calculation, the detail view shows only aggregate totals per employee (VP, Commissions, Splits). There is no way to verify **how** those numbers were derived -- what target was used, what actual was achieved, which multiplier applied, and how the eligible payout breaks down by metric. Finance and GTM Ops need this transparency to validate calculations before approving.
-
-### Solution
-Add a **"Detailed Workings"** tab/view within the Payout Run Detail that shows, for each employee, a metric-by-metric breakdown of the calculation, plus the three-way split and incremental deduction logic.
+### Summary
+Three changes to the Detailed Workings report: (1) restructure to a unified single-table-per-employee layout covering all metrics in sequence, (2) add an "Allocated Variable OTE %" column, and (3) increase achievement percentage precision to 4 decimal places.
 
 ---
 
-### What the report will show (per employee, per metric/component)
+### Change 1: Unified Single-Table Layout
 
-**Section 1: Variable Pay -- Metric-Level Workings**
+**Current state:** The EmployeeWorkingsCard renders three separate sections/tables -- VP metrics, Three-Way Split, and Payable This Month -- each filtering by component type.
 
-| Metric | Target (USD) | YTD Actuals (USD) | Ach % | Allocated OTE (USD) | Multiplier | YTD Eligible (USD) | Prior Paid (USD) | This Month (USD) |
-|--------|-------------|-------------------|-------|---------------------|------------|-------------------|-----------------|-----------------|
-| New Software Booking ARR | 1,000,000 | 650,000 | 65% | 30,000 | 1.0x | 19,500 | 15,000 | 4,500 |
-| Closing ARR | 500,000 | 520,000 | 104% | 20,000 | 1.6x | 20,800 | 18,000 | 2,800 |
-| **VP Total** | | | | **50,000** | | **40,300** | **33,000** | **7,300** |
+**New structure:** Replace the three-section layout with a single comprehensive table that lists ALL metric rows (VP, Commission, NRR, SPIFF, Deal Team SPIFF, Collection Release, Year-End Release, Clawback) in sequence, grouped by type with sub-header rows. Each row shows the full derivation chain: Target, Actuals, Ach%, Allocated OTE %, Allocated OTE, Multiplier, YTD Eligible, Prior Paid, This Month, and the three-way split (Booking, Collection, Year-End).
 
-**Section 2: Three-Way Split (per component)**
+The layout will be:
 
-| Component | Eligible (USD) | Upon Booking | Upon Collection | At Year End |
-|-----------|---------------|-------------|----------------|------------|
-| Variable Pay | 7,300 | 5,110 (70%) | 1,825 (25%) | 365 (5%) |
-| Commission: Managed Services | 2,400 | 1,680 | 600 | 120 |
-| NRR Additional Pay | 1,200 | 0 | 1,200 | 0 |
-| SPIFF | 800 | 560 | 200 | 40 |
+```text
+Employee Name (Code) | Plan | Currency | Total: $X,XXX
+-------------------------------------------------------------
+[Sub-header: Variable Pay]
+  Metric 1  | Target | Actuals | Ach% | OTE% | OTE$ | Mult | YTD Elig | Prior | This Mo | Booking | Collection | Year-End
+  Metric 2  | ...
+  VP Subtotal row
 
-**Section 3: Payable This Month**
+[Sub-header: Commissions]
+  Managed Services | ...
+  CR/ER | ...
 
-| Line Item | Amount (USD) |
-|-----------|-------------|
-| Upon Booking (VP + Comm + NRR + SPIFF) | 7,350 |
-| Collection Releases | 3,200 |
-| Year-End Releases | 0 |
-| Clawback Recovery | -500 |
-| **Payable This Month** | **10,050** |
+[Sub-header: Additional Pay]
+  NRR Additional Pay | ...
+  SPIFF | ...
+  Deal Team SPIFF | ...
+
+[Sub-header: Releases and Adjustments]
+  Collection Release | ...
+  Year-End Release | ...
+  Clawback | ... (highlighted red)
+
+[Grand Total row]
+```
+
+This is built dynamically from the data -- if a new component_type is added to the engine, it will automatically appear in the appropriate group or fall into a catch-all "Other" group.
+
+**File:** `src/components/admin/PayoutRunWorkings.tsx`
+- Rewrite `EmployeeWorkingsCard` to render a single table with grouped sub-headers
+- Define a component-type ordering map for display sequence
+- Use sub-header rows (colSpan) to visually separate groups
+- Keep the accordion structure for employee-level expand/collapse
 
 ---
 
-### Data Strategy
+### Change 2: Add "Allocated Variable OTE %" Column
 
-The payout engine already computes all the per-metric detail in memory (target, actual, achievement, multiplier, allocated OTE) but discards it after aggregation. We need to **persist** this detail.
+The percentage is derived from existing data: `(allocated_ote_usd / target_bonus_usd) * 100`.
 
-#### New Database Table: `payout_metric_details`
+**File:** `src/components/admin/PayoutRunWorkings.tsx`
+- Add a new column "OTE %" between "Ach %" and "Allocated OTE" in the table header
+- Compute and display the percentage per row using the two fields already available in `PayoutMetricDetailRow`
 
-This table stores the metric-level calculation workings for each employee in each payout run.
-
-```
-payout_metric_details
-- id (uuid, PK)
-- payout_run_id (uuid, FK -> payout_runs)
-- employee_id (uuid, FK -> employees)
-- component_type (text) -- 'variable_pay', 'commission', 'nrr', 'spiff', 'deal_team_spiff', 'collection_release', 'year_end_release', 'clawback'
-- metric_name (text) -- e.g. 'New Software Booking ARR', 'Closing ARR', 'Managed Services', 'NRR Additional Pay'
-- plan_id (uuid, FK -> comp_plans)
-- plan_name (text)
-- target_bonus_usd (numeric) -- employee's target bonus for this run
-- allocated_ote_usd (numeric) -- portion of OTE allocated to this metric (weightage)
-- target_usd (numeric) -- performance target
-- actual_usd (numeric) -- YTD actuals
-- achievement_pct (numeric)
-- multiplier (numeric)
-- ytd_eligible_usd (numeric) -- full YTD payout before incremental
-- prior_paid_usd (numeric) -- sum of prior finalized months
-- this_month_usd (numeric) -- incremental = ytd_eligible - prior_paid
-- booking_usd (numeric)
-- collection_usd (numeric)
-- year_end_usd (numeric)
-- notes (text) -- any special context (clawback exempt, linked_to_impl, etc.)
-- created_at (timestamptz)
-```
-
-#### Changes to Payout Engine
-
-Modify `persistPayoutResults()` to also insert rows into `payout_metric_details` using the calculation context that's already available in `EmployeePayoutResult` and the intermediate metric-level calculations.
-
-The key change is in `calculateEmployeeVariablePay()` -- instead of only returning aggregate totals, also return the per-metric detail array (target, actual, achievement, multiplier, allocated OTE, YTD eligible). This data is already computed inside the loop but currently discarded after summation.
-
-#### Changes to the `EmployeePayoutResult` interface
-
-Add a new field:
-```typescript
-metricDetails: MetricPayoutDetail[];
-```
-
-Where `MetricPayoutDetail` captures each metric's workings.
+No database or engine changes needed -- both `allocated_ote_usd` and `target_bonus_usd` are already persisted.
 
 ---
 
-### UI Implementation
+### Change 3: Achievement % to 4 Decimal Places
 
-#### New Component: `PayoutRunWorkings.tsx`
-
-- Located at `src/components/admin/PayoutRunWorkings.tsx`
-- Receives `payoutRunId` as prop
-- Fetches data from `payout_metric_details` table grouped by employee
-- Expandable accordion per employee showing:
-  - Metric-level table (Section 1 above)
-  - Three-way split table (Section 2)
-  - Payable summary (Section 3)
-  - Clawback highlight row (red) if any
-- Search/filter by employee name
-- Currency filter (same as existing)
-- Inherits the payout run status badge
-
-#### Integration into PayoutRunDetail.tsx
-
-Add a **Tabs** component with two tabs:
-1. **Summary** (existing content -- employee payouts table)
-2. **Detailed Workings** (new component)
-
-The tab selection persists in local state. Both tabs share the same header, summary cards, and export buttons.
-
-#### Export Enhancement
-
-Add a new XLSX sheet "Detailed Workings" to the existing multi-sheet export that includes all metric-level rows across all employees.
+**File:** `src/components/admin/PayoutRunWorkings.tsx`
+- Update `formatPct` from `value.toFixed(1)` to `value.toFixed(4)`
 
 ---
 
 ### Technical Details
 
-**Files to create:**
-- `src/components/admin/PayoutRunWorkings.tsx` -- New detailed workings UI component
-- `src/hooks/usePayoutMetricDetails.ts` -- Hook to fetch metric detail data
-
 **Files to modify:**
-- `src/lib/payoutEngine.ts`:
-  - Add `MetricPayoutDetail` interface
-  - Update `EmployeePayoutResult` to include `metricDetails[]`
-  - Update `calculateEmployeeVariablePay()` to return per-metric details
-  - Update `calculateMonthlyPayout()` to build commission/NRR/SPIFF detail rows
-  - Update `persistPayoutResults()` to insert into `payout_metric_details`
-- `src/components/admin/PayoutRunDetail.tsx`:
-  - Wrap existing content in Tabs (Summary / Detailed Workings)
-  - Add "Detailed Workings" XLSX sheet to export
-- **Database migration**: Create `payout_metric_details` table with RLS policies
+- `src/components/admin/PayoutRunWorkings.tsx` -- All three changes are in this single file
 
-**No changes to existing calculation logic** -- the math stays the same. We are only capturing and persisting intermediate values that are already computed but currently discarded.
-
+**No database, engine, or hook changes required.** The data model already supports all the information needed.
