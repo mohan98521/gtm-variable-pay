@@ -1,79 +1,61 @@
 
 
-## Optimize Payout Engine Performance
+## Populate SPIFF Metric Details with Meaningful Values
 
-### Root Cause
+### Problem
 
-The payout engine processes each employee **sequentially**, and each employee triggers **20-30 individual database queries** (plan assignment, blended pro-rata, metrics, commissions, exchange rates, deals, closing ARR, prior months VP/NRR/SPIFF, collections, clawbacks, SPIFF configs, performance targets, etc.). With 30 employees, that's 600-900 sequential round-trips to the database.
+The SPIFF row in the Detailed Workings report currently shows zeros/blanks for Target, YTD Actuals, Achievement %, OTE %, and Allocated OTE. This is because the payout engine persists the SPIFF metric detail with placeholder zeros instead of computing the meaningful intermediate values.
 
-For 1,000 deals and 2,000 Closing ARR rows, the data volume itself is manageable, but the **query count per employee** is the bottleneck -- each round-trip adds ~50-150ms of network latency.
+Looking at the screenshot, the SPIFF row shows `$8,351` misaligned across columns because the underlying data fields are empty, causing the layout to display the total payout in the wrong position.
 
-### Optimization Strategy
+### Expected Values (per user)
 
-Two complementary approaches:
+For each SPIFF (e.g., "Large Deal SPIFF"):
 
-#### 1. Prefetch shared/bulk data before the employee loop
-
-Instead of each employee independently querying the same tables (deals, closing ARR, performance targets, exchange rates, plan configs), fetch all required data **once** upfront and pass it into the per-employee calculation.
-
-**Data to prefetch (single queries):**
-
-| Data | Current | After |
+| Column | Value | Source |
 |---|---|---|
-| All deals (fiscal year) | 1 query per employee per metric | 1 bulk query total |
-| Closing ARR actuals | 1 query per employee | 1 bulk query total |
-| Performance targets | 2-4 queries per employee (per metric + NRR + SPIFF) | 1 bulk query total |
-| Exchange rates | 1 query per employee | 1 bulk query total |
-| Plan assignments (user_targets + comp_plans) | 2 queries per employee | 1 bulk query total |
-| Plan metrics + multiplier grids | 1 query per employee | 1 bulk query total (grouped by plan) |
-| Plan commissions | 1 query per employee | 1 bulk query total |
-| Plan spiffs | 1 query per employee | 1 bulk query total |
-| Prior month payouts | 3 queries per employee (VP, NRR, SPIFF) | 1 bulk query total |
-| Deal collections | 1 query per employee | 1 bulk query total |
-| Support team memberships | 1 query per employee | 1 bulk query total |
-| Deal team SPIFF allocations | 1 query per employee | 1 bulk query total |
-| Clawback ledger | 1 query per employee | 1 bulk query total |
-| Renewal multipliers | 1 query per employee per plan | 1 bulk query total |
+| Target | Software New Booking ARR target (e.g., $600,000) | Same as linked metric's performance target |
+| YTD Actuals | Total eligible large deal ARR | Sum of deal ARR values that meet the SPIFF threshold |
+| Ach % | Eligible Actuals / Software Target | e.g., 500K / 600K = 83.33% |
+| OTE % | SPIFF rate (e.g., 25%) | From `spiff_rate_pct` |
+| Allocated OTE | SPIFF rate x Software Variable OTE | e.g., 25% x $48,887 = ~$8,351 (this is the "Software Variable OTE" allocated to SPIFF) |
+| Multiplier | 1.0x | SPIFFs have no multiplier grid |
+| YTD Eligible | Total SPIFF payout (YTD) | Already calculated correctly |
 
-This reduces ~25 queries/employee to **~15 prefetch queries total** + ~2-3 per employee (for remaining employee-specific lookups that are hard to bulk).
+### Layout Change
 
-#### 2. Parallel employee processing
-
-After prefetching, process employees in **parallel batches of 5** using `Promise.all`. Since each employee's calculation is now mostly in-memory (filtering prefetched data), this provides further speedup.
-
-#### 3. Progress feedback
-
-Add a progress callback to `runPayoutCalculation` so the UI can show "Processing employee 12/30..." instead of appearing frozen. The `PayoutRunManagement` component will display a progress bar during calculation.
-
-### Expected Impact
-
-| Scenario | Current (est.) | After (est.) |
-|---|---|---|
-| 30 employees, 200 deals | ~45-90 seconds | ~5-10 seconds |
-| 50 employees, 1000 deals, 2000 ARR rows | ~120-250 seconds | ~10-20 seconds |
+Currently, the SPIFF row uses a reduced "spiff" column layout (9 columns: OTE%, Allocated OTE, Actuals, ...). Since we now have Target, Actuals, Ach%, and Multiplier data, the SPIFF row should use the same full `variable_pay` layout (12 columns) -- exactly like NRR does. This keeps the "Additional Pay" section uniform.
 
 ### Technical Details
 
-**Files to modify:**
+**File 1: `src/lib/spiffCalculation.ts`**
 
-1. **`src/lib/payoutEngine.ts`** -- Main changes:
-   - Add a `PrefetchedData` interface containing all bulk-fetched data
-   - Add `prefetchPayoutData(monthYear, fiscalYear)` function that runs ~15 queries and returns the prefetched data object
-   - Modify `calculateMonthlyPayout` to accept `PrefetchedData` and filter in-memory instead of querying
-   - Modify `calculateEmployeeVariablePay` and `calculateEmployeeCommissions` to use prefetched deals/targets
-   - Modify `getPriorMonthsVp/Nrr/Spiff` to filter from prefetched prior payouts
-   - Modify `calculateCollectionReleases` to use prefetched collections
-   - Modify `getTeamAttributedDealIds` to filter from prefetched team memberships
-   - In `executePayoutCalculation`, call `prefetchPayoutData` first, then process employees in batches of 5 with `Promise.all`
-   - Add optional `onProgress` callback parameter
+- Update `calculateAllSpiffs` to return additional aggregate data alongside `totalSpiffUsd` and `breakdowns`:
+  - `softwareTargetUsd`: the linked metric's target
+  - `eligibleActualsUsd`: sum of deal ARR values that passed the SPIFF threshold
+  - `softwareVariableOteUsd`: the allocated OTE portion (variableOTE x metric weightage)
+  - `spiffRatePct`: the SPIFF rate applied
 
-2. **`src/hooks/usePayoutRuns.ts`** -- Pass progress callback from the mutation to update state
+**File 2: `src/lib/payoutEngine.ts`** (lines 1517-1538)
 
-3. **`src/components/admin/PayoutRunManagement.tsx`** -- Display a progress indicator during calculation (employee count processed / total)
+- Populate the SPIFF metric detail row with real values:
+  - `targetBonusUsd` = employee's target bonus (already available)
+  - `allocatedOteUsd` = softwareVariableOteUsd x spiffRatePct / 100 (the "Allocated OTE" for SPIFF)
+  - `targetUsd` = linked metric's software target
+  - `actualUsd` = eligible large deal actuals total
+  - `achievementPct` = eligible actuals / software target x 100
+  - `multiplier` = 1.0 (SPIFFs have no multiplier)
+
+**File 3: `src/components/admin/PayoutRunWorkings.tsx`**
+
+- Change SPIFF rows to use the `variable_pay` layout instead of the custom `spiff` layout
+- Update `getRowLayout`: return `'variable_pay'` for `'spiff'` component type (keep `'spiff'` only for `'deal_team_spiff'`)
+- Update `getGroupLayout`: when the additional group has both NRR and SPIFF, both now use variable_pay layout; only fall back to spiff layout for deal_team_spiff-only groups
+- Remove the separate "spiff" header/row columns since SPIFF will reuse the VP/NRR 12-column layout
 
 ### What does NOT change
 
-- All calculation logic (multipliers, splits, pro-rata, incremental) remains identical
-- All persistence logic (monthly_payouts, deal details, metric details, attributions) remains identical
+- SPIFF calculation logic (thresholds, formula, payout splits) remains identical
+- Deal Team SPIFF continues to use the reduced layout (it has no target/achievement concept)
+- NRR row is already correct and unchanged
 - All existing tests continue to pass
-- The only difference is **when** data is fetched (upfront bulk vs per-employee)
