@@ -1,62 +1,58 @@
 
 
-## Auto-Calculate OTE = TFP + TVP
+## Exclude Staff Users from Compensation and Payout Logic
 
 ### Summary
-Make OTE (On-Target Earnings) a computed field that automatically equals TFP + TVP, for both Local Currency and USD values. This applies to the Employee Form, Plan Assignment Dialog, and Employee Bulk Upload.
+Staff users (employees with `sales_function = null`) should be excluded from all compensation-related calculations, validations, counts, and settlement workflows. This ensures they don't appear as missing-plan warnings, inflate headcount numbers, or show up in F&F settlement eligibility.
 
 ---
 
-### 1. Employee Form (`EmployeeFormDialog.tsx`)
+### Change 1: Payout Engine -- Validation (HIGH)
 
-- Add `useEffect` watchers on `tfp_local_currency` and `tvp_local_currency` to auto-set `ote_local_currency = tfp + tvp`
-- Add `useEffect` watchers on `tfp_usd` and `tvp_usd` to auto-set `ote_usd = tfp + tvp`
-- Make both OTE fields **read-only** (disabled input with a subtle background) so users see the computed value but cannot manually override it
-- Add a small helper text under OTE fields: "Auto-calculated: TFP + TVP"
+**File:** `src/lib/payoutEngine.ts` (lines 219-222)
 
----
+The `validatePayoutRunPrerequisites()` function fetches all active employees without filtering out staff. This causes staff users to appear in "missing plan assignment" warnings and "missing compensation rate" errors.
 
-### 2. Plan Assignment Dialog (`PlanAssignmentDialog.tsx`)
-
-- Add `useEffect` watchers on `tfp_local_currency` and `tvp_local_currency` to auto-set `ote_local_currency = tfp + tvp`
-- Add `useEffect` watchers on `tfp_usd` and `target_bonus_usd` to auto-set `ote_usd = tfp + target_bonus`
-  - Note: This dialog uses `target_bonus_usd` instead of `tvp_usd`. The TVP (Local) field exists, but on the USD side, the equivalent is "Target Bonus (USD)". The formula will be: `ote_usd = tfp_usd + target_bonus_usd`
-- Make both OTE fields read-only with helper text
+**Fix:** Add `.not('sales_function', 'is', null)` to the employee query at line 222, so the validation only checks sales-eligible employees.
 
 ---
 
-### 3. Employee Bulk Upload (`BulkUpload.tsx`)
+### Change 2: Payout Engine -- Calculation (HIGH)
 
-- During row parsing, after reading `tfp_local_currency`, `tvp_local_currency`, `tfp_usd`, and `tvp_usd`, auto-calculate OTE values:
-  - `ote_local_currency = tfp_local_currency + tvp_local_currency`
-  - `ote_usd = tfp_usd + tvp_usd`
-- If the CSV provides an OTE value that differs from TFP + TVP, override it with the computed value (the formula is the source of truth)
-- The OTE columns remain in the CSV template for reference/visibility, but their values are always recalculated
+**File:** `src/lib/payoutEngine.ts` (lines 1570-1573)
+
+The `runPayoutCalculation()` function fetches all active employees for the payout loop. Staff users get iterated over unnecessarily (they would be skipped due to having no plan assignment, but they still consume processing time and could cause edge-case errors).
+
+**Fix:** Add `.not('sales_function', 'is', null)` to the employee query at line 1573.
+
+---
+
+### Change 3: Management Summary -- Function Breakdown (MEDIUM)
+
+**File:** `src/hooks/useManagementSummary.ts` (lines 65-75)
+
+The employee query fetches all active employees. Staff users without a `sales_function` are mapped to "Unknown" in the function breakdown, inflating headcount and distorting the by-function totals.
+
+**Fix:** Add `.not('sales_function', 'is', null)` to the employees query at line 68. This removes "Unknown" from the function breakdown and ensures annual/quarterly totals only count payouts tied to sales-function employees.
+
+---
+
+### Change 4: F&F Settlement -- Employee Dropdown (LOW)
+
+**File:** `src/components/admin/FnFSettlementManagement.tsx` (lines 28-40)
+
+The `useEmployeesForFnf()` query fetches all employees. Staff users who depart do not need F&F commission settlements since they have no compensation plans.
+
+**Fix:** Add `.not('sales_function', 'is', null)` to the employee query at line 34. This filters the "Initiate F&F" dropdown to only show departed sales-eligible employees.
 
 ---
 
 ### Technical Details
 
+All four changes are single-line filter additions (`.not('sales_function', 'is', null)`) on existing Supabase queries. No database, schema, or RLS changes are required.
+
 **Files to modify:**
+- `src/lib/payoutEngine.ts` -- 2 query filters (validation + calculation)
+- `src/hooks/useManagementSummary.ts` -- 1 query filter
+- `src/components/admin/FnFSettlementManagement.tsx` -- 1 query filter
 
-- **`src/components/admin/EmployeeFormDialog.tsx`**
-  - Add two `useEffect` hooks using `form.watch` and `form.setValue` for the auto-calculation
-  - Set OTE input fields to `readOnly` with `className="bg-muted/50"`
-  - Add `FormDescription` with "Auto-calculated: TFP + TVP"
-
-- **`src/components/admin/PlanAssignmentDialog.tsx`**
-  - Add two `useEffect` hooks for auto-calculation
-  - Local: `ote_local_currency = tfp_local_currency + tvp_local_currency`
-  - USD: `ote_usd = tfp_usd + target_bonus_usd`
-  - Set OTE input fields to `readOnly` with muted background
-  - Add helper description text
-
-- **`src/components/admin/BulkUpload.tsx`**
-  - In the row parsing logic (around line 155), after parsing TFP and TVP values, compute OTE:
-    ```
-    ote_local = (tfp_local || 0) + (tvp_local || 0)
-    ote_usd = (tfp_usd || 0) + (tvp_usd || 0)
-    ```
-  - Override any user-provided OTE values with the computed result
-
-No database changes required -- this is purely a UI/form-level calculation.
