@@ -408,7 +408,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
           { key: 'min_gp_margin_pct', header: 'Min GP %' },
           { key: 'is_eligible', header: 'Eligible', getValue: (r: any) => r.is_eligible ? 'Yes' : 'No' },
           { key: 'exclusion_reason', header: 'Exclusion Reason' },
-          { key: 'commission_rate_pct', header: 'Commission %' },
+          { key: 'commission_rate_pct', header: 'Rate / Mix %' },
           { key: 'gross_commission_usd', header: 'Gross Commission (USD)' },
           { key: 'booking_usd', header: 'Upon Booking (USD)' },
           { key: 'collection_usd', header: 'Upon Collection (USD)' },

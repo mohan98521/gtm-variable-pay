@@ -163,7 +163,7 @@ export function PayoutRunDealWorkings({ payoutRunId }: PayoutRunDealWorkingsProp
               <TableHead className="text-right">Min GP</TableHead>
               <TableHead className="text-center">Eligible?</TableHead>
               <TableHead>Exclusion Reason</TableHead>
-              <TableHead className="text-right">Commission %</TableHead>
+              <TableHead className="text-right">Rate / Mix %</TableHead>
               <TableHead className="text-right">Gross Commission</TableHead>
               <TableHead className="text-right">Upon Booking</TableHead>
               <TableHead className="text-right">Upon Collection</TableHead>

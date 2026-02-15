@@ -2297,9 +2297,13 @@ async function persistPayoutResults(
       });
     }
 
-    // NRR deal details
+    // NRR deal details with pro-rata payout attribution
+    const nrrActuals = emp.nrrResult?.nrrActuals ?? 0;
+    const nrrTotalPayout = emp.nrrPayoutUsd;
     for (const nrr of emp.nrrDealBreakdowns) {
       const meta = dealMetaMap.get(nrr.dealId);
+      const proRataPct = (nrr.isEligible && nrrActuals > 0) ? (nrr.eligibleValueUsd / nrrActuals) * 100 : 0;
+      const dealNrrPayout = (nrr.isEligible && nrrActuals > 0) ? nrrTotalPayout * (nrr.eligibleValueUsd / nrrActuals) : 0;
       dealDetailRecords.push({
         payout_run_id: payoutRunId,
         employee_id: emp.employeeId,
@@ -2310,19 +2314,20 @@ async function persistPayoutResults(
         component_type: 'nrr',
         deal_value_usd: nrr.crErUsd + nrr.implUsd,
         gp_margin_pct: nrr.gpMarginPct,
-        min_gp_margin_pct: null, // thresholds vary by CR/ER vs Impl
-        commission_rate_pct: 0,
+        min_gp_margin_pct: null,
+        commission_rate_pct: Math.round(proRataPct * 100) / 100,
         is_eligible: nrr.isEligible,
         exclusion_reason: nrr.exclusionReason,
-        gross_commission_usd: nrr.eligibleValueUsd,
-        booking_usd: 0,
-        collection_usd: 0,
-        year_end_usd: 0,
+        gross_commission_usd: Math.round(dealNrrPayout * 100) / 100,
+        booking_usd: Math.round(dealNrrPayout * emp.nrrBookingPct * 100) / 100,
+        collection_usd: Math.round(dealNrrPayout * emp.nrrCollectionPct * 100) / 100,
+        year_end_usd: Math.round(dealNrrPayout * emp.nrrYearEndPct * 100) / 100,
       });
     }
 
-    // SPIFF deal details
+    // SPIFF deal details with payout splits
     for (const spiff of emp.spiffDealBreakdowns) {
+      const grossPayout = spiff.spiffPayoutUsd;
       dealDetailRecords.push({
         payout_run_id: payoutRunId,
         employee_id: emp.employeeId,
@@ -2334,13 +2339,13 @@ async function persistPayoutResults(
         deal_value_usd: spiff.dealArrUsd,
         gp_margin_pct: null,
         min_gp_margin_pct: null,
-        commission_rate_pct: 0,
+        commission_rate_pct: spiff.spiffRatePct,
         is_eligible: spiff.isEligible,
         exclusion_reason: spiff.exclusionReason,
-        gross_commission_usd: spiff.spiffPayoutUsd,
-        booking_usd: 0,
-        collection_usd: 0,
-        year_end_usd: 0,
+        gross_commission_usd: grossPayout,
+        booking_usd: Math.round(grossPayout * emp.spiffBookingPct * 100) / 100,
+        collection_usd: Math.round(grossPayout * emp.spiffCollectionPct * 100) / 100,
+        year_end_usd: Math.round(grossPayout * emp.spiffYearEndPct * 100) / 100,
       });
     }
   }
