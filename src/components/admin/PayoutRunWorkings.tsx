@@ -109,8 +109,8 @@ function EmployeeWorkingsCard({ emp }: { emp: EmployeeWorkings }) {
             <TableHead className="text-right">Allocated OTE</TableHead>
             <TableHead className="text-right">Multiplier</TableHead>
             <TableHead className="text-right">YTD Eligible</TableHead>
-            <TableHead className="text-right">Prior Paid</TableHead>
-            <TableHead className="text-right">This Month</TableHead>
+            <TableHead className="text-right">Eligible Till Last Month</TableHead>
+            <TableHead className="text-right">Incremental Eligible</TableHead>
             <TableHead className="text-right">Booking</TableHead>
             <TableHead className="text-right">Collection</TableHead>
             <TableHead className="text-right">Year-End</TableHead>
