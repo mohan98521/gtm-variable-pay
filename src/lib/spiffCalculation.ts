@@ -138,28 +138,57 @@ export function calculateSpiffPayout(
 /**
  * Calculate all SPIFFs for an employee
  */
+export interface SpiffAggregateResult {
+  totalSpiffUsd: number;
+  breakdowns: SpiffDealBreakdown[];
+  /** The linked metric's performance target */
+  softwareTargetUsd: number;
+  /** Sum of deal ARR values that passed the SPIFF threshold */
+  eligibleActualsUsd: number;
+  /** Variable OTE allocated to the linked metric (variableOTE × weightage) */
+  softwareVariableOteUsd: number;
+  /** The SPIFF rate applied */
+  spiffRatePct: number;
+}
+
 export function calculateAllSpiffs(
   spiffs: SpiffConfig[],
   deals: SpiffDeal[],
   planMetrics: SpiffMetric[],
   variableOteUsd: number,
   targetsByMetric: Record<string, number>
-): { totalSpiffUsd: number; breakdowns: SpiffDealBreakdown[] } {
+): SpiffAggregateResult {
   let totalSpiffUsd = 0;
   const breakdowns: SpiffDealBreakdown[] = [];
+  let softwareTargetUsd = 0;
+  let eligibleActualsUsd = 0;
+  let softwareVariableOteUsd = 0;
+  let spiffRatePct = 0;
 
   for (const spiff of spiffs) {
     if (!spiff.is_active) continue;
 
-    const softwareTargetUsd = targetsByMetric[spiff.linked_metric_name] ?? 0;
-    const result = calculateSpiffPayout(spiff, deals, planMetrics, variableOteUsd, softwareTargetUsd);
+    const target = targetsByMetric[spiff.linked_metric_name] ?? 0;
+    const result = calculateSpiffPayout(spiff, deals, planMetrics, variableOteUsd, target);
 
     totalSpiffUsd += result.totalSpiffUsd;
     breakdowns.push(...result.dealBreakdowns);
+
+    // Capture aggregate metadata from the last active SPIFF
+    softwareTargetUsd = target;
+    softwareVariableOteUsd = result.softwareVariableOteUsd;
+    spiffRatePct = spiff.spiff_rate_pct;
+    eligibleActualsUsd += result.dealBreakdowns
+      .filter(b => b.isEligible)
+      .reduce((sum, b) => sum + b.dealArrUsd, 0);
   }
 
   return {
     totalSpiffUsd: Math.round(totalSpiffUsd * 100) / 100,
     breakdowns,
+    softwareTargetUsd,
+    eligibleActualsUsd: Math.round(eligibleActualsUsd * 100) / 100,
+    softwareVariableOteUsd: Math.round(softwareVariableOteUsd * 100) / 100,
+    spiffRatePct,
   };
 }
