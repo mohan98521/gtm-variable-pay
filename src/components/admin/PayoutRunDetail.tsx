@@ -271,11 +271,28 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
         return a.metricName.localeCompare(b.metricName);
       });
 
-      const SUB_LABELS = [
+      // Component-type-aware sub-labels
+      const VP_SUB_LABELS = [
         'Target', 'Actuals', 'Ach %', 'OTE %', 'Allocated OTE', 'Multiplier',
         'YTD Eligible', 'Eligible Till Last Month', 'Incremental Eligible',
         'Booking', 'Collection', 'Year-End',
       ];
+      const COMM_SUB_LABELS = [
+        'Commission %', 'Actuals (TCV)',
+        'YTD Eligible', 'Eligible Till Last Month', 'Incremental Eligible',
+        'Booking', 'Collection', 'Year-End',
+      ];
+      const SPIFF_SUB_LABELS = [
+        'OTE %', 'Allocated OTE', 'Actuals',
+        'YTD Eligible', 'Eligible Till Last Month', 'Incremental Eligible',
+        'Booking', 'Collection', 'Year-End',
+      ];
+
+      function getSubLabels(componentType: string): string[] {
+        if (componentType === 'commission') return COMM_SUB_LABELS;
+        if (componentType === 'spiff' || componentType === 'deal_team_spiff') return SPIFF_SUB_LABELS;
+        return VP_SUB_LABELS;
+      }
 
       const workingsColumns: any[] = [
         { key: 'empCode', header: 'Emp Code' },
@@ -284,7 +301,8 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
         { key: 'ccy', header: 'Ccy' },
       ];
       for (const mc of discoveredMetrics) {
-        for (const sub of SUB_LABELS) {
+        const subLabels = getSubLabels(mc.componentType);
+        for (const sub of subLabels) {
           workingsColumns.push({
             key: `${mc.componentType}::${mc.metricName}::${sub}`,
             header: `${mc.metricName} - ${sub}`,
@@ -316,13 +334,24 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
         for (const mc of discoveredMetrics) {
           const key = `${mc.componentType}::${mc.metricName}`;
           const d = dm.get(key);
+          const subLabels = getSubLabels(mc.componentType);
           if (d) {
-            row[`${key}::Target`] = d.target_usd ?? '';
-            row[`${key}::Actuals`] = d.actual_usd ?? '';
-            row[`${key}::Ach %`] = d.achievement_pct != null ? `${d.achievement_pct.toFixed(4)}%` : '';
-            row[`${key}::OTE %`] = fmtOtePct(d.allocated_ote_usd, d.target_bonus_usd);
-            row[`${key}::Allocated OTE`] = d.allocated_ote_usd ?? '';
-            row[`${key}::Multiplier`] = d.multiplier ? `${d.multiplier.toFixed(2)}x` : '';
+            if (mc.componentType === 'commission') {
+              row[`${key}::Commission %`] = d.commission_rate_pct != null ? `${d.commission_rate_pct.toFixed(2)}%` : '';
+              row[`${key}::Actuals (TCV)`] = d.actual_usd ?? '';
+            } else if (mc.componentType === 'spiff' || mc.componentType === 'deal_team_spiff') {
+              row[`${key}::OTE %`] = fmtOtePct(d.allocated_ote_usd, d.target_bonus_usd);
+              row[`${key}::Allocated OTE`] = d.allocated_ote_usd ?? '';
+              row[`${key}::Actuals`] = d.actual_usd ?? '';
+            } else {
+              row[`${key}::Target`] = d.target_usd ?? '';
+              row[`${key}::Actuals`] = d.actual_usd ?? '';
+              row[`${key}::Ach %`] = d.achievement_pct != null ? `${d.achievement_pct.toFixed(4)}%` : '';
+              row[`${key}::OTE %`] = fmtOtePct(d.allocated_ote_usd, d.target_bonus_usd);
+              row[`${key}::Allocated OTE`] = d.allocated_ote_usd ?? '';
+              row[`${key}::Multiplier`] = d.multiplier ? `${d.multiplier.toFixed(2)}x` : '';
+            }
+            // Common payout columns
             row[`${key}::YTD Eligible`] = d.ytd_eligible_usd ?? '';
             row[`${key}::Eligible Till Last Month`] = d.prior_paid_usd ?? '';
             row[`${key}::Incremental Eligible`] = d.this_month_usd ?? '';
@@ -330,7 +359,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
             row[`${key}::Collection`] = d.collection_usd ?? '';
             row[`${key}::Year-End`] = d.year_end_usd ?? '';
           } else {
-            for (const sub of SUB_LABELS) row[`${key}::${sub}`] = '';
+            for (const sub of subLabels) row[`${key}::${sub}`] = '';
           }
         }
         row.gt_incr = emp.allDetails.reduce((s: number, d: any) => s + (d.this_month_usd || 0), 0);

@@ -45,6 +45,11 @@ const formatOtePct = (allocated: number | null | undefined, targetBonus: number 
   return `${((allocated / targetBonus) * 100).toFixed(2)}%`;
 };
 
+const formatCommissionRate = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return '-';
+  return `${value.toFixed(2)}%`;
+};
+
 // Group ordering: known groups in display order, unknown types fall into "Other"
 const GROUP_CONFIG: { key: string; label: string; types: string[] }[] = [
   { key: 'vp', label: 'Variable Pay', types: ['variable_pay'] },
@@ -63,7 +68,6 @@ function groupRows(details: PayoutMetricDetailRow[]) {
     if (rows.length > 0) groups.push({ key: g.key, label: g.label, rows });
   }
 
-  // Catch-all for any new component_types not in the known list
   const otherRows = details.filter(d => !ALL_KNOWN_TYPES.includes(d.component_type));
   if (otherRows.length > 0) {
     groups.push({ key: 'other', label: 'Other', rows: otherRows });
@@ -72,18 +76,145 @@ function groupRows(details: PayoutMetricDetailRow[]) {
   return groups;
 }
 
-const COL_COUNT = 12;
+// Determine column layout based on the dominant component type in a group
+type ColumnLayout = 'variable_pay' | 'commission' | 'spiff';
 
-function SubtotalRow({ label, rows }: { label: string; rows: PayoutMetricDetailRow[] }) {
+function getColumnLayout(groupKey: string): ColumnLayout {
+  if (groupKey === 'comm') return 'commission';
+  if (groupKey === 'additional') return 'spiff'; // SPIFFs/NRR - we'll handle NRR specially
+  return 'variable_pay';
+}
+
+function getRowLayout(componentType: string): ColumnLayout {
+  if (componentType === 'commission') return 'commission';
+  if (componentType === 'spiff' || componentType === 'deal_team_spiff') return 'spiff';
+  return 'variable_pay';
+}
+
+// Column count per layout (excluding Metric column)
+const LAYOUT_COL_COUNT: Record<ColumnLayout, number> = {
+  variable_pay: 12, // Target, Actuals, Ach%, OTE%, Allocated OTE, Multiplier, YTD, Prior, Incr, Booking, Collection, YearEnd
+  commission: 8,    // Commission%, Actuals, YTD, Prior, Incr, Booking, Collection, YearEnd
+  spiff: 9,         // OTE%, Allocated OTE, Actuals, YTD, Prior, Incr, Booking, Collection, YearEnd
+};
+
+function GroupHeader({ layout }: { layout: ColumnLayout }) {
+  if (layout === 'commission') {
+    return (
+      <TableRow>
+        <TableHead>Metric</TableHead>
+        <TableHead className="text-right">Commission %</TableHead>
+        <TableHead className="text-right">Actuals (TCV)</TableHead>
+        <TableHead className="text-right">YTD Eligible</TableHead>
+        <TableHead className="text-right">Eligible Till Last Month</TableHead>
+        <TableHead className="text-right">Incremental Eligible</TableHead>
+        <TableHead className="text-right">Booking</TableHead>
+        <TableHead className="text-right">Collection</TableHead>
+        <TableHead className="text-right">Year-End</TableHead>
+      </TableRow>
+    );
+  }
+  if (layout === 'spiff') {
+    return (
+      <TableRow>
+        <TableHead>Metric</TableHead>
+        <TableHead className="text-right">OTE %</TableHead>
+        <TableHead className="text-right">Allocated OTE</TableHead>
+        <TableHead className="text-right">Actuals</TableHead>
+        <TableHead className="text-right">YTD Eligible</TableHead>
+        <TableHead className="text-right">Eligible Till Last Month</TableHead>
+        <TableHead className="text-right">Incremental Eligible</TableHead>
+        <TableHead className="text-right">Booking</TableHead>
+        <TableHead className="text-right">Collection</TableHead>
+        <TableHead className="text-right">Year-End</TableHead>
+      </TableRow>
+    );
+  }
+  return (
+    <TableRow>
+      <TableHead>Metric</TableHead>
+      <TableHead className="text-right">Target</TableHead>
+      <TableHead className="text-right">YTD Actuals</TableHead>
+      <TableHead className="text-right">Ach %</TableHead>
+      <TableHead className="text-right">OTE %</TableHead>
+      <TableHead className="text-right">Allocated OTE</TableHead>
+      <TableHead className="text-right">Multiplier</TableHead>
+      <TableHead className="text-right">YTD Eligible</TableHead>
+      <TableHead className="text-right">Eligible Till Last Month</TableHead>
+      <TableHead className="text-right">Incremental Eligible</TableHead>
+      <TableHead className="text-right">Booking</TableHead>
+      <TableHead className="text-right">Collection</TableHead>
+      <TableHead className="text-right">Year-End</TableHead>
+    </TableRow>
+  );
+}
+
+function DetailRow({ d }: { d: PayoutMetricDetailRow }) {
+  const layout = getRowLayout(d.component_type);
+  const cls = d.component_type === 'clawback' ? 'text-destructive' : '';
+
+  if (layout === 'commission') {
+    return (
+      <TableRow className={cls}>
+        <TableCell className="font-medium pl-6">{d.metric_name}</TableCell>
+        <TableCell className="text-right">{formatCommissionRate(d.commission_rate_pct)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.actual_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.ytd_eligible_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.prior_paid_usd)}</TableCell>
+        <TableCell className="text-right font-medium">{formatCurrency(d.this_month_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.booking_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.collection_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.year_end_usd)}</TableCell>
+      </TableRow>
+    );
+  }
+
+  if (layout === 'spiff') {
+    return (
+      <TableRow className={cls}>
+        <TableCell className="font-medium pl-6">{d.metric_name}</TableCell>
+        <TableCell className="text-right">{formatOtePct(d.allocated_ote_usd, d.target_bonus_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.allocated_ote_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.actual_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.ytd_eligible_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.prior_paid_usd)}</TableCell>
+        <TableCell className="text-right font-medium">{formatCurrency(d.this_month_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.booking_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.collection_usd)}</TableCell>
+        <TableCell className="text-right">{formatCurrency(d.year_end_usd)}</TableCell>
+      </TableRow>
+    );
+  }
+
+  // variable_pay / nrr / default
+  return (
+    <TableRow className={cls}>
+      <TableCell className="font-medium pl-6">{d.metric_name}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.target_usd)}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.actual_usd)}</TableCell>
+      <TableCell className="text-right">{formatPct(d.achievement_pct)}</TableCell>
+      <TableCell className="text-right">{formatOtePct(d.allocated_ote_usd, d.target_bonus_usd)}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.allocated_ote_usd)}</TableCell>
+      <TableCell className="text-right">{formatMultiplier(d.multiplier)}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.ytd_eligible_usd)}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.prior_paid_usd)}</TableCell>
+      <TableCell className="text-right font-medium">{formatCurrency(d.this_month_usd)}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.booking_usd)}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.collection_usd)}</TableCell>
+      <TableCell className="text-right">{formatCurrency(d.year_end_usd)}</TableCell>
+    </TableRow>
+  );
+}
+
+function SubtotalRow({ label, rows, layout }: { label: string; rows: PayoutMetricDetailRow[]; layout: ColumnLayout }) {
+  const colCount = LAYOUT_COL_COUNT[layout];
+  // Payout columns are always the last 6
+  const emptyBefore = colCount - 6;
+
   return (
     <TableRow className="bg-muted/50 font-semibold">
       <TableCell>{label} Subtotal</TableCell>
-      <TableCell />
-      <TableCell />
-      <TableCell />
-      <TableCell />
-      <TableCell className="text-right">{formatCurrency(rows.reduce((s, d) => s + d.allocated_ote_usd, 0))}</TableCell>
-      <TableCell />
+      {Array.from({ length: emptyBefore }, (_, i) => <TableCell key={i} />)}
       <TableCell className="text-right">{formatCurrency(rows.reduce((s, d) => s + d.ytd_eligible_usd, 0))}</TableCell>
       <TableCell className="text-right">{formatCurrency(rows.reduce((s, d) => s + d.prior_paid_usd, 0))}</TableCell>
       <TableCell className="text-right">{formatCurrency(rows.reduce((s, d) => s + d.this_month_usd, 0))}</TableCell>
@@ -98,80 +229,71 @@ function EmployeeWorkingsCard({ emp }: { emp: EmployeeWorkings }) {
   const groups = groupRows(emp.allDetails);
   const grandTotal = emp.allDetails.reduce((s, d) => s + d.this_month_usd, 0);
 
+  // Find the max column count across all groups for the grand total row
+  const maxColCount = Math.max(...groups.map(g => {
+    const layout = getGroupLayout(g);
+    return LAYOUT_COL_COUNT[layout];
+  }), 12);
+
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Metric</TableHead>
-            <TableHead className="text-right">Target</TableHead>
-            <TableHead className="text-right">YTD Actuals</TableHead>
-            <TableHead className="text-right">Ach %</TableHead>
-            <TableHead className="text-right">OTE %</TableHead>
-            <TableHead className="text-right">Allocated OTE</TableHead>
-            <TableHead className="text-right">Multiplier</TableHead>
-            <TableHead className="text-right">YTD Eligible</TableHead>
-            <TableHead className="text-right">Eligible Till Last Month</TableHead>
-            <TableHead className="text-right">Incremental Eligible</TableHead>
-            <TableHead className="text-right">Booking</TableHead>
-            <TableHead className="text-right">Collection</TableHead>
-            <TableHead className="text-right">Year-End</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {groups.map((group) => (
-            <>
-              {/* Group sub-header */}
-              <TableRow key={`header-${group.key}`} className="bg-muted/30">
-                <TableCell colSpan={COL_COUNT + 1} className="font-semibold text-xs uppercase tracking-wider text-muted-foreground py-2">
-                  {group.label}
-                </TableCell>
-              </TableRow>
-
-              {/* Detail rows */}
-              {group.rows.map((d) => (
-                <TableRow
-                  key={d.id}
-                  className={d.component_type === 'clawback' ? 'text-destructive' : ''}
-                >
-                  <TableCell className="font-medium pl-6">{d.metric_name}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.target_usd)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.actual_usd)}</TableCell>
-                  <TableCell className="text-right">{formatPct(d.achievement_pct)}</TableCell>
-                  <TableCell className="text-right">{formatOtePct(d.allocated_ote_usd, d.target_bonus_usd)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.allocated_ote_usd)}</TableCell>
-                  <TableCell className="text-right">{formatMultiplier(d.multiplier)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.ytd_eligible_usd)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.prior_paid_usd)}</TableCell>
-                  <TableCell className="text-right font-medium">{formatCurrency(d.this_month_usd)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.booking_usd)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.collection_usd)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(d.year_end_usd)}</TableCell>
+    <div className="space-y-4">
+      {groups.map((group) => {
+        const layout = getGroupLayout(group);
+        return (
+          <div key={group.key} className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead colSpan={LAYOUT_COL_COUNT[layout] + 1} className="font-semibold text-xs uppercase tracking-wider text-muted-foreground py-2">
+                    {group.label}
+                  </TableHead>
                 </TableRow>
-              ))}
+                <GroupHeader layout={layout} />
+              </TableHeader>
+              <TableBody>
+                {group.rows.map((d) => (
+                  <DetailRow key={d.id} d={d} />
+                ))}
+                {group.rows.length > 1 && (
+                  <SubtotalRow label={group.label} rows={group.rows} layout={layout} />
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        );
+      })}
 
-              {/* Subtotal row if group has multiple rows */}
-              {group.rows.length > 1 && (
-                <SubtotalRow key={`sub-${group.key}`} label={group.label} rows={group.rows} />
-              )}
-            </>
-          ))}
-
-          {/* Grand Total */}
-          <TableRow className="bg-muted/50 font-semibold border-t-2">
-            <TableCell>Grand Total</TableCell>
-            <TableCell colSpan={8} />
-            <TableCell className="text-right text-emerald-700 dark:text-emerald-400">
-              {formatCurrency(grandTotal)}
-            </TableCell>
-            <TableCell className="text-right">{formatCurrency(emp.allDetails.reduce((s, d) => s + d.booking_usd, 0))}</TableCell>
-            <TableCell className="text-right">{formatCurrency(emp.allDetails.reduce((s, d) => s + d.collection_usd, 0))}</TableCell>
-            <TableCell className="text-right">{formatCurrency(emp.allDetails.reduce((s, d) => s + d.year_end_usd, 0))}</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+      {/* Grand Total */}
+      <div className="overflow-x-auto">
+        <Table>
+          <TableBody>
+            <TableRow className="bg-muted/50 font-semibold border-t-2">
+              <TableCell>Grand Total</TableCell>
+              <TableCell className="text-right text-emerald-700 dark:text-emerald-400">
+                Incr Eligible: {formatCurrency(grandTotal)}
+              </TableCell>
+              <TableCell className="text-right">Booking: {formatCurrency(emp.allDetails.reduce((s, d) => s + d.booking_usd, 0))}</TableCell>
+              <TableCell className="text-right">Collection: {formatCurrency(emp.allDetails.reduce((s, d) => s + d.collection_usd, 0))}</TableCell>
+              <TableCell className="text-right">Year-End: {formatCurrency(emp.allDetails.reduce((s, d) => s + d.year_end_usd, 0))}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
+}
+
+function getGroupLayout(group: { key: string; rows: PayoutMetricDetailRow[] }): ColumnLayout {
+  // For 'additional' group, NRR uses variable_pay layout but spiff uses spiff layout
+  // Use the dominant type in the group
+  if (group.key === 'comm') return 'commission';
+  if (group.key === 'additional') {
+    // If any NRR rows, use variable_pay; if only spiffs, use spiff
+    const hasNrr = group.rows.some(r => r.component_type === 'nrr');
+    if (hasNrr) return 'variable_pay';
+    return 'spiff';
+  }
+  return 'variable_pay';
 }
 
 export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {

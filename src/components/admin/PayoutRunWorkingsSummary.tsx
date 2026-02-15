@@ -19,23 +19,6 @@ const GROUP_ORDER: Record<string, number> = {
   clawback: 7,
 };
 
-const SUB_COLS = [
-  "Target",
-  "Actuals",
-  "Ach %",
-  "OTE %",
-  "Allocated OTE",
-  "Multiplier",
-  "YTD Eligible",
-  "Elig Last Mo",
-  "Incr Eligible",
-  "Booking",
-  "Collection",
-  "Year-End",
-] as const;
-
-const SUB_COL_COUNT = SUB_COLS.length;
-
 const formatCurrency = (value: number | null | undefined) => {
   if (value === null || value === undefined) return "-";
   const abs = Math.abs(value);
@@ -58,9 +41,62 @@ const formatOtePct = (allocated: number | null | undefined, targetBonus: number 
   return `${((allocated / targetBonus) * 100).toFixed(2)}%`;
 };
 
+const formatCommissionRate = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return "-";
+  return `${value.toFixed(2)}%`;
+};
+
+// Sub-column definitions per component type
+type SubColDef = { key: string; label: string };
+
+const VP_SUB_COLS: SubColDef[] = [
+  { key: "tgt", label: "Target" },
+  { key: "act", label: "Actuals" },
+  { key: "ach", label: "Ach %" },
+  { key: "ote", label: "OTE %" },
+  { key: "alloc", label: "Allocated OTE" },
+  { key: "mult", label: "Multiplier" },
+  { key: "ytd", label: "YTD Eligible" },
+  { key: "prior", label: "Elig Last Mo" },
+  { key: "incr", label: "Incr Eligible" },
+  { key: "bkg", label: "Booking" },
+  { key: "coll", label: "Collection" },
+  { key: "ye", label: "Year-End" },
+];
+
+const COMM_SUB_COLS: SubColDef[] = [
+  { key: "rate", label: "Commission %" },
+  { key: "act", label: "Actuals (TCV)" },
+  { key: "ytd", label: "YTD Eligible" },
+  { key: "prior", label: "Elig Last Mo" },
+  { key: "incr", label: "Incr Eligible" },
+  { key: "bkg", label: "Booking" },
+  { key: "coll", label: "Collection" },
+  { key: "ye", label: "Year-End" },
+];
+
+const SPIFF_SUB_COLS: SubColDef[] = [
+  { key: "ote", label: "OTE %" },
+  { key: "alloc", label: "Allocated OTE" },
+  { key: "act", label: "Actuals" },
+  { key: "ytd", label: "YTD Eligible" },
+  { key: "prior", label: "Elig Last Mo" },
+  { key: "incr", label: "Incr Eligible" },
+  { key: "bkg", label: "Booking" },
+  { key: "coll", label: "Collection" },
+  { key: "ye", label: "Year-End" },
+];
+
+function getSubCols(componentType: string): SubColDef[] {
+  if (componentType === 'commission') return COMM_SUB_COLS;
+  if (componentType === 'spiff' || componentType === 'deal_team_spiff') return SPIFF_SUB_COLS;
+  return VP_SUB_COLS;
+}
+
 interface MetricColumn {
   metricName: string;
   componentType: string;
+  subCols: SubColDef[];
 }
 
 function discoverMetrics(employees: EmployeeWorkings[]): MetricColumn[] {
@@ -69,7 +105,11 @@ function discoverMetrics(employees: EmployeeWorkings[]): MetricColumn[] {
     for (const d of emp.allDetails) {
       const key = `${d.component_type}::${d.metric_name}`;
       if (!seen.has(key)) {
-        seen.set(key, { metricName: d.metric_name, componentType: d.component_type });
+        seen.set(key, {
+          metricName: d.metric_name,
+          componentType: d.component_type,
+          subCols: getSubCols(d.component_type),
+        });
       }
     }
   }
@@ -81,26 +121,31 @@ function discoverMetrics(employees: EmployeeWorkings[]): MetricColumn[] {
   });
 }
 
-function renderSubCells(d: PayoutMetricDetailRow | undefined) {
+function renderSubCells(d: PayoutMetricDetailRow | undefined, subCols: SubColDef[]) {
   if (!d) {
-    return Array.from({ length: SUB_COL_COUNT }, (_, i) => (
+    return subCols.map((sc, i) => (
       <TableCell key={i} className="text-right text-muted-foreground">-</TableCell>
     ));
   }
-  return [
-    <TableCell key="tgt" className="text-right">{formatCurrency(d.target_usd)}</TableCell>,
-    <TableCell key="act" className="text-right">{formatCurrency(d.actual_usd)}</TableCell>,
-    <TableCell key="ach" className="text-right">{formatPct(d.achievement_pct)}</TableCell>,
-    <TableCell key="ote" className="text-right">{formatOtePct(d.allocated_ote_usd, d.target_bonus_usd)}</TableCell>,
-    <TableCell key="alloc" className="text-right">{formatCurrency(d.allocated_ote_usd)}</TableCell>,
-    <TableCell key="mult" className="text-right">{formatMultiplier(d.multiplier)}</TableCell>,
-    <TableCell key="ytd" className="text-right">{formatCurrency(d.ytd_eligible_usd)}</TableCell>,
-    <TableCell key="prior" className="text-right">{formatCurrency(d.prior_paid_usd)}</TableCell>,
-    <TableCell key="incr" className="text-right font-medium">{formatCurrency(d.this_month_usd)}</TableCell>,
-    <TableCell key="bkg" className="text-right">{formatCurrency(d.booking_usd)}</TableCell>,
-    <TableCell key="coll" className="text-right">{formatCurrency(d.collection_usd)}</TableCell>,
-    <TableCell key="ye" className="text-right">{formatCurrency(d.year_end_usd)}</TableCell>,
-  ];
+
+  return subCols.map((sc) => {
+    switch (sc.key) {
+      case "tgt": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.target_usd)}</TableCell>;
+      case "act": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.actual_usd)}</TableCell>;
+      case "ach": return <TableCell key={sc.key} className="text-right">{formatPct(d.achievement_pct)}</TableCell>;
+      case "ote": return <TableCell key={sc.key} className="text-right">{formatOtePct(d.allocated_ote_usd, d.target_bonus_usd)}</TableCell>;
+      case "alloc": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.allocated_ote_usd)}</TableCell>;
+      case "mult": return <TableCell key={sc.key} className="text-right">{formatMultiplier(d.multiplier)}</TableCell>;
+      case "rate": return <TableCell key={sc.key} className="text-right">{formatCommissionRate(d.commission_rate_pct)}</TableCell>;
+      case "ytd": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.ytd_eligible_usd)}</TableCell>;
+      case "prior": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.prior_paid_usd)}</TableCell>;
+      case "incr": return <TableCell key={sc.key} className="text-right font-medium">{formatCurrency(d.this_month_usd)}</TableCell>;
+      case "bkg": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.booking_usd)}</TableCell>;
+      case "coll": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.collection_usd)}</TableCell>;
+      case "ye": return <TableCell key={sc.key} className="text-right">{formatCurrency(d.year_end_usd)}</TableCell>;
+      default: return <TableCell key={sc.key} className="text-right">-</TableCell>;
+    }
+  });
 }
 
 interface Props {
@@ -120,7 +165,6 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
     pivots.set(emp.employeeId, m);
   }
 
-  const FIXED_COLS = 4; // Code, Name, Plan, Ccy
   const GRAND_TOTAL_COLS = 4; // Incr Elig, Booking, Collection, Year-End
 
   return (
@@ -136,7 +180,7 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
             {metrics.map((mc) => (
               <TableHead
                 key={`${mc.componentType}::${mc.metricName}`}
-                colSpan={SUB_COL_COUNT}
+                colSpan={mc.subCols.length}
                 className="text-center border-l bg-muted/30 text-xs uppercase tracking-wider"
               >
                 {mc.metricName}
@@ -149,12 +193,12 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
           {/* Sub-header row: field labels */}
           <TableRow>
             {metrics.map((mc) =>
-              SUB_COLS.map((label) => (
+              mc.subCols.map((sc) => (
                 <TableHead
-                  key={`${mc.componentType}::${mc.metricName}::${label}`}
+                  key={`${mc.componentType}::${mc.metricName}::${sc.key}`}
                   className="text-right text-xs whitespace-nowrap min-w-[100px]"
                 >
-                  {label}
+                  {sc.label}
                 </TableHead>
               ))
             )}
@@ -180,7 +224,7 @@ export function PayoutRunWorkingsSummary({ employees }: Props) {
                 <TableCell className="text-xs">{emp.localCurrency}</TableCell>
                 {metrics.map((mc) => {
                   const key = `${mc.componentType}::${mc.metricName}`;
-                  return renderSubCells(empPivot.get(key));
+                  return renderSubCells(empPivot.get(key), mc.subCols);
                 })}
                 <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400 border-l">
                   {formatCurrency(grandIncr)}

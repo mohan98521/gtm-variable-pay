@@ -1,0 +1,1 @@
+ALTER TABLE public.payout_metric_details ADD COLUMN commission_rate_pct numeric NULL;

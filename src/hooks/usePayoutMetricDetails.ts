@@ -21,6 +21,7 @@ export interface PayoutMetricDetailRow {
   booking_usd: number;
   collection_usd: number;
   year_end_usd: number;
+  commission_rate_pct: number | null;
   notes: string | null;
   created_at: string;
   // Joined employee data
