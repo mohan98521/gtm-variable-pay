@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Settings, FileSpreadsheet, LogOut, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, Settings, FileSpreadsheet, LogOut, BarChart3, PieChart } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +44,12 @@ const navigation: NavItem[] = [
     href: "/data-inputs", 
     icon: FileSpreadsheet,
     permissionKey: "page:data_inputs"
+  },
+  { 
+    name: "Executive", 
+    href: "/executive", 
+    icon: PieChart,
+    permissionKey: "page:executive_dashboard"
   },
 ];
 

@@ -7,6 +7,7 @@ export type PermissionKey =
   | "page:plan_config"
   | "page:reports"
   | "page:data_inputs"
+  | "page:executive_dashboard"
   // Admin Tabs
   | "tab:employee_accounts"
   | "tab:bulk_upload"
@@ -51,6 +52,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "page:plan_config", label: "Plan Config", description: "Access to plan configuration (Admin page)", category: "page" },
   { key: "page:reports", label: "Reports", description: "Access to reports and analytics", category: "page" },
   { key: "page:data_inputs", label: "Data Inputs", description: "Manage actuals and exchange rates", category: "page" },
+  { key: "page:executive_dashboard", label: "Executive Dashboard", description: "Access executive compensation overview", category: "page" },
   
   // Admin Tabs
   { key: "tab:comp_plans", label: "Compensation Plans", description: "View compensation plans tab", category: "tab" },
@@ -100,4 +102,5 @@ export const PAGE_PERMISSION_MAP: Record<string, PermissionKey> = {
   "/admin": "page:plan_config",
   "/reports": "page:reports",
   "/data-inputs": "page:data_inputs",
+  "/executive": "page:executive_dashboard",
 };
