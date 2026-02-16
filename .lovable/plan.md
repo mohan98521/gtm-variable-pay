@@ -1,52 +1,50 @@
 
 
-## Show Eligible Payout (Not Actual Paid) in Trend Chart
+## Reorder Plan Builder Sections
 
 ### What Changes
 
-The Payout Trend chart currently sums ALL payout records including Collection Releases, Year-End Releases, and Clawbacks. This mixes the "eligible/earned" amount with later cash disbursement events, leading to double-counting or distorted monthly figures.
+Rearrange the section cards in `src/pages/PlanBuilder.tsx` to match the requested order. This is a cosmetic change only — no logic, data, or component changes.
 
-The fix filters payout records to only include **core earning types** whose `calculated_amount_usd` represents the full eligible (gross earned) amount:
-- Variable Pay
-- Commission types (Managed Services, Perpetual License, CR/ER, Implementation)
-- NRR Additional Pay
-- SPIFF
-- Deal Team SPIFF
+### Current Order (in the JSX)
+1. Plan Overview cards (stats)
+2. Plan Metrics table
+3. Multiplier Grids (accordion)
+4. Payout Settings
+5. Commission Structure
+6. NRR Settings
+7. SPIFFs
+8. Closing ARR Renewal Multipliers
+9. Assigned Employees
 
-Records of type `Collection Release`, `Year-End Release`, and `Clawback` will be excluded from the chart, North Star total, and cumulative YTD line.
+### New Order
+1. Plan Overview cards (stats) -- unchanged
+2. Plan Metrics table
+3. Multiplier Grids (accordion)
+4. Closing ARR Renewal Multipliers -- moved up
+5. Commission Structure -- moved up
+6. SPIFFs -- stays roughly same
+7. Payout Settings -- moved down (plan-level settings, not a "structure" table)
+8. NRR Settings -- moved down alongside Payout Settings
+9. Assigned Employees -- stays last
+
+Note: Payout Settings and NRR Settings are plan-level configuration cards, not separate DB tables in the requested list. They will be placed after the core structure sections. The "user_targets / performance_targets / quarterly_targets" are represented by the Assigned Employees card which already links to target management. That section stays last.
 
 ### Technical Details
 
-**File: `src/hooks/useExecutiveDashboard.ts`**
+**File: `src/pages/PlanBuilder.tsx`**
 
-1. Define excluded payout types at the top of the `useMemo`:
-   ```
-   const excludedTypes = new Set(['Collection Release', 'Year-End Release', 'Clawback']);
-   ```
+Reorder the JSX blocks (move closing tags and opening tags) in the return statement. The components and their props remain identical — only their position in the JSX tree changes.
 
-2. Create a filtered list of "eligible only" payouts:
-   ```
-   const eligiblePayouts = payouts.filter(p => !excludedTypes.has(p.payout_type));
-   ```
-
-3. Replace all references to `payouts` with `eligiblePayouts` for:
-   - `totalPayoutYtd` calculation
-   - `activePayeeSet` (eligible employees count)
-   - Monthly trend aggregation
-   - Payout by function breakdown
-   - Per-employee total payout map (top performers)
-
-4. Add cumulative YTD to the `MonthlyTrend` interface:
-   - Add `cumulativePayout: number` field
-   - After building monthly totals, iterate chronologically and compute running sum
-
-**File: `src/components/executive/PayoutTrendChart.tsx`**
-
-- Add a second `Line` series on the left Y-axis for `cumulativePayout`
-- Use a distinct dashed stroke with a warm color (amber/orange) to differentiate from the attainment line
-- Update Legend and Tooltip formatters for the new series
+New JSX order after the stats cards and weightage warning:
+1. Metrics Card (unchanged)
+2. Multiplier Grids Card (unchanged)
+3. `<ClosingArrRenewalMultiplierEditor>` (moved from position 8 to 3)
+4. `<PlanCommissionEditor>` (moved from position 5 to 4)
+5. `<SpiffEditor>` (moved from position 7 to 5)
+6. `<PayoutSettingsCard>` (moved from position 4 to 6)
+7. `<NrrSettingsCard>` (moved from position 6 to 7)
+8. `<AssignedEmployeesCard>` (stays last)
 
 ### Files Modified
-- `src/hooks/useExecutiveDashboard.ts` -- filter to eligible-only payouts, add cumulative YTD
-- `src/components/executive/PayoutTrendChart.tsx` -- add cumulative YTD line
-
+- `src/pages/PlanBuilder.tsx` -- reorder section blocks only
