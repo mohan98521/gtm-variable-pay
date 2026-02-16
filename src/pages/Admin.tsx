@@ -115,9 +115,9 @@ export default function Admin() {
       .filter((section) => section.items.length > 0);
   }, [permCtx]);
 
-  const defaultSectionId = visibleSections[0]?.id || "compensation";
+  const defaultSectionId = visibleSections[0]?.id || "people";
   const [activeSection, setActiveSection] = useState(defaultSectionId);
-  const [activeItem, setActiveItem] = useState(visibleSections[0]?.items[0]?.id || "plans");
+  const [activeItem, setActiveItem] = useState(visibleSections[0]?.items[0]?.id || "accounts");
 
   // Resolve active section & item
   const resolvedSection = visibleSections.find((s) => s.id === activeSection) || visibleSections[0];
@@ -125,7 +125,7 @@ export default function Admin() {
     () => visibleSections.flatMap((s) => s.items.map((i) => i.id)),
     [visibleSections]
   );
-  const resolvedActiveItem = allVisibleIds.includes(activeItem) ? activeItem : resolvedSection?.items[0]?.id || "plans";
+  const resolvedActiveItem = allVisibleIds.includes(activeItem) ? activeItem : resolvedSection?.items[0]?.id || "accounts";
 
   const handleSectionClick = (sectionId: string) => {
     setActiveSection(sectionId);
