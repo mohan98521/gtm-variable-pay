@@ -484,7 +484,7 @@ export function EmployeeFormDialog({
                       <FormItem>
                         <FormLabel>Email *</FormLabel>
                         <FormControl>
-                          <Input placeholder="john.doe@azentio.com" type="email" {...field} />
+                          <Input placeholder="john.doe@company.com" type="email" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

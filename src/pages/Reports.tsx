@@ -468,28 +468,28 @@ export default function Reports() {
           {/* Personal Reports */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Personal Reports</p>
-            <TabsList className="bg-[hsl(var(--azentio-navy))] text-white flex-wrap h-auto gap-1 p-1">
-              <TabsTrigger value="employees" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+            <TabsList className="bg-[hsl(var(--qota-navy))] text-white flex-wrap h-auto gap-1 p-1">
+              <TabsTrigger value="employees" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <Users className="mr-2 h-4 w-4" />
                 Employee Master
               </TabsTrigger>
-              <TabsTrigger value="compensation" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <TabsTrigger value="compensation" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <DollarSign className="mr-2 h-4 w-4" />
                 Compensation
               </TabsTrigger>
-              <TabsTrigger value="audit" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <TabsTrigger value="audit" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <Calculator className="mr-2 h-4 w-4" />
                 Incentive Audit
               </TabsTrigger>
-              <TabsTrigger value="my-deals" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <TabsTrigger value="my-deals" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <Briefcase className="mr-2 h-4 w-4" />
                 My Deals
               </TabsTrigger>
-              <TabsTrigger value="my-closing-arr" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <TabsTrigger value="my-closing-arr" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <Database className="mr-2 h-4 w-4" />
                 My Closing ARR
               </TabsTrigger>
-              <TabsTrigger value="payout-statement" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <TabsTrigger value="payout-statement" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <Receipt className="mr-2 h-4 w-4" />
                 Payout Statement
               </TabsTrigger>
@@ -500,20 +500,20 @@ export default function Reports() {
           {canViewAllData() && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Management Reports</p>
-              <TabsList className="bg-[hsl(var(--azentio-navy))] text-white flex-wrap h-auto gap-1 p-1">
-                <TabsTrigger value="mgmt-summary" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+              <TabsList className="bg-[hsl(var(--qota-navy))] text-white flex-wrap h-auto gap-1 p-1">
+                <TabsTrigger value="mgmt-summary" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                   <BarChart3 className="mr-2 h-4 w-4" />
                   Mgmt Summary
                 </TabsTrigger>
-                <TabsTrigger value="currency" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <TabsTrigger value="currency" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                   <Globe className="mr-2 h-4 w-4" />
                   Currency
                 </TabsTrigger>
-                <TabsTrigger value="holdbacks" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <TabsTrigger value="holdbacks" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                   <Wallet className="mr-2 h-4 w-4" />
                   Holdbacks
                 </TabsTrigger>
-                <TabsTrigger value="audit-trail" className="data-[state=active]:bg-[hsl(var(--azentio-teal))] data-[state=active]:text-white">
+                <TabsTrigger value="audit-trail" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                   <FileText className="mr-2 h-4 w-4" />
                   Audit Trail
                 </TabsTrigger>

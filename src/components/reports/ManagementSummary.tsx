@@ -102,7 +102,7 @@ export function ManagementSummary() {
           <h2 className="text-xl font-semibold">Management Summary - FY{selectedYear}</h2>
           <p className="text-muted-foreground">Aggregated payout overview in USD</p>
         </div>
-        <Button onClick={handleExport} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+        <Button onClick={handleExport} className="bg-[hsl(var(--qota-teal))] hover:bg-[hsl(var(--qota-teal))]/90">
           <Download className="mr-2 h-4 w-4" />
           Export XLSX
         </Button>
@@ -113,7 +113,7 @@ export function ManagementSummary() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Variable Pay</CardDescription>
-            <CardTitle className="text-xl text-[hsl(var(--azentio-teal))]">
+            <CardTitle className="text-xl text-[hsl(var(--qota-teal))]">
               {formatCurrency(data.annualTotals.vpUsd)}
             </CardTitle>
           </CardHeader>
@@ -128,7 +128,7 @@ export function ManagementSummary() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Commissions</CardDescription>
-            <CardTitle className="text-xl text-[hsl(var(--azentio-navy))]">
+            <CardTitle className="text-xl text-[hsl(var(--qota-navy))]">
               {formatCurrency(data.annualTotals.commUsd)}
             </CardTitle>
           </CardHeader>
@@ -185,7 +185,7 @@ export function ManagementSummary() {
           </CardContent>
         </Card>
         
-        <Card className="bg-[hsl(var(--azentio-navy))] text-white">
+        <Card className="bg-[hsl(var(--qota-navy))] text-white">
           <CardHeader className="pb-2">
             <CardDescription className="text-white/70">Net Payout</CardDescription>
             <CardTitle className="text-xl">
@@ -209,7 +209,7 @@ export function ManagementSummary() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow className="bg-[hsl(var(--azentio-navy))]">
+              <TableRow className="bg-[hsl(var(--qota-navy))]">
                 <TableHead className="text-white">Quarter</TableHead>
                 <TableHead className="text-white text-right">Variable Pay</TableHead>
                 <TableHead className="text-white text-right">Commissions</TableHead>
@@ -247,7 +247,7 @@ export function ManagementSummary() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow className="bg-[hsl(var(--azentio-navy))]">
+              <TableRow className="bg-[hsl(var(--qota-navy))]">
                 <TableHead className="text-white">Function</TableHead>
                 <TableHead className="text-white text-right">Headcount</TableHead>
                 <TableHead className="text-white text-right">Variable Pay</TableHead>
@@ -264,7 +264,7 @@ export function ManagementSummary() {
                   <TableCell className="text-right">{formatCurrency(f.vpUsd)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(f.commUsd)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(f.additionalPayUsd)}</TableCell>
-                  <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                  <TableCell className="text-right font-semibold text-[hsl(var(--qota-teal))]">
                     {formatCurrency(f.avgPerHead)}
                   </TableCell>
                 </TableRow>

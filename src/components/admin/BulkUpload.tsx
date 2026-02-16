@@ -334,7 +334,7 @@ export function BulkUpload() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
+            <FileSpreadsheet className="h-5 w-5 text-[hsl(var(--qota-teal))]" />
             Employee Data Management - Bulk Upload
           </CardTitle>
         <CardDescription>
@@ -358,7 +358,7 @@ export function BulkUpload() {
           <Button 
             onClick={generateTemplate} 
             variant="outline"
-            className="border-[hsl(var(--azentio-navy))] text-[hsl(var(--azentio-navy))] hover:bg-[hsl(var(--azentio-navy))]/10"
+            className="border-[hsl(var(--qota-navy))] text-[hsl(var(--qota-navy))] hover:bg-[hsl(var(--qota-navy))]/10"
           >
             <Download className="mr-2 h-4 w-4" />
             Download Template
@@ -368,14 +368,14 @@ export function BulkUpload() {
             {...getRootProps()}
             className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
               isDragActive
-                ? "border-[hsl(var(--azentio-teal))] bg-[hsl(var(--azentio-teal))]/5"
-                : "border-muted-foreground/25 hover:border-[hsl(var(--azentio-teal))]/50"
+                ? "border-[hsl(var(--qota-teal))] bg-[hsl(var(--qota-teal))]/5"
+                : "border-muted-foreground/25 hover:border-[hsl(var(--qota-teal))]/50"
             } ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <input {...getInputProps()} />
             <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             {isDragActive ? (
-              <p className="text-[hsl(var(--azentio-teal))] font-medium">Drop the CSV file here...</p>
+              <p className="text-[hsl(var(--qota-teal))] font-medium">Drop the CSV file here...</p>
             ) : (
               <div>
                 <p className="font-medium mb-1">Drag & drop a CSV file here</p>

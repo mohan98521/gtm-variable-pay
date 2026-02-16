@@ -15,7 +15,7 @@ import {
 import { Mail, Lock, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { AzentioLogo } from "@/components/AzentioLogo";
+import { QotaLogo } from "@/components/QotaLogo";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -199,7 +199,7 @@ export default function Auth() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center space-y-4 text-center">
-          <AzentioLogo variant="dark" size="lg" />
+          <QotaLogo variant="dark" size="lg" />
           <div>
             <h1 className="text-xl font-semibold text-foreground">Variable Pay Management</h1>
             <p className="text-muted-foreground text-sm mt-1">Sales Compensation Portal</p>
@@ -223,7 +223,7 @@ export default function Auth() {
                   <Input
                     id="signin-email"
                     type="email"
-                    placeholder="EmployeeID@azentio.com"
+                    placeholder="you@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"

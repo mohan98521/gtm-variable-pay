@@ -152,7 +152,7 @@ export function AuditTrailExport() {
             Comprehensive system activity log with rate tracking
           </p>
         </div>
-        <Button onClick={handleExport} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+        <Button onClick={handleExport} className="bg-[hsl(var(--qota-teal))] hover:bg-[hsl(var(--qota-teal))]/90">
           <Download className="mr-2 h-4 w-4" />
           Export Full Trail
         </Button>
@@ -221,7 +221,7 @@ export function AuditTrailExport() {
           <ScrollArea className="w-full whitespace-nowrap">
             <Table>
               <TableHeader>
-                <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                <TableRow className="bg-[hsl(var(--qota-navy))]">
                   <TableHead className="text-white">Timestamp</TableHead>
                   <TableHead className="text-white">Event</TableHead>
                   <TableHead className="text-white">Category</TableHead>

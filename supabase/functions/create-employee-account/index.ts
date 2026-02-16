@@ -73,14 +73,6 @@ serve(async (req) => {
 
     console.log(`Creating account for employee: ${employee_id} (${email})`);
 
-    // Validate email domain
-    if (!email.toLowerCase().endsWith('@azentio.com')) {
-      console.error('Invalid email domain:', email);
-      return new Response(
-        JSON.stringify({ error: 'Only @azentio.com emails are allowed' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     // Check if employee exists and doesn't already have an auth account
     const { data: employee, error: empError } = await supabaseAdmin
