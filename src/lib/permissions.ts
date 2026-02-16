@@ -20,6 +20,7 @@ export type PermissionKey =
   | "tab:exchange_rates"
   | "tab:deal_team_spiffs"
   | "tab:support_teams"
+  | "tab:sales_functions"
   // Actions
   | "action:create_comp_plan"
   | "action:edit_comp_plan"
@@ -67,6 +68,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "tab:deal_team_spiffs", label: "Deal Team SPIFFs", description: "Access the Deal Team SPIFF management section", category: "tab" },
   { key: "tab:support_teams", label: "Support Teams", description: "Manage support team attribution for GTM roles", category: "tab" },
   { key: "tab:fnf_settlements", label: "F&F Settlements", description: "Manage Full & Final settlements for departed employees", category: "tab" },
+  { key: "tab:sales_functions", label: "Sales Functions", description: "Manage configurable sales function list", category: "tab" },
   
   // Actions
   { key: "action:create_comp_plan", label: "Create Comp Plan", description: "Create new compensation plans", category: "action" },

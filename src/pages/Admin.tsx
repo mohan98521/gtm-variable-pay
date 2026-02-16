@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 // Card import removed — no longer needed
 import { cn } from "@/lib/utils";
-import { Layers, Users, UserCog, Shield, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, UsersRound, UserMinus, type LucideIcon } from "lucide-react";
+import { Layers, Users, UserCog, Shield, Target, DollarSign, Calculator, Lock, Settings, UserPlus, Gift, UsersRound, UserMinus, Briefcase, type LucideIcon } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePermissions } from "@/hooks/usePermissions";
 import { CompensationPlansTab } from "@/components/admin/CompensationPlansTab";
@@ -17,6 +17,7 @@ import { RoleBuilder } from "@/components/admin/RoleBuilder";
 import { DealTeamSpiffManager } from "@/components/admin/DealTeamSpiffManager";
 import { SupportTeamManagement } from "@/components/admin/SupportTeamManagement";
 import { FnFSettlementManagement } from "@/components/admin/FnFSettlementManagement";
+import { SalesFunctionsManagement } from "@/components/admin/SalesFunctionsManagement";
 
 // --- Section / Item types ---
 interface NavItem {
@@ -76,6 +77,7 @@ const sections: NavSection[] = [
     icon: Settings,
     items: [
       { id: "roles-builder", label: "Roles", icon: UserPlus, permissionCheck: (c) => c.canAccessTab("tab:roles") },
+      { id: "sales-functions", label: "Sales Functions", icon: Briefcase, permissionCheck: (c) => c.canAccessTab("tab:sales_functions") },
       { id: "permissions", label: "Permissions", icon: Lock, permissionCheck: (c) => c.isAdmin() },
     ],
   },
@@ -95,6 +97,7 @@ const contentMap: Record<string, React.ComponentType> = {
   "deal-team-spiffs": DealTeamSpiffManager,
   "permissions": PermissionsManagement,
   "roles-builder": RoleBuilder,
+  "sales-functions": SalesFunctionsManagement,
 };
 
 export default function Admin() {

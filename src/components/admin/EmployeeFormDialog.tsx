@@ -42,27 +42,7 @@ import { logEmployeeChange } from "@/lib/auditLogger";
 import { useSplitAssignment } from "@/hooks/usePlanAssignments";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-const SALES_FUNCTIONS = [
-  "Farmer",
-  "Hunter",
-  "CSM",
-  "Channel Sales",
-  "Sales Engineering",
-  "Sales Head - Farmer",
-  "Sales Head - Hunter",
-  "Farmer - Retain",
-  "IMAL Product SE",
-  "Insurance Product SE",
-  "APAC Regional SE",
-  "MEA Regional SE",
-  "Sales Engineering - Head",
-  "Team Lead",
-  "Team Lead - Farmer",
-  "Team Lead - Hunter",
-  "Overlay",
-  "Executive",
-] as const;
+import { useSalesFunctions } from "@/hooks/useSalesFunctions";
 
 // Full 26-field schema matching bulk upload
 const employeeFormSchema = z.object({
@@ -146,6 +126,7 @@ export function EmployeeFormDialog({
 }: EmployeeFormDialogProps) {
   const isEditing = !!employee;
   const { currencyCodeOptions } = useCurrencies();
+  const { salesFunctions: salesFunctionsList } = useSalesFunctions();
   const logChange = useLogEmployeeChange();
   const splitAssignment = useSplitAssignment();
 
@@ -631,9 +612,9 @@ export function EmployeeFormDialog({
                           <SearchableSelect
                             value={field.value || ""}
                             onValueChange={field.onChange}
-                            options={SALES_FUNCTIONS.map((func) => ({
-                              value: func,
-                              label: func,
+                            options={salesFunctionsList.map((func) => ({
+                              value: func.name,
+                              label: func.name,
                             }))}
                             placeholder="Select sales function"
                             searchPlaceholder="Search functions..."
