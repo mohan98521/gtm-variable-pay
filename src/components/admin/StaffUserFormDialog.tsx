@@ -40,10 +40,7 @@ const staffUserSchema = z.object({
     .string()
     .trim()
     .email("Invalid email address")
-    .max(255)
-    .refine((v) => v.toLowerCase().endsWith("@azentio.com"), {
-      message: "Only @azentio.com emails are allowed",
-    }),
+    .max(255),
   role: z.string().min(1, "Role is required"),
 });
 
@@ -183,7 +180,7 @@ export function StaffUserFormDialog({ open, onOpenChange }: StaffUserFormDialogP
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="name@azentio.com" type="email" {...field} />
+                    <Input placeholder="name@company.com" type="email" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

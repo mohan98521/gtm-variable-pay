@@ -90,7 +90,7 @@ export function YearEndHoldbackTracker() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Total Accumulated</CardDescription>
-            <CardTitle className="text-2xl text-[hsl(var(--azentio-teal))]">
+            <CardTitle className="text-2xl text-[hsl(var(--qota-teal))]">
               {formatCurrency(summary?.totalHoldbackUsd || 0)}
             </CardTitle>
           </CardHeader>
@@ -130,7 +130,7 @@ export function YearEndHoldbackTracker() {
           </CardContent>
         </Card>
         
-        <Card className="bg-[hsl(var(--azentio-navy))] text-white">
+        <Card className="bg-[hsl(var(--qota-navy))] text-white">
           <CardHeader className="pb-2">
             <CardDescription className="text-white/70">Release Date</CardDescription>
             <CardTitle className="text-xl flex items-center gap-2">
@@ -162,7 +162,7 @@ export function YearEndHoldbackTracker() {
           <ScrollArea className="w-full whitespace-nowrap">
             <Table>
               <TableHeader>
-                <TableRow className="bg-[hsl(var(--azentio-navy))]">
+                <TableRow className="bg-[hsl(var(--qota-navy))]">
                   <TableHead className="text-white">Employee</TableHead>
                   <TableHead className="text-white">Currency</TableHead>
                   <TableHead className="text-white text-right">Comp Rate</TableHead>
@@ -183,7 +183,7 @@ export function YearEndHoldbackTracker() {
                     <TableCell className="text-right">
                       {getCurrencySymbol(emp.localCurrency)}{emp.commHoldbackLocal.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                    <TableCell className="text-right font-semibold text-[hsl(var(--qota-teal))]">
                       {formatCurrency(emp.totalHoldbackUsd)}
                     </TableCell>
                   </TableRow>
@@ -213,7 +213,7 @@ export function YearEndHoldbackTracker() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow className="bg-[hsl(var(--azentio-navy))]">
+              <TableRow className="bg-[hsl(var(--qota-navy))]">
                 <TableHead className="text-white">Month</TableHead>
                 <TableHead className="text-white text-right">VP Holdback</TableHead>
                 <TableHead className="text-white text-right">Comm Holdback</TableHead>
@@ -228,7 +228,7 @@ export function YearEndHoldbackTracker() {
                   </TableCell>
                   <TableCell className="text-right">{formatCurrency(month.vpHoldbackUsd)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(month.commHoldbackUsd)}</TableCell>
-                  <TableCell className="text-right font-semibold text-[hsl(var(--azentio-teal))]">
+                  <TableCell className="text-right font-semibold text-[hsl(var(--qota-teal))]">
                     {formatCurrency(month.runningTotalUsd)}
                   </TableCell>
                 </TableRow>

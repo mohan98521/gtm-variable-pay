@@ -3,7 +3,7 @@ import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { AzentioLogo } from "@/components/AzentioLogo";
+import { QotaLogo } from "@/components/QotaLogo";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { PermissionKey } from "@/lib/permissions";
 
@@ -78,7 +78,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
     <aside className="flex h-screen w-64 flex-col bg-sidebar border-r border-sidebar-border shadow-lg">
       {/* Logo */}
       <div className="flex h-16 items-center px-6 border-b border-sidebar-border bg-sidebar/95">
-        <AzentioLogo variant="light" size="sm" />
+        <QotaLogo variant="light" size="sm" />
       </div>
 
       {/* Navigation */}
@@ -102,7 +102,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
       {/* User info section */}
       <div className="border-t border-sidebar-border p-4">
         <div className="mb-3 text-xs text-sidebar-muted uppercase tracking-wider">
-          GTM Variable Compensation
+          Qota
         </div>
         <button
           onClick={handleSignOut}

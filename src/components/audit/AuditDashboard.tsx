@@ -88,7 +88,7 @@ export function AuditDashboard() {
             Unified view across all system changes: Deals, Payouts, Config, Master Data
           </p>
         </div>
-        <Button onClick={handleExport} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+        <Button onClick={handleExport} className="bg-[hsl(var(--qota-teal))] hover:bg-[hsl(var(--qota-teal))]/90">
           <Download className="mr-2 h-4 w-4" />
           Export XLSX
         </Button>

@@ -465,7 +465,7 @@ export function ExchangeRateManagement() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
+            <FileSpreadsheet className="h-5 w-5 text-[hsl(var(--qota-teal))]" />
             Exchange Rate Bulk Upload
           </CardTitle>
           <CardDescription>
@@ -500,14 +500,14 @@ export function ExchangeRateManagement() {
             {...getRootProps()}
             className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
               isDragActive
-                ? "border-[hsl(var(--azentio-teal))] bg-[hsl(var(--azentio-teal))]/5"
-                : "border-muted-foreground/25 hover:border-[hsl(var(--azentio-teal))]/50"
+                ? "border-[hsl(var(--qota-teal))] bg-[hsl(var(--qota-teal))]/5"
+                : "border-muted-foreground/25 hover:border-[hsl(var(--qota-teal))]/50"
             } ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <input {...getInputProps()} />
             <Upload className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
             {isDragActive ? (
-              <p className="text-[hsl(var(--azentio-teal))] font-medium">Drop the CSV file here...</p>
+              <p className="text-[hsl(var(--qota-teal))] font-medium">Drop the CSV file here...</p>
             ) : (
               <div>
                 <p className="font-medium mb-1">Drag & drop a CSV file here</p>
@@ -571,7 +571,7 @@ export function ExchangeRateManagement() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-[hsl(var(--azentio-teal))]" />
+                <DollarSign className="h-5 w-5 text-[hsl(var(--qota-teal))]" />
                 Exchange Rates
               </CardTitle>
               <CardDescription>Monthly market rates for commission conversions</CardDescription>

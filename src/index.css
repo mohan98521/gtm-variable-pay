@@ -2,12 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* GTM Variable Comp - Azentio Corporate Design System */
+/* Qota Design System */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    /* Azentio Corporate Color Palette - Deep Blues & Teals */
+    /* Qota Color Palette - Deep Blues & Teals */
     --background: 210 40% 98%;
     --foreground: 210 50% 12%;
 
@@ -17,7 +17,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 210 50% 12%;
 
-    /* Deep Corporate Navy - Primary (Azentio Brand) */
+    /* Deep Corporate Navy - Primary */
     --primary: 210 60% 18%;
     --primary-foreground: 0 0% 100%;
 
@@ -28,7 +28,7 @@
     --muted: 210 20% 94%;
     --muted-foreground: 210 25% 45%;
 
-    /* Azentio Teal - Accent for CTAs and highlights */
+    /* Qota Teal - Accent for CTAs and highlights */
     --accent: 175 70% 40%;
     --accent-foreground: 0 0% 100%;
 
@@ -60,16 +60,16 @@
     --sidebar-ring: 175 70% 50%;
     --sidebar-muted: 210 20% 55%;
 
-    /* Chart colors - Azentio palette */
+    /* Chart colors - Qota palette */
     --chart-1: 210 60% 18%;
     --chart-2: 175 70% 40%;
     --chart-3: 160 70% 45%;
     --chart-4: 38 92% 50%;
     --chart-5: 280 70% 55%;
 
-    /* Azentio Brand Colors */
-    --azentio-navy: 212 100% 22%; /* #002D72 */
-    --azentio-teal: 180 100% 34%; /* #00A3AD */
+    /* Qota Brand Colors */
+    --qota-navy: 212 100% 22%; /* #002D72 */
+    --qota-teal: 180 100% 34%; /* #00A3AD */
 
     /* Gradient tokens */
     --gradient-primary: linear-gradient(135deg, hsl(210 60% 18%), hsl(210 55% 25%));

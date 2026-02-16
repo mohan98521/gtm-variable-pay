@@ -217,7 +217,7 @@ export function CurrencyBreakdown() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={handleExport} className="bg-[hsl(var(--azentio-teal))] hover:bg-[hsl(var(--azentio-teal))]/90">
+          <Button onClick={handleExport} className="bg-[hsl(var(--qota-teal))] hover:bg-[hsl(var(--qota-teal))]/90">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
@@ -267,7 +267,7 @@ export function CurrencyBreakdown() {
               <div className="border-t pt-2 flex justify-between">
                 <span className="font-medium">Total</span>
                 <div className="text-right">
-                  <div className="font-bold text-[hsl(var(--azentio-teal))]">
+                  <div className="font-bold text-[hsl(var(--qota-teal))]">
                     {getCurrencySymbol(curr.currency)}{curr.totalLocal.toLocaleString()}
                   </div>
                   <div className="text-sm text-muted-foreground">(${curr.totalUsd.toLocaleString()} USD)</div>

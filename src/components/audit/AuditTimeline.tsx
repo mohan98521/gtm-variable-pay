@@ -34,7 +34,7 @@ export function AuditTimeline({ entries, employeeMap, userMap, maxItems = 200 }:
       <ScrollArea className="w-full whitespace-nowrap">
         <Table>
           <TableHeader>
-            <TableRow className="bg-[hsl(var(--azentio-navy))]">
+            <TableRow className="bg-[hsl(var(--qota-navy))]">
               <TableHead className="text-white w-8"></TableHead>
               <TableHead className="text-white">Timestamp</TableHead>
               <TableHead className="text-white">Domain</TableHead>
