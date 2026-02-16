@@ -23,17 +23,7 @@ import { CurrencyBreakdown } from "@/components/reports/CurrencyBreakdown";
 import { YearEndHoldbackTracker } from "@/components/reports/YearEndHoldbackTracker";
 import { AuditDashboard } from "@/components/audit/AuditDashboard";
 import { useUserRole } from "@/hooks/useUserRole";
-const SALES_FUNCTIONS = [
-  "All",
-  "Farmer",
-  "Hunter",
-  "CSM",
-  "Sales Head - Hunter",
-  "Sales head - Farmer",
-  "Farmer - Retain",
-  "Channel Sales",
-  "Sales Engineering",
-];
+import { useSalesFunctions } from "@/hooks/useSalesFunctions";
 
 // All 27 employee fields for the master report
 const ALL_EMPLOYEE_COLUMNS = [
@@ -121,6 +111,7 @@ export default function Reports() {
   const { roles, canViewAllData } = useUserRole();
   const [activeTab, setActiveTab] = useState("employees");
   const [searchTerm, setSearchTerm] = useState("");
+  const { salesFunctions: sfList } = useSalesFunctions();
   const [salesFunctionFilter, setSalesFunctionFilter] = useState("All");
   const [visibleColumns, setVisibleColumns] = useState<string[]>(
     ALL_EMPLOYEE_COLUMNS.filter((c) => c.default).map((c) => c.key)
@@ -540,7 +531,7 @@ export default function Reports() {
                 <SearchableSelect
                   value={salesFunctionFilter}
                   onValueChange={setSalesFunctionFilter}
-                  options={SALES_FUNCTIONS.map((sf) => ({ value: sf, label: sf }))}
+                  options={[{ value: "All", label: "All" }, ...sfList.map((sf) => ({ value: sf.name, label: sf.name }))]}
                   placeholder="Filter by Sales Function"
                   searchPlaceholder="Search functions..."
                   className="w-[200px]"
