@@ -46,10 +46,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </SheetContent>
               </Sheet>
             )}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-medium">Demo for</span>
-              <CustomerLogo size="sm" />
-            </div>
+            <CustomerLogo size="sm" />
           </div>
 
           <div className="flex items-center gap-3">

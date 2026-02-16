@@ -206,7 +206,6 @@ export default function Auth() {
             <p className="text-muted-foreground text-sm mt-1">Sales Compensation Portal</p>
           </div>
           <div className="flex items-center gap-2 pt-2 border-t border-border w-full justify-center">
-            <span className="text-xs text-muted-foreground">Prepared for</span>
             <CustomerLogo size="sm" />
           </div>
         </div>
