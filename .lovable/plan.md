@@ -1,30 +1,77 @@
 
 
-## Add Budget by Sales Function Pie Chart
+## Make Sales Functions Configurable from Admin UI
 
 ### What Changes
 
-Add a second pie chart titled "Budget by Sales Function" next to the existing "Payout by Sales Function" chart. Budget is defined as the sum of `tvp_usd` (Target Variable Pay) for active employees, broken down by their `sales_function`. The layout will shift to a 2-column row with both pie charts, and the Top Performers table moves to its own full-width row.
+Replace the hardcoded `SALES_FUNCTIONS` array with a database-backed `sales_functions` table, add an Admin UI to manage it, and add a permission row so access can be controlled per role.
+
+### Database
+
+Create a new `sales_functions` table:
+- `id` (uuid, PK)
+- `name` (text, unique, not null) -- e.g. "Farmer", "Hunter"
+- `display_order` (integer, default 0) -- for sorting
+- `is_active` (boolean, default true) -- soft-delete support
+- `created_at` (timestamptz)
+
+RLS: read access for all authenticated users; write access restricted to users with admin role.
+
+### New Permission
+
+Add `tab:sales_functions` to the permission system:
+- Add entry to `PermissionKey` type in `src/lib/permissions.ts`
+- Add definition to `PERMISSION_DEFINITIONS` array
+- Seed the `role_permissions` table with the new key for all existing roles (enabled for admin by default)
+
+### New Hook: `useSalesFunctions`
+
+- `src/hooks/useSalesFunctions.ts`
+- Fetches active sales functions sorted by `display_order`
+- Provides mutations for add, update (rename), toggle active, reorder, and delete
+- Query key: `["sales-functions"]`
+
+### New Admin Component: `SalesFunctionsManagement`
+
+- `src/components/admin/SalesFunctionsManagement.tsx`
+- Table listing all functions with name, status badge, and action buttons
+- "Add Function" dialog with name input
+- Inline rename via edit button
+- Toggle active/inactive
+- Delete with confirmation (only if no employees currently use that function)
+- Reorder via drag or up/down buttons
+
+### Admin Page Wiring
+
+In `src/pages/Admin.tsx`:
+- Add `SalesFunctionsManagement` to the `contentMap`
+- Add a new nav item under the **System** section: `{ id: "sales-functions", label: "Sales Functions", icon: Briefcase, permissionCheck: (c) => c.canAccessTab("tab:sales_functions") }`
+
+### Replace Hardcoded Lists
+
+**`src/components/admin/EmployeeFormDialog.tsx`**:
+- Remove the `SALES_FUNCTIONS` const
+- Import `useSalesFunctions` hook
+- Populate the `SearchableSelect` options from the hook data
+
+**`src/pages/Reports.tsx`**:
+- Remove the `SALES_FUNCTIONS` const
+- Import `useSalesFunctions` hook
+- Build filter options from hook data (prepend "All")
 
 ### Technical Details
 
-**File: `src/hooks/useExecutiveDashboard.ts`**
-- Add `budgetByFunction: FunctionBreakdown[]` to the `ExecutiveDashboardData` interface
-- Compute it by aggregating `tvp_usd` grouped by `sales_function` for active employees (same employees already used for `totalBudget`)
-- Add the new field to the return object
+**Files Created:**
+- `src/hooks/useSalesFunctions.ts` -- CRUD hook
+- `src/components/admin/SalesFunctionsManagement.tsx` -- admin UI
 
-**File: `src/components/executive/PayoutByFunction.tsx`**
-- Make the component reusable by accepting a `title` prop (defaulting to "Payout by Sales Function")
-- Add percentage display in the tooltip (e.g., "$1.2M (34%)")
+**Files Modified:**
+- `src/lib/permissions.ts` -- add `tab:sales_functions` permission key and definition
+- `src/pages/Admin.tsx` -- register new tab under System section
+- `src/components/admin/EmployeeFormDialog.tsx` -- replace hardcoded array with hook
+- `src/pages/Reports.tsx` -- replace hardcoded array with hook
 
-**File: `src/pages/ExecutiveDashboard.tsx`**
-- Change the bottom grid from a 2-column layout (Payout pie + Top Performers) to:
-  - Row of 2 pie charts: Payout by Function + Budget by Function
-  - Full-width row: Top Performers table
-- Pass `title="Budget by Sales Function"` and `data={data?.budgetByFunction || []}` for the second chart
-
-### Files Modified
-- `src/hooks/useExecutiveDashboard.ts` -- add budgetByFunction computation
-- `src/components/executive/PayoutByFunction.tsx` -- add title prop, percentage in tooltip
-- `src/pages/ExecutiveDashboard.tsx` -- update layout with second pie chart
-
+**Migration:**
+- Create `sales_functions` table with RLS policies
+- Seed table with all 18 current function names
+- Insert `tab:sales_functions` permission row for all existing roles
