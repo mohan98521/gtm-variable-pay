@@ -160,7 +160,11 @@ export function useExecutiveDashboard() {
     const totalPayoutYtd = payouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
 
     // Active payees
-    const activePayeeSet = new Set(payouts.map((p) => p.employee_id));
+    const activePayeeSet = new Set(
+      payouts
+        .filter((p) => employeeMap.get(p.employee_id)?.sales_function)
+        .map((p) => p.employee_id)
+    );
     const activePayees = activePayeeSet.size;
 
     // Budget = sum of tvp_usd for active employees
@@ -242,7 +246,7 @@ export function useExecutiveDashboard() {
       : 0;
 
     const repsWithTargets = attainments.length;
-    const totalActiveEmployees = employees.filter((e) => e.is_active).length;
+    const totalActiveEmployees = employees.filter((e) => e.is_active && e.sales_function).length;
 
     // Attainment distribution histogram
     const buckets = [
