@@ -1,77 +1,46 @@
 
+## Fix: Seed Sales Functions Data and Move to People Section
 
-## Make Sales Functions Configurable from Admin UI
+### Problem
+The `sales_functions` database table was never created -- the previous migration did not apply. The table shows "No sales functions configured" because it doesn't exist yet. Additionally, you want Sales Functions moved from the System section to the People section.
 
-### What Changes
+### Changes
 
-Replace the hardcoded `SALES_FUNCTIONS` array with a database-backed `sales_functions` table, add an Admin UI to manage it, and add a permission row so access can be controlled per role.
+**1. Create and seed the `sales_functions` table (database migration)**
 
-### Database
+Create the table with columns: `id`, `name`, `display_order`, `is_active`, `created_at`, plus RLS policies, and seed it with these 18 functions:
 
-Create a new `sales_functions` table:
-- `id` (uuid, PK)
-- `name` (text, unique, not null) -- e.g. "Farmer", "Hunter"
-- `display_order` (integer, default 0) -- for sorting
-- `is_active` (boolean, default true) -- soft-delete support
-- `created_at` (timestamptz)
+1. Farmer
+2. Hunter
+3. CSM
+4. Channel Sales
+5. Sales Engineering
+6. Sales Head - Farmer
+7. Sales Head - Hunter
+8. Farmer - Retain
+9. IMAL Product SE
+10. Insurance Product SE
+11. APAC Regional SE
+12. MEA Regional SE
+13. Sales Engineering - Head
+14. Team Lead
+15. Team Lead - Farmer
+16. Team Lead - Hunter
+17. Overlay
+18. Executive
 
-RLS: read access for all authenticated users; write access restricted to users with admin role.
+Also seed the `tab:sales_functions` permission for existing roles.
 
-### New Permission
+**2. Move Sales Functions to People section (`src/pages/Admin.tsx`)**
 
-Add `tab:sales_functions` to the permission system:
-- Add entry to `PermissionKey` type in `src/lib/permissions.ts`
-- Add definition to `PERMISSION_DEFINITIONS` array
-- Seed the `role_permissions` table with the new key for all existing roles (enabled for admin by default)
-
-### New Hook: `useSalesFunctions`
-
-- `src/hooks/useSalesFunctions.ts`
-- Fetches active sales functions sorted by `display_order`
-- Provides mutations for add, update (rename), toggle active, reorder, and delete
-- Query key: `["sales-functions"]`
-
-### New Admin Component: `SalesFunctionsManagement`
-
-- `src/components/admin/SalesFunctionsManagement.tsx`
-- Table listing all functions with name, status badge, and action buttons
-- "Add Function" dialog with name input
-- Inline rename via edit button
-- Toggle active/inactive
-- Delete with confirmation (only if no employees currently use that function)
-- Reorder via drag or up/down buttons
-
-### Admin Page Wiring
-
-In `src/pages/Admin.tsx`:
-- Add `SalesFunctionsManagement` to the `contentMap`
-- Add a new nav item under the **System** section: `{ id: "sales-functions", label: "Sales Functions", icon: Briefcase, permissionCheck: (c) => c.canAccessTab("tab:sales_functions") }`
-
-### Replace Hardcoded Lists
-
-**`src/components/admin/EmployeeFormDialog.tsx`**:
-- Remove the `SALES_FUNCTIONS` const
-- Import `useSalesFunctions` hook
-- Populate the `SearchableSelect` options from the hook data
-
-**`src/pages/Reports.tsx`**:
-- Remove the `SALES_FUNCTIONS` const
-- Import `useSalesFunctions` hook
-- Build filter options from hook data (prepend "All")
+Move the nav item `{ id: "sales-functions", label: "Sales Functions", icon: Briefcase }` from the **System** section to the **People** section.
 
 ### Technical Details
 
-**Files Created:**
-- `src/hooks/useSalesFunctions.ts` -- CRUD hook
-- `src/components/admin/SalesFunctionsManagement.tsx` -- admin UI
+**Files modified:**
+- `src/pages/Admin.tsx` -- move the sales-functions nav item from `system.items` to `people.items`
 
-**Files Modified:**
-- `src/lib/permissions.ts` -- add `tab:sales_functions` permission key and definition
-- `src/pages/Admin.tsx` -- register new tab under System section
-- `src/components/admin/EmployeeFormDialog.tsx` -- replace hardcoded array with hook
-- `src/pages/Reports.tsx` -- replace hardcoded array with hook
-
-**Migration:**
-- Create `sales_functions` table with RLS policies
-- Seed table with all 18 current function names
-- Insert `tab:sales_functions` permission row for all existing roles
+**Database migration:**
+- CREATE TABLE `sales_functions` with RLS policies
+- INSERT 18 seed rows
+- INSERT `tab:sales_functions` permission for all existing roles
