@@ -87,18 +87,18 @@ export function TopPerformers({ data, isLoading }: TopPerformersProps) {
                   {formatCompact(p.totalPayout)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.softwareArrAchPct)}`}>
-                    {p.softwareArrAchPct.toFixed(0)}%
+                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.softwareArrAchPct ?? 0)}`}>
+                    {(p.softwareArrAchPct ?? 0).toFixed(0)}%
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.closingArrAchPct)}`}>
-                    {p.closingArrAchPct.toFixed(0)}%
+                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.closingArrAchPct ?? 0)}`}>
+                    {(p.closingArrAchPct ?? 0).toFixed(0)}%
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.attainmentPct)}`}>
-                    {p.attainmentPct.toFixed(0)}%
+                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.attainmentPct ?? 0)}`}>
+                    {(p.attainmentPct ?? 0).toFixed(0)}%
                   </Badge>
                 </TableCell>
               </TableRow>
