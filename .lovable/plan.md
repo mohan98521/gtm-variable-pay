@@ -1,19 +1,19 @@
 
 
-## Rearrange Admin Navigation Order
+## Fix: Default Admin Page to Employee Accounts
 
-### What Changes
+### Problem
+When navigating to the Admin page, it defaults to Compensation Plans instead of Employee Accounts. The fallback values in the state initialization are hardcoded to `"compensation"` and `"plans"`.
 
-Reorder the top-level section tabs in the Admin page from the current order (Compensation, People, Finance, System) to:
+### Changes
 
-1. **People**
-2. **Compensation**
-3. **Finance**
-4. **System**
+**File: `src/pages/Admin.tsx`**
 
-### Technical Details
+Update the fallback values in the `useState` calls on lines 118-120:
 
-**File modified:** `src/pages/Admin.tsx`
+- Change `"compensation"` to `"people"` (line 118)
+- Change `"plans"` to `"accounts"` (line 120)
+- Also update the fallback on line 127 (`resolvedActiveItem` fallback) from `"plans"` to `"accounts"`
 
-Simply reorder the `sections` array so the "people" section comes first, followed by "compensation", "finance", and "system". No other changes needed -- all items, icons, and permission checks remain the same.
+This ensures the Admin page always opens to **Employee Accounts** under **People**, even if permissions haven't loaded yet.
 
