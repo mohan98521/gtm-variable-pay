@@ -1,61 +1,91 @@
 
 
-## Fix: Attainment 0% Bug + Add Software/Closing ARR Columns
+## Executive Dashboard Updates
 
-### Root Cause: ID Type Mismatch
+### Three Changes Requested
 
-The attainment is always 0% because of a key mismatch between three data sources:
+**1. Payout Source: Only from Finalized/Paid Payout Runs**
 
-- `monthly_payouts.employee_id` stores **UUIDs** (e.g., `da2f0c64-...`)
-- `performance_targets.employee_id` stores **string IDs** (e.g., `AF0001`)
-- `deals.sales_rep_employee_id` stores **string IDs** (e.g., `AF0001`)
+Currently, `useExecutiveDashboard.ts` fetches all `monthly_payouts` regardless of payout run status. Since the payout lifecycle is Draft -> Review -> Approved -> Finalized -> Paid, the Executive Dashboard should only show "Eligible Payouts" from runs that have reached `finalized` or `paid` status.
 
-When building the Top Performers list, the code keys `empPayoutMap` by UUID but `empTargetMap`/`empActualMap` by string ID. The lookup on line 250 never matches, so every performer shows 0%.
+**Fix:** Add a filter to the current payouts query by first fetching finalized/paid `payout_runs`, then filtering `monthly_payouts` by those run IDs. Alternatively, join on `payout_run_id` and filter by `run_status IN ('finalized', 'paid')`.
 
-### Fix Summary
+Since Supabase JS client doesn't support direct joins with filters on the related table easily, the approach will be:
+- Query `payout_runs` for the FY where `run_status` is `finalized` or `paid`, get their IDs
+- Query `monthly_payouts` filtered by those run IDs using `.in('payout_run_id', runIds)`
 
-**File: `src/hooks/useExecutiveDashboard.ts`**
+This affects: North Star total payout, monthly trend chart, payout by function donut, and top performers payout column.
 
-1. **Add `employee_id` (string) to the employees query** so we can build a UUID-to-stringID lookup map.
+**2. Replace "vs Last Year" with "Budget" (Pro-Rated TVP)**
 
-2. **Build a bidirectional map** (`uuidToStringId`) from the employees data. Use this to bridge between payout data (UUID-keyed) and targets/deals data (string-keyed).
+Since there is no prior year data, the YoY comparison is meaningless. Replace it with a Budget comparison:
+- **Budget** = Sum of `tvp_usd` for all active employees (already computed as `totalBudget`)
+- The North Star "Total Variable Payout" card subtext changes from "+X% vs last year" to "X% of Budget ($XM)"
+- Remove the `priorPayoutsQuery` entirely since it is no longer needed
+- Remove `totalPayoutPriorYear` and `yoyChangePct` from the interface
 
-3. **Compute per-employee metric-level attainment** instead of one aggregate number. Split targets into:
-   - **Software ARR**: targets with `metric_type` containing "New Software Booking ARR" (including Team/Org variants)
-   - **Closing ARR**: targets with `metric_type = "Closing ARR"`
+**3. Remove Currency Toggle, USD Only**
 
-4. **Fetch Closing ARR actuals** from the `closing_arr_actuals` table (latest month snapshot, filtered by contract end_date eligibility) to compute Closing ARR achievement.
-
-5. **Expand the `TopPerformer` interface** to include:
-   - `softwareArrAchPct` -- Software Booking ARR achievement %
-   - `closingArrAchPct` -- Closing ARR achievement %
-
-6. **Fix the top performers mapping** to translate UUIDs to string IDs when looking up attainment.
-
-**File: `src/components/executive/TopPerformers.tsx`**
-
-7. **Add two new columns** to the table:
-   - "Software %" -- shows the Software ARR achievement percentage
-   - "Closing ARR %" -- shows the Closing ARR achievement percentage
-   - Each uses color-coded badges (green >= 100%, amber >= 80%, red < 80%)
-
-8. **Add a footer note** clarifying the data source: "Payouts from finalized monthly payout runs. Achievement from deal actuals vs performance targets."
-
-### Updated Top Performers Table Layout
-
-```text
-| # | Name | Role/Region | Payout | Software % | Closing ARR % | Att. % |
-```
-
-### Data Source Clarification (shown as a subtle footnote)
-
-- **Payout column**: Sourced from `monthly_payouts` table (the output of finalized payout runs)
-- **Software %**: YTD deal `new_software_booking_arr_usd` vs `performance_targets` for "New Software Booking ARR"
-- **Closing ARR %**: Latest month eligible ARR from `closing_arr_actuals` vs target
-- **Att. %**: Weighted overall attainment across all metrics
+Strip the currency toggle from `ExecutiveDashboard.tsx`:
+- Remove `useState` for `currencyMode`
+- Remove the toggle buttons and mixed-currency badge from the header
+- Remove `currencyMode` prop from `NorthStarCards`
+- Clean up `NorthStarCards` interface to remove the `currencyMode` prop
 
 ### Files Modified
-- `src/hooks/useExecutiveDashboard.ts` -- fix ID bridging, add per-metric attainment, fetch closing ARR actuals
-- `src/components/executive/TopPerformers.tsx` -- add Software % and Closing ARR % columns, add data source footnote
+
+| File | Changes |
+|------|---------|
+| `src/hooks/useExecutiveDashboard.ts` | Add `payout_runs` query filtered by `finalized`/`paid`; filter payouts by eligible run IDs; remove prior year query; remove `yoyChangePct` and `totalPayoutPriorYear` from interface |
+| `src/pages/ExecutiveDashboard.tsx` | Remove currency toggle state, buttons, badge, and import; remove `currencyMode` prop from NorthStarCards |
+| `src/components/executive/NorthStarCards.tsx` | Remove `currencyMode` from props interface; change "vs last year" subtext to "X% of Budget" using `payoutVsBudgetPct` and `totalBudget` |
+
+### Technical Details
+
+**Hook changes (`useExecutiveDashboard.ts`):**
+
+```typescript
+// New query: fetch only finalized/paid run IDs
+const payoutRunsQuery = useQuery({
+  queryKey: ["exec-payout-runs", selectedYear],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("payout_runs")
+      .select("id")
+      .gte("month_year", fyStart)
+      .lte("month_year", fyEnd)
+      .in("run_status", ["finalized", "paid"]);
+    if (error) throw error;
+    return data || [];
+  },
+});
+
+// Current payouts query: filter by eligible run IDs
+const eligibleRunIds = payoutRunsQuery.data?.map(r => r.id) || [];
+// Only fetch if we have run IDs (or return empty)
+const currentPayoutsQuery = useQuery({
+  queryKey: ["exec-payouts-current", selectedYear, eligibleRunIds],
+  queryFn: async () => {
+    if (eligibleRunIds.length === 0) return [];
+    const { data, error } = await supabase
+      .from("monthly_payouts")
+      .select("employee_id, month_year, payout_type, calculated_amount_usd")
+      .in("payout_run_id", eligibleRunIds);
+    if (error) throw error;
+    return data || [];
+  },
+  enabled: !payoutRunsQuery.isLoading,
+});
+```
+
+Remove `priorPayoutsQuery` entirely. Remove `totalPayoutPriorYear`, `yoyChangePct` from `ExecutiveDashboardData`. Remove `calculated_amount_local` and `local_currency` from the select since we only show USD.
+
+**NorthStarCards changes:**
+- First card subtext changes from YoY trend arrow to: "X% of Budget ($XM)" using existing `payoutVsBudgetPct` and `totalBudget`
+- Since the third card ("Payout vs Budget") now duplicates the first card's subtext concept, keep it but it serves as a visual progress bar complement
+
+**Active Payees:**
+- Keep showing count of employees with payouts from eligible (finalized/paid) runs — these are the actual eligible employees
 
 ### No Database Changes Required
+
