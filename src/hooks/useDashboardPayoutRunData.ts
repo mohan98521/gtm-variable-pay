@@ -250,16 +250,16 @@ export function useDashboardPayoutRunData() {
           .from("deals")
           .select("month_year, new_software_booking_arr_usd, managed_services_usd, cr_usd, er_usd, implementation_usd, perpetual_license_usd, sales_rep_employee_id")
           .eq("sales_rep_employee_id", profile.employee_id)
-          .gte("month_year", `${selectedYear}-01`)
-          .lte("month_year", `${selectedYear}-12`),
+          .gte("month_year", `${selectedYear}-01-01`)
+          .lte("month_year", `${selectedYear}-12-31`),
 
         // Fetch closing ARR actuals for monthly snapshots (Issue 3)
         supabase
           .from("closing_arr_actuals")
           .select("month_year, closing_arr")
           .eq("sales_rep_employee_id", profile.employee_id)
-          .gte("month_year", `${selectedYear}-01`)
-          .lte("month_year", `${selectedYear}-12`),
+          .gte("month_year", `${selectedYear}-01-01`)
+          .lte("month_year", `${selectedYear}-12-31`),
       ]);
 
       const payoutRuns = payoutRunsRes.data || [];
@@ -754,19 +754,24 @@ export function useDashboardPayoutRunData() {
         const runMonth = runMonthMap.get(detail.payout_run_id);
         if (!runMonth) continue;
         const monthKey = typeof runMonth === 'string' ? runMonth.substring(0, 7) : String(runMonth).substring(0, 7);
-        allMetricNames.add(detail.metric_name);
+        // Normalize SPIFF metric name to match plan config name (avoid duplicate columns)
+        let metricName = detail.metric_name;
+        if (detail.component_type === 'spiff' && planConfig?.spiffs?.length) {
+          metricName = planConfig.spiffs[0].spiffName || "Large Deal SPIFF";
+        }
+        allMetricNames.add(metricName);
 
         // actual_usd is YTD cumulative; derive incremental for this month
         const currentCumulative = detail.actual_usd || 0;
-        const priorCumulative = priorCumulativeMap.get(detail.metric_name) || 0;
+        const priorCumulative = priorCumulativeMap.get(metricName) || 0;
         const incrementalActual = currentCumulative - priorCumulative;
-        priorCumulativeMap.set(detail.metric_name, currentCumulative);
+        priorCumulativeMap.set(metricName, currentCumulative);
 
         if (!monthlyDataMap.has(monthKey)) {
           monthlyDataMap.set(monthKey, {});
         }
         const monthData = monthlyDataMap.get(monthKey)!;
-        monthData[detail.metric_name] = (monthData[detail.metric_name] || 0) + Math.max(0, incrementalActual);
+        monthData[metricName] = (monthData[metricName] || 0) + Math.max(0, incrementalActual);
       }
 
       // Populate metricTargetMap from performance_targets (Issue 1)
@@ -775,8 +780,12 @@ export function useDashboardPayoutRunData() {
       }
       // Also fill from payout_metric_details for metrics not in performance_targets
       for (const detail of allMetricDetails) {
-        if (detail.target_usd && detail.target_usd > 0 && !metricTargetMap[detail.metric_name]) {
-          metricTargetMap[detail.metric_name] = detail.target_usd;
+        let tMetricName = detail.metric_name;
+        if (detail.component_type === 'spiff' && planConfig?.spiffs?.length) {
+          tMetricName = planConfig.spiffs[0].spiffName || "Large Deal SPIFF";
+        }
+        if (detail.target_usd && detail.target_usd > 0 && !metricTargetMap[tMetricName]) {
+          metricTargetMap[tMetricName] = detail.target_usd;
         }
       }
 
