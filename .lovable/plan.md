@@ -1,61 +1,54 @@
 
 
-## Rebrand from "Azentio" to "Qota"
+## Rebrand from "Azentio" to "Qota" -- Implementation Plan
 
-This plan covers renaming the product from "GTM Variable Comp | Azentio" to **Qota** across the entire codebase -- titles, logos, CSS tokens, component names, and color variable references.
+The Qota logo has been uploaded. Here is the complete implementation plan covering all files.
 
-### Pre-requisite
+### 1. Logo Asset
+- Copy `user-uploads://image-88.png` to `src/assets/qota-logo.png`
+- The old `src/assets/azentio-logo.png` remains (unused after refactor)
 
-You will need to upload a **Qota logo image** (PNG or SVG) before implementation begins. This logo will replace `src/assets/azentio-logo.png`.
+### 2. Logo Component
+- Rename `src/components/AzentioLogo.tsx` content to create `src/components/QotaLogo.tsx`
+- New component imports `qota-logo.png`, uses `QotaLogo` name, `QotaLogoProps` interface, alt text "Qota"
 
-### Changes Overview
+### 3. HTML Metadata (`index.html`)
+- Title: "Qota | Variable Pay Management"
+- Author: "Qota"
+- OG title: "Qota | Variable Pay Management"
+- Twitter site: "@Qota"
 
-#### 1. Logo and Brand Image
-- Replace `src/assets/azentio-logo.png` with the uploaded Qota logo
-- Rename `src/components/AzentioLogo.tsx` to `src/components/QotaLogo.tsx`
-- Update the component name, props interface, alt text, and import path inside the component
+### 4. CSS Tokens (`src/index.css`)
+- Comments: remove "Azentio" references, update to "Qota"
+- `--azentio-navy` becomes `--qota-navy`
+- `--azentio-teal` becomes `--qota-teal`
 
-#### 2. Page Titles and Metadata (`index.html`)
-- Title: "GTM Variable Comp | Azentio" becomes **"Qota | Variable Pay Management"**
-- Meta description updated to reference Qota
-- Author: "Azentio" becomes "Qota"
-- OG and Twitter meta tags updated
+### 5. Tailwind Config (`tailwind.config.ts`)
+- `azentio.navy` becomes `qota.navy`
+- `azentio.teal` becomes `qota.teal`
 
-#### 3. Sidebar and Footer Text (`src/components/layout/AppSidebar.tsx`)
+### 6. Sidebar (`src/components/layout/AppSidebar.tsx`)
 - Import `QotaLogo` instead of `AzentioLogo`
-- Footer text "GTM Variable Compensation" becomes **"Qota"** (or similar short label)
+- Footer text "GTM Variable Compensation" becomes "Qota"
 
-#### 4. Auth Page (`src/pages/Auth.tsx`)
+### 7. Auth Page (`src/pages/Auth.tsx`)
 - Import `QotaLogo` instead of `AzentioLogo`
-- Email placeholder: `EmployeeID@azentio.com` becomes a generic `you@company.com`
-- Heading: "Variable Pay Management" stays (product descriptor under Qota logo)
+- Email placeholder: `EmployeeID@azentio.com` becomes `you@company.com`
 
-#### 5. CSS Design Tokens (`src/index.css`)
-- Comment: "GTM Variable Comp - Azentio Corporate Design System" becomes "Qota Design System"
-- Rename CSS custom properties:
-  - `--azentio-navy` becomes `--qota-navy`
-  - `--azentio-teal` becomes `--qota-teal`
-- The color **values stay identical** -- only the variable names change
+### 8. Staff User Form (`src/components/admin/StaffUserFormDialog.tsx`)
+- Remove `@azentio.com` email domain restriction from Zod validation
+- Update placeholder from `name@azentio.com` to `name@company.com`
 
-#### 6. Tailwind Config (`tailwind.config.ts`)
-- Rename the `azentio` color group to `qota`:
-  - `azentio.navy` becomes `qota.navy`
-  - `azentio.teal` becomes `qota.teal`
+### 9. Edge Function (`supabase/functions/create-employee-account/index.ts`)
+- Remove the `@azentio.com` domain check (lines 77-83) so any email domain is accepted
+- This is important: without this change, creating employee accounts for non-azentio emails will fail
 
-#### 7. All Component References (17 files)
-Every file referencing `azentio-navy` or `azentio-teal` in class names needs a find-and-replace:
-- `hsl(var(--azentio-navy))` becomes `hsl(var(--qota-navy))`
-- `hsl(var(--azentio-teal))` becomes `hsl(var(--qota-teal))`
-- `text-[hsl(var(--azentio-...))]` becomes `text-[hsl(var(--qota-...))]`
+### 10. Component Color References (find-and-replace across ~13 files)
+All occurrences of `azentio-navy` and `azentio-teal` in className strings become `qota-navy` and `qota-teal`. Files affected:
 
-Files affected:
-- `src/pages/Reports.tsx`
-- `src/pages/Admin.tsx`
-- `src/pages/DataInputs.tsx`
-- `src/pages/Dashboard.tsx`
+- `src/components/reports/AuditTrailExport.tsx`
 - `src/components/reports/ManagementSummary.tsx`
 - `src/components/reports/CurrencyBreakdown.tsx`
-- `src/components/reports/AuditTrailExport.tsx`
 - `src/components/reports/PayoutStatement.tsx`
 - `src/components/reports/MyDealsReport.tsx`
 - `src/components/reports/MyClosingARRReport.tsx`
@@ -63,21 +56,20 @@ Files affected:
 - `src/components/audit/AuditDashboard.tsx`
 - `src/components/audit/AuditTimeline.tsx`
 - `src/components/admin/BulkUpload.tsx`
+- `src/components/admin/ExchangeRateManagement.tsx`
 - `src/components/admin/CurrencyManagement.tsx`
 - `src/components/admin/PerformanceTargetsBulkUpload.tsx`
-- `src/components/data-inputs/*BulkUpload.tsx` (if applicable)
-
-#### 8. Project Memory
-- Update the project knowledge/memory entries that reference "Azentio" to say "Qota"
+- `src/pages/Reports.tsx`
+- `src/pages/Admin.tsx`
+- `src/pages/DataInputs.tsx`
+- `src/pages/Dashboard.tsx`
 
 ### What does NOT change
-- Color values (the navy and teal palette stays the same)
-- Layout, functionality, and calculation logic -- purely cosmetic rename
-- Database schema -- no tables reference "Azentio"
+- Color values (navy #002D72 and teal #00A3AD stay identical)
+- Layout, functionality, calculation logic
+- Database schema
 
 ### Technical Details
-
-The implementation is a systematic find-and-replace across the codebase:
 
 | Find | Replace |
 |---|---|
@@ -90,6 +82,7 @@ The implementation is a systematic find-and-replace across the codebase:
 | `azentio.teal` (Tailwind) | `qota.teal` |
 | `GTM Variable Comp` (text) | `Qota` |
 | `Azentio` (brand text) | `Qota` |
+| `@azentio.com` (email domain) | removed / generic |
 
-No new dependencies are needed. The total change touches ~20 files with straightforward string replacements.
+Total: ~20 frontend files + 1 edge function. No new dependencies needed.
 
