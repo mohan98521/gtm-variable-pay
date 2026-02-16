@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Menu } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { CustomerLogo } from "@/components/AzentioLogo";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -30,7 +31,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Global Header */}
         <header className="flex items-center justify-between gap-3 px-4 lg:px-6 py-3 border-b bg-muted/30">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {/* Mobile hamburger */}
             {isMobile && (
               <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -45,6 +46,10 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </SheetContent>
               </Sheet>
             )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-medium">Demo for</span>
+              <CustomerLogo size="sm" />
+            </div>
           </div>
 
           <div className="flex items-center gap-3">

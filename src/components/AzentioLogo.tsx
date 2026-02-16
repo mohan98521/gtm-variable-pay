@@ -1,27 +1,26 @@
 import azentioLogo from "@/assets/azentio-logo.png";
 
-interface AzentioLogoProps {
+interface CustomerLogoProps {
   variant?: "light" | "dark";
   size?: "sm" | "md" | "lg";
 }
 
-export function AzentioLogo({ 
+export function CustomerLogo({ 
   variant = "dark", 
   size = "md" 
-}: AzentioLogoProps) {
+}: CustomerLogoProps) {
   const sizes = {
     sm: "h-6",
     md: "h-8",
     lg: "h-12",
   };
 
-  // For light variant (sidebar), we invert the logo colors
   const filterClass = variant === "light" ? "brightness-0 invert" : "";
 
   return (
     <img 
       src={azentioLogo} 
-      alt="Azentio" 
+      alt="Customer Logo" 
       className={`${sizes[size]} w-auto ${filterClass}`}
     />
   );
