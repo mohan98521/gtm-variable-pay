@@ -1,14 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, TrendingDown, DollarSign, Users, Target } from "lucide-react";
+import { DollarSign, Users, Target } from "lucide-react";
 import { RadialBarChart, RadialBar, ResponsiveContainer } from "recharts";
 import type { ExecutiveDashboardData } from "@/hooks/useExecutiveDashboard";
 
 interface NorthStarCardsProps {
   data: ExecutiveDashboardData | null;
   isLoading: boolean;
-  currencyMode: "usd" | "local";
 }
 
 function formatCompact(value: number): string {
@@ -34,26 +33,23 @@ export function NorthStarCards({ data, isLoading }: NorthStarCardsProps) {
     );
   }
 
-  const yoyPositive = data.yoyChangePct >= 0;
   const attainmentData = [{ value: Math.min(data.globalQuotaAttainment, 150), fill: "hsl(var(--accent))" }];
   const budgetPct = Math.min(data.payoutVsBudgetPct, 100);
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {/* Total Variable Payout */}
+      {/* Total Eligible Payout */}
       <Card className="border shadow-sm">
         <CardContent className="p-6">
           <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium mb-1">
             <DollarSign className="h-4 w-4" />
-            Total Variable Payout (YTD)
+            Total Eligible Payout (YTD)
           </div>
           <div className="text-3xl font-bold text-foreground tracking-tight">
             {formatCompact(data.totalPayoutYtd)}
           </div>
-          <div className={`flex items-center gap-1 text-sm mt-1 ${yoyPositive ? "text-success" : "text-destructive"}`}>
-            {yoyPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-            <span className="font-medium">{yoyPositive ? "+" : ""}{data.yoyChangePct.toFixed(1)}%</span>
-            <span className="text-muted-foreground ml-1">vs last year</span>
+          <div className="text-xs text-muted-foreground mt-1">
+            {data.payoutVsBudgetPct.toFixed(0)}% of Budget ({formatCompact(data.totalBudget)})
           </div>
         </CardContent>
       </Card>
@@ -118,13 +114,13 @@ export function NorthStarCards({ data, isLoading }: NorthStarCardsProps) {
         <CardContent className="p-6">
           <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium mb-1">
             <Users className="h-4 w-4" />
-            Active Payees
+            Eligible Payees
           </div>
           <div className="text-3xl font-bold text-foreground tracking-tight">
             {data.activePayees}
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            Receiving payouts this year
+            With finalized payouts this year
           </div>
         </CardContent>
       </Card>
