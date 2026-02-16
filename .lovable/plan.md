@@ -1,42 +1,39 @@
 
 
-## Fixes for Monthly Performance Breakdown
+## Rename "NRR Additional Pay" to "(CR/ER + Implementation)" Across the System
 
-### Issue 1: New Software Booking ARR Actuals Not Flowing
+### Approach
 
-**Root Cause**: The deals query at line 253-254 uses partial date strings:
-```
-.gte("month_year", `${selectedYear}-01`)   // passes "2026-01"
-.lte("month_year", `${selectedYear}-12`)   // passes "2026-12"
-```
-But `month_year` is a **date** column in the database (not text). Comparing a date against `"2026-01"` causes a silent error/empty result since it's an invalid date format.
+The string `"NRR Additional Pay"` is used in two ways:
+1. **Database value** -- stored as `payout_type` in `monthly_payouts` and referenced in queries (payout engine, FnF engine, dashboard data hook). Changing this would break existing data.
+2. **Display label** -- shown in UI cards, simulator, metric columns, toasts, and comments.
 
-The same issue exists for the `closing_arr_actuals` query at lines 261-262.
+**Strategy**: Introduce a constant for the display label `"(CR/ER + Implementation)"` and use it everywhere the label is shown to users. Keep the database `payout_type` value as `"NRR Additional Pay"` to avoid breaking existing records and queries.
 
-**Fix in `src/hooks/useDashboardPayoutRunData.ts` (lines 253-254 and 261-262)**:
-- Change date filters to use full date format:
-  - `.gte("month_year", `${selectedYear}-01-01`)`
-  - `.lte("month_year", `${selectedYear}-12-31`)`
+### Files to Change
 
----
+| # | File | What Changes |
+|---|------|-------------|
+| 1 | `src/lib/payoutTypes.ts` | Add a display-name constant: `export const NRR_DISPLAY_NAME = '(CR/ER + Implementation)';` |
+| 2 | `src/components/dashboard/NRRSummaryCard.tsx` | Card title: "NRR Additional Pay" -> "(CR/ER + Implementation)" |
+| 3 | `src/components/dashboard/PayoutSimulator.tsx` | Metric name and label: "NRR Additional Pay" -> display constant |
+| 4 | `src/components/admin/NrrSettingsCard.tsx` | Card title, empty state heading, toast messages, dialog descriptions (~8 occurrences) |
+| 5 | `src/pages/PlanBuilder.tsx` | Comment only (line 540) |
+| 6 | `src/pages/Dashboard.tsx` | Comment only (line 291) |
+| 7 | `src/hooks/useDashboardPayoutRunData.ts` | `allMetricNames.add(...)` and `METRIC_PRIORITY` key -- both use display label for the monthly table column header |
+| 8 | `src/lib/nrrCalculation.ts` | JSDoc comment only |
+| 9 | `src/lib/__tests__/nrrCalculation.test.ts` | Test describe block label |
 
-### Issue 2: "Large Deal SPIFF" and "SPIFF" Showing as Two Separate Columns
+### What Stays Unchanged (database-facing values)
 
-**Root Cause**: Two different data sources add SPIFF to the metric names set:
-1. `payout_metric_details` records have `metric_name = "SPIFF"` (line 757)
-2. `plan_spiffs` config has `spiff_name = "Large Deal SPIFF"` (line 796)
+These lines use `'NRR Additional Pay'` as a database `payout_type` value and must NOT change:
+- `src/lib/payoutEngine.ts` -- `payout_type: 'NRR Additional Pay'` (line 2128), `metricName: 'NRR Additional Pay'` (line 1499), prior-month lookup (line 1287)
+- `src/lib/fnfEngine.ts` -- `sumPriorPayouts(..., 'NRR Additional Pay')` (line 248), `payout_type: 'NRR Additional Pay'` (line 322)
+- `src/lib/payoutTypes.ts` -- the `ADDITIONAL_PAY_TYPES` array stays as-is since it's used for data filtering
 
-Both get added to `allMetricNames`, creating two columns.
+### Summary
 
-**Fix in `src/hooks/useDashboardPayoutRunData.ts`**:
-- Normalize the SPIFF metric name from `payout_metric_details` to use the plan's SPIFF name ("Large Deal SPIFF") instead of the generic "SPIFF". When processing NRR/SPIFF details at line 757, if `component_type === 'spiff'` and a plan SPIFF name exists, use that name instead of `detail.metric_name`.
-- This ensures only one SPIFF column appears in the table.
-
----
-
-### Technical Summary
-
-| File | Changes |
-|------|---------|
-| `src/hooks/useDashboardPayoutRunData.ts` | (1) Fix date filter format on lines 253-254 and 261-262 from partial dates to full dates. (2) Normalize SPIFF metric_name from payout data to match plan config name, preventing duplicate columns. |
-
+- Pure UI/label rename across ~9 files
+- No database migration needed
+- No payout engine logic changes
+- Existing payout data remains valid
