@@ -537,14 +537,6 @@ export default function PlanBuilder() {
           metricNames={metrics.map(m => m.metric_name)}
         />
 
-        {/* Payout Settings Section */}
-        <PayoutSettingsCard
-          planId={planId!}
-          payoutFrequency={plan.payout_frequency || "monthly"}
-          clawbackPeriodDays={plan.clawback_period_days || 180}
-          isClawbackExempt={plan.is_clawback_exempt || false}
-        />
-
         {/* NRR Additional Pay Section */}
         <NrrSettingsCard
           planId={planId!}
@@ -554,6 +546,14 @@ export default function PlanBuilder() {
           nrrPayoutOnBookingPct={(plan as any).nrr_payout_on_booking_pct ?? 0}
           nrrPayoutOnCollectionPct={(plan as any).nrr_payout_on_collection_pct ?? 100}
           nrrPayoutOnYearEndPct={(plan as any).nrr_payout_on_year_end_pct ?? 0}
+        />
+
+        {/* Payout Settings Section */}
+        <PayoutSettingsCard
+          planId={planId!}
+          payoutFrequency={plan.payout_frequency || "monthly"}
+          clawbackPeriodDays={plan.clawback_period_days || 180}
+          isClawbackExempt={plan.is_clawback_exempt || false}
         />
 
         {/* Assigned Employees Section */}
