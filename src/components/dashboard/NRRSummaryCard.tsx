@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { TrendingUp } from "lucide-react";
 import { formatCurrencyValue } from "@/lib/utils";
 import { NRRSummaryData } from "@/hooks/useDashboardPayoutRunData";
+import { NRR_DISPLAY_NAME } from "@/lib/payoutTypes";
 
 interface NRRSummaryCardProps {
   nrrSummary: NRRSummaryData;
@@ -16,7 +17,7 @@ export function NRRSummaryCard({ nrrSummary }: NRRSummaryCardProps) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-primary" />
-          NRR Additional Pay
+          {NRR_DISPLAY_NAME}
           {nrrSummary.nrrOtePct > 0 && (
             <Badge variant="secondary" className="ml-auto text-xs">
               {nrrSummary.nrrOtePct}% of Variable OTE

@@ -288,7 +288,7 @@ export default function Dashboard() {
           totalYearEndHoldback={commYearEndTotal}
         />
 
-        {/* NRR Additional Pay */}
+        {/* (CR/ER + Implementation) */}
         {hasPayoutRun && payoutData.nrrSummary && (
           <NRRSummaryCard nrrSummary={payoutData.nrrSummary} />
         )}

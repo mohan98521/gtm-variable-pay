@@ -34,6 +34,7 @@ import {
 import { Plus, Edit, Trash2, Loader2, TrendingUp, AlertTriangle, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { NRR_DISPLAY_NAME } from "@/lib/payoutTypes";
 
 interface NrrSettingsCardProps {
   planId: string;
@@ -134,7 +135,7 @@ export function NrrSettingsCard({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["comp_plan_with_metrics", planId] });
-      toast({ title: "NRR settings saved", description: "NRR Additional Pay configuration updated." });
+      toast({ title: `${NRR_DISPLAY_NAME} settings saved`, description: `${NRR_DISPLAY_NAME} configuration updated.` });
       setShowDialog(false);
     },
     onError: (error: Error) => {
@@ -159,7 +160,7 @@ export function NrrSettingsCard({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["comp_plan_with_metrics", planId] });
-      toast({ title: "NRR settings removed", description: "NRR Additional Pay has been reset." });
+      toast({ title: `${NRR_DISPLAY_NAME} settings removed`, description: `${NRR_DISPLAY_NAME} has been reset.` });
       setShowDeleteDialog(false);
     },
     onError: (error: Error) => {
@@ -179,7 +180,7 @@ export function NrrSettingsCard({
                 <TrendingUp className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-lg">NRR Additional Pay</CardTitle>
+                <CardTitle className="text-lg">{NRR_DISPLAY_NAME}</CardTitle>
                 <CardDescription>
                   Non-Recurring Revenue (CR/ER + Implementation) additional OTE allocation
                 </CardDescription>
@@ -188,7 +189,7 @@ export function NrrSettingsCard({
             {!isConfigured && (
               <Button variant="accent" onClick={() => setShowDialog(true)}>
                 <Plus className="h-4 w-4 mr-1.5" />
-                Add NRR Settings
+                Add {NRR_DISPLAY_NAME} Settings
               </Button>
             )}
           </div>
@@ -199,13 +200,13 @@ export function NrrSettingsCard({
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
                 <TrendingUp className="h-8 w-8 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-medium text-foreground mb-2">No NRR Additional Pay Configured</h3>
+              <h3 className="text-lg font-medium text-foreground mb-2">No {NRR_DISPLAY_NAME} Configured</h3>
               <p className="text-muted-foreground max-w-md mb-4">
-                Configure NRR Additional Pay to enable bonus calculations based on CR/ER and Implementation revenue.
+                Configure {NRR_DISPLAY_NAME} to enable bonus calculations based on CR/ER and Implementation revenue.
               </p>
               <Button variant="accent" onClick={() => setShowDialog(true)}>
                 <Plus className="h-4 w-4 mr-1.5" />
-                Add NRR Settings
+                Add {NRR_DISPLAY_NAME} Settings
               </Button>
             </div>
           ) : (
@@ -263,9 +264,9 @@ export function NrrSettingsCard({
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>{isConfigured ? "Edit NRR Settings" : "Add NRR Settings"}</DialogTitle>
+            <DialogTitle>{isConfigured ? `Edit ${NRR_DISPLAY_NAME} Settings` : `Add ${NRR_DISPLAY_NAME} Settings`}</DialogTitle>
             <DialogDescription>
-              Configure NRR Additional Pay allocation and payout timing for this plan.
+              Configure {NRR_DISPLAY_NAME} allocation and payout timing for this plan.
             </DialogDescription>
           </DialogHeader>
 
@@ -376,7 +377,7 @@ export function NrrSettingsCard({
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
             <Button onClick={() => saveMutation.mutate()} disabled={!isValid || saveMutation.isPending}>
               {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
-              {isConfigured ? "Save Changes" : "Add NRR Settings"}
+              {isConfigured ? "Save Changes" : `Add ${NRR_DISPLAY_NAME} Settings`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -386,9 +387,9 @@ export function NrrSettingsCard({
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove NRR Settings</AlertDialogTitle>
+            <AlertDialogTitle>Remove {NRR_DISPLAY_NAME} Settings</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove the NRR Additional Pay configuration? This will reset all NRR settings to zero.
+              Are you sure you want to remove the {NRR_DISPLAY_NAME} configuration? This will reset all settings to zero.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
