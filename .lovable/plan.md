@@ -1,21 +1,30 @@
 
 
-## Remove "Att. %" Column from Top Performers Table
+## Add Budget by Sales Function Pie Chart
 
 ### What Changes
 
-The "Att. %" (Attainment %) column in the Top 5 Performers table on the Executive Dashboard is redundant since it duplicates the "Software %" column (both are based on Software ARR achievement). Removing it simplifies the table.
+Add a second pie chart titled "Budget by Sales Function" next to the existing "Payout by Sales Function" chart. Budget is defined as the sum of `tvp_usd` (Target Variable Pay) for active employees, broken down by their `sales_function`. The layout will shift to a 2-column row with both pie charts, and the Top Performers table moves to its own full-width row.
 
 ### Technical Details
 
-**File: `src/components/executive/TopPerformers.tsx`**
+**File: `src/hooks/useExecutiveDashboard.ts`**
+- Add `budgetByFunction: FunctionBreakdown[]` to the `ExecutiveDashboardData` interface
+- Compute it by aggregating `tvp_usd` grouped by `sales_function` for active employees (same employees already used for `totalBudget`)
+- Add the new field to the return object
 
-- Remove the `<TableHead>` for "Att. %" from the header row
-- Remove the corresponding `<TableCell>` rendering `p.attainmentPct` from each data row
-- Update the empty-state `colSpan` from 7 to 6
+**File: `src/components/executive/PayoutByFunction.tsx`**
+- Make the component reusable by accepting a `title` prop (defaulting to "Payout by Sales Function")
+- Add percentage display in the tooltip (e.g., "$1.2M (34%)")
 
-No changes needed to the hook or data model -- the `attainmentPct` field can remain in the interface for potential use elsewhere.
+**File: `src/pages/ExecutiveDashboard.tsx`**
+- Change the bottom grid from a 2-column layout (Payout pie + Top Performers) to:
+  - Row of 2 pie charts: Payout by Function + Budget by Function
+  - Full-width row: Top Performers table
+- Pass `title="Budget by Sales Function"` and `data={data?.budgetByFunction || []}` for the second chart
 
 ### Files Modified
-- `src/components/executive/TopPerformers.tsx`
+- `src/hooks/useExecutiveDashboard.ts` -- add budgetByFunction computation
+- `src/components/executive/PayoutByFunction.tsx` -- add title prop, percentage in tooltip
+- `src/pages/ExecutiveDashboard.tsx` -- update layout with second pie chart
 
