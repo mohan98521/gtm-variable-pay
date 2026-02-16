@@ -1,125 +1,61 @@
 
 
-## Executive Summary Dashboard
+## Fix: Attainment 0% Bug + Add Software/Closing ARR Columns
 
-### Overview
-A new page at `/executive` providing CIO, CFO, and Sales Heads with a real-time, data-dense overview of compensation spend, quota attainment, and sales force distribution. Built on top of existing data from `monthly_payouts`, `performance_targets`, `employees`, and `user_targets` tables -- no schema changes needed.
+### Root Cause: ID Type Mismatch
 
----
+The attainment is always 0% because of a key mismatch between three data sources:
 
-### Page Structure
+- `monthly_payouts.employee_id` stores **UUIDs** (e.g., `da2f0c64-...`)
+- `performance_targets.employee_id` stores **string IDs** (e.g., `AF0001`)
+- `deals.sales_rep_employee_id` stores **string IDs** (e.g., `AF0001`)
+
+When building the Top Performers list, the code keys `empPayoutMap` by UUID but `empTargetMap`/`empActualMap` by string ID. The lookup on line 250 never matches, so every performer shows 0%.
+
+### Fix Summary
+
+**File: `src/hooks/useExecutiveDashboard.ts`**
+
+1. **Add `employee_id` (string) to the employees query** so we can build a UUID-to-stringID lookup map.
+
+2. **Build a bidirectional map** (`uuidToStringId`) from the employees data. Use this to bridge between payout data (UUID-keyed) and targets/deals data (string-keyed).
+
+3. **Compute per-employee metric-level attainment** instead of one aggregate number. Split targets into:
+   - **Software ARR**: targets with `metric_type` containing "New Software Booking ARR" (including Team/Org variants)
+   - **Closing ARR**: targets with `metric_type = "Closing ARR"`
+
+4. **Fetch Closing ARR actuals** from the `closing_arr_actuals` table (latest month snapshot, filtered by contract end_date eligibility) to compute Closing ARR achievement.
+
+5. **Expand the `TopPerformer` interface** to include:
+   - `softwareArrAchPct` -- Software Booking ARR achievement %
+   - `closingArrAchPct` -- Closing ARR achievement %
+
+6. **Fix the top performers mapping** to translate UUIDs to string IDs when looking up attainment.
+
+**File: `src/components/executive/TopPerformers.tsx`**
+
+7. **Add two new columns** to the table:
+   - "Software %" -- shows the Software ARR achievement percentage
+   - "Closing ARR %" -- shows the Closing ARR achievement percentage
+   - Each uses color-coded badges (green >= 100%, amber >= 80%, red < 80%)
+
+8. **Add a footer note** clarifying the data source: "Payouts from finalized monthly payout runs. Achievement from deal actuals vs performance targets."
+
+### Updated Top Performers Table Layout
 
 ```text
-+-----------------------------------------------------------------------+
-| Executive Compensation Overview     [FY Dropdown] [USD/Local Toggle]  |
-+===============================+=======================================+
-| Total Variable     | Global Quota  | Payout vs   | Active            |
-| Payout (YTD)       | Attainment    | Budget      | Payees            |
-| $2.4M  +12% YoY   | 87% (radial)  | 92% bar     | 47                |
-+===============================+=======================================+
-|  Payout & Attainment Trend (Bar+Line)  |  Attainment Distribution    |
-|  Monthly: bars=payout, line=avg att%   |  Histogram: <50 50-80 etc   |
-+========================================+=============================+
-|  Payout by Sales Function (Donut)      |  Top 5 Performers Table     |
-|  Hunters, Farmers, SEs, Heads...       |  Name, Role, Payout, Att%   |
-+========================================+=============================+
+| # | Name | Role/Region | Payout | Software % | Closing ARR % | Att. % |
 ```
 
----
+### Data Source Clarification (shown as a subtle footnote)
 
-### Data Hook: `useExecutiveDashboard.ts`
+- **Payout column**: Sourced from `monthly_payouts` table (the output of finalized payout runs)
+- **Software %**: YTD deal `new_software_booking_arr_usd` vs `performance_targets` for "New Software Booking ARR"
+- **Closing ARR %**: Latest month eligible ARR from `closing_arr_actuals` vs target
+- **Att. %**: Weighted overall attainment across all metrics
 
-Single hook that fetches all data for the page in parallel:
+### Files Modified
+- `src/hooks/useExecutiveDashboard.ts` -- fix ID bridging, add per-metric attainment, fetch closing ARR actuals
+- `src/components/executive/TopPerformers.tsx` -- add Software % and Closing ARR % columns, add data source footnote
 
-**Query 1 -- Current Year Payouts:** `monthly_payouts` filtered to selected FY. Groups by employee, month, and payout_type to compute:
-- Total variable payout (YTD) using `classifyPayoutType` from `payoutTypes.ts`
-- Monthly payout totals for the trend chart
-- Distinct active payees count
-
-**Query 2 -- Prior Year Payouts:** Same query for FY-1, used only for YoY percentage change on the north star card.
-
-**Query 3 -- Employees:** `employees` table for `sales_function`, `full_name`, `region`, `employee_role`, `ote_usd` (budget proxy), `tvp_usd`.
-
-**Query 4 -- Performance Targets + Actuals:** Join `performance_targets` (target_value_usd) with aggregated deal actuals per employee to compute attainment percentages. Uses the same metric aggregation logic already in `useCurrentUserCompensation.ts` but across all employees.
-
-**Computed Fields:**
-- **Global Quota Attainment:** Weighted average of individual attainment percentages (weighted by target size)
-- **Payout vs Budget:** Sum of all payouts / Sum of all `tvp_usd` for active employees
-- **Attainment Distribution:** Bucket each employee's attainment into <50%, 50-80%, 80-100%, 100-120%, >120%
-- **Top 5 Performers:** Sorted by total payout descending, limited to 5
-
----
-
-### New Files
-
-| File | Purpose |
-|------|---------|
-| `src/pages/ExecutiveDashboard.tsx` | Main page component with header, FY dropdown, currency toggle, and four sections |
-| `src/hooks/useExecutiveDashboard.ts` | Data fetching hook with all queries and computed metrics |
-| `src/components/executive/NorthStarCards.tsx` | 4 top-row metric cards (total payout, radial attainment, budget progress bar, active payees) |
-| `src/components/executive/PayoutTrendChart.tsx` | Dual-axis composed chart -- bars for monthly payout, line for avg attainment % |
-| `src/components/executive/AttainmentDistribution.tsx` | Histogram bar chart with color-coded buckets |
-| `src/components/executive/PayoutByFunction.tsx` | Donut/pie chart by sales function |
-| `src/components/executive/TopPerformers.tsx` | Compact leaderboard table with rank, name, role/region, payout, attainment % |
-
----
-
-### Modified Files
-
-| File | Change |
-|------|--------|
-| `src/App.tsx` | Add route `/executive` with `ProtectedRoute permissionKey="page:executive_dashboard"` |
-| `src/components/layout/AppSidebar.tsx` | Add "Executive" nav item with `PieChart` icon, gated by `page:executive_dashboard` permission |
-| `src/lib/permissions.ts` | Add `"page:executive_dashboard"` to the `PermissionKey` type and `PERMISSION_DEFINITIONS` array |
-
----
-
-### Permission Integration
-
-- New permission key: `page:executive_dashboard` (category: "page", label: "Executive Dashboard")
-- Added to `PERMISSION_DEFINITIONS` so it automatically appears in the Permissions matrix UI
-- Database migration: Insert default permission rows for all existing roles (default `is_allowed = false` except for `admin` and `executive` roles which get `true`)
-- The existing `auto_generate_role_permissions` trigger handles future roles automatically
-
----
-
-### Visual Design Specifications
-
-- **Color palette:** Qota Deep Navy (`--qota-navy`) for primary text/headers, Teal (`--qota-teal`) for accent highlights and positive metrics
-- **North Star Cards:** Clean white cards with subtle `border` and `shadow-sm`. Large `text-3xl font-bold` numbers. YoY trend uses `TrendingUp`/`TrendingDown` icons in success/destructive colors
-- **Radial Progress (Quota Attainment):** Built with Recharts `RadialBarChart` -- single ring, teal fill, centered percentage text
-- **Budget Progress Bar:** Reuses the existing `Progress` component with a percentage label
-- **Charts:** All use `ChartContainer` from `src/components/ui/chart.tsx` for consistent theming
-- **Histogram colors:** Red (`hsl(0 72% 51%)`) for <50%, warning amber for 50-80%, muted for 80-100%, teal for 100-120%, deep teal for >120%
-- **Donut chart:** Uses chart color variables (`--chart-1` through `--chart-5`)
-- **Top 5 table:** Compact shadcn `Table` with rank badges, avatar initials circle, and right-aligned currency values
-- **Loading states:** `Skeleton` loaders matching each card/chart dimensions
-- **Inter font, strict alignment, no decorative elements** -- fintech aesthetic
-
----
-
-### Technical Details
-
-**Database Migration (1 statement):**
-```sql
-INSERT INTO role_permissions (role, permission_key, is_allowed)
-SELECT r.name, 'page:executive_dashboard', 
-  CASE WHEN r.name IN ('admin', 'executive') THEN true ELSE false END
-FROM roles r
-ON CONFLICT DO NOTHING;
-```
-
-**Recharts Components Used:**
-- `ComposedChart` with `Bar` + `Line` for the trend chart (dual Y-axes via `YAxis yAxisId`)
-- `BarChart` for histogram
-- `PieChart` with `Pie innerRadius` for donut
-- `RadialBarChart` for the quota attainment circle
-
-**Currency Toggle Logic:**
-- State: `currencyMode: 'usd' | 'local'`
-- When `usd`: use `calculated_amount_usd` from payouts
-- When `local`: use `calculated_amount_local` (with mixed currencies, show a warning badge that local mode aggregates across currencies)
-- Default: USD (executive view is primarily USD-denominated)
-
-**FY Dropdown:** Reuses `useFiscalYear` context already available globally.
-
+### No Database Changes Required
