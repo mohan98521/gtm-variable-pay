@@ -39,6 +39,8 @@ export interface ExecutiveDashboardData {
   payoutVsBudgetPct: number;
   totalBudget: number;
   activePayees: number;
+  repsWithTargets: number;
+  totalActiveEmployees: number;
   monthlyTrend: MonthlyTrend[];
   attainmentDistribution: AttainmentBucket[];
   payoutByFunction: FunctionBreakdown[];
@@ -224,20 +226,23 @@ export function useExecutiveDashboard() {
       empTotalActualMap.set(eid, (empTotalActualMap.get(eid) || 0) + val);
     }
 
-    // Per-employee attainment
+    // Per-employee attainment (Software ARR only)
     const attainments: { employeeId: string; pct: number; targetSize: number }[] = [];
-    for (const [empId, totalTarget] of empTotalTargetMap) {
-      if (totalTarget > 0) {
-        const totalActual = empTotalActualMap.get(empId) || 0;
-        attainments.push({ employeeId: empId, pct: (totalActual / totalTarget) * 100, targetSize: totalTarget });
+    for (const [empId, swTarget] of empSoftwareTargetMap) {
+      if (swTarget > 0) {
+        const swActual = empSoftwareActualMap.get(empId) || 0;
+        attainments.push({ employeeId: empId, pct: (swActual / swTarget) * 100, targetSize: swTarget });
       }
     }
 
-    // Weighted global quota attainment
+    // Weighted global quota attainment (Software ARR only)
     const totalTargetWeight = attainments.reduce((s, a) => s + a.targetSize, 0);
     const globalQuotaAttainment = totalTargetWeight > 0
       ? attainments.reduce((s, a) => s + a.pct * (a.targetSize / totalTargetWeight), 0)
       : 0;
+
+    const repsWithTargets = attainments.length;
+    const totalActiveEmployees = employees.filter((e) => e.is_active).length;
 
     // Attainment distribution histogram
     const buckets = [
@@ -338,6 +343,8 @@ export function useExecutiveDashboard() {
       attainmentDistribution,
       payoutByFunction,
       topPerformers,
+      repsWithTargets,
+      totalActiveEmployees,
     };
   }, [isLoading, currentPayoutsQuery.data, employeesQuery.data, targetsQuery.data, dealsQuery.data, closingArrQuery.data, selectedYear]);
 

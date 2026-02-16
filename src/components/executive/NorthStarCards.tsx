@@ -49,7 +49,7 @@ export function NorthStarCards({ data, isLoading }: NorthStarCardsProps) {
             {formatCompact(data.totalPayoutYtd)}
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            {data.payoutVsBudgetPct.toFixed(0)}% of Budget ({formatCompact(data.totalBudget)})
+            From finalized payout runs
           </div>
         </CardContent>
       </Card>
@@ -59,7 +59,7 @@ export function NorthStarCards({ data, isLoading }: NorthStarCardsProps) {
         <CardContent className="p-6">
           <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium mb-1">
             <Target className="h-4 w-4" />
-            Global Quota Attainment
+            Software ARR Attainment
           </div>
           <div className="flex items-center gap-4">
             <div className="relative w-20 h-20">
@@ -86,7 +86,7 @@ export function NorthStarCards({ data, isLoading }: NorthStarCardsProps) {
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
-              Weighted avg across all reps
+              Weighted across {data.repsWithTargets} reps with Software ARR targets
             </div>
           </div>
         </CardContent>
@@ -114,10 +114,10 @@ export function NorthStarCards({ data, isLoading }: NorthStarCardsProps) {
         <CardContent className="p-6">
           <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium mb-1">
             <Users className="h-4 w-4" />
-            Eligible Payees
+            Eligible Employees
           </div>
           <div className="text-3xl font-bold text-foreground tracking-tight">
-            {data.activePayees}
+            {data.activePayees} <span className="text-lg font-medium text-muted-foreground">of {data.totalActiveEmployees}</span>
           </div>
           <div className="text-xs text-muted-foreground mt-1">
             With finalized payouts this year
