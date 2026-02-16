@@ -192,13 +192,16 @@ export function useDashboardPayoutRunData() {
 
       const employeeUuid = employee.id;
 
-      // 2. Fetch payout runs, metric details, monthly payouts, user_targets, clawback in parallel
+      // 2. Fetch payout runs, metric details, monthly payouts, user_targets, clawback, performance_targets, deals in parallel
       const [
         payoutRunsRes,
         metricDetailsRes,
         monthlyPayoutsRes,
         userTargetsRes,
         clawbackRes,
+        perfTargetsRes,
+        dealsRes,
+        closingArrRes,
       ] = await Promise.all([
         supabase
           .from("payout_runs")
@@ -234,11 +237,43 @@ export function useDashboardPayoutRunData() {
           .eq("employee_id", employeeUuid)
           .gte("triggered_month", `${selectedYear}-01`)
           .lte("triggered_month", `${selectedYear}-12`),
+
+        // Fetch performance_targets for this employee (Issue 1: correct targets)
+        supabase
+          .from("performance_targets")
+          .select("metric_type, target_value_usd")
+          .eq("employee_id", profile.employee_id)
+          .eq("effective_year", selectedYear),
+
+        // Fetch deals for monthly actuals pivot (Issue 3: deal values not payouts)
+        supabase
+          .from("deals")
+          .select("month_year, new_software_booking_arr_usd, managed_services_usd, cr_usd, er_usd, implementation_usd, perpetual_license_usd, sales_rep_employee_id")
+          .eq("sales_rep_employee_id", profile.employee_id)
+          .gte("month_year", `${selectedYear}-01`)
+          .lte("month_year", `${selectedYear}-12`),
+
+        // Fetch closing ARR actuals for monthly snapshots (Issue 3)
+        supabase
+          .from("closing_arr_actuals")
+          .select("month_year, closing_arr")
+          .eq("sales_rep_employee_id", profile.employee_id)
+          .gte("month_year", `${selectedYear}-01`)
+          .lte("month_year", `${selectedYear}-12`),
       ]);
 
       const payoutRuns = payoutRunsRes.data || [];
       const monthlyPayouts = monthlyPayoutsRes.data || [];
       const userTargets = userTargetsRes.data || [];
+      const perfTargets = perfTargetsRes.data || [];
+      const deals = dealsRes.data || [];
+      const closingArrActuals = closingArrRes.data || [];
+
+      // Build performance targets lookup map (metric_type -> annual target)
+      const perfTargetMap = new Map<string, number>();
+      for (const pt of perfTargets) {
+        perfTargetMap.set(pt.metric_type, pt.target_value_usd);
+      }
 
       const runIds = (metricDetailsRes.data || []).map(r => r.id);
       const runMonthMap = new Map((metricDetailsRes.data || []).map(r => [r.id, r.month_year]));
@@ -387,9 +422,13 @@ export function useDashboardPayoutRunData() {
           const allocated = detail.allocated_ote_usd || 0;
           const weightage = targetBonus > 0 ? Math.round((allocated / targetBonus) * 100) : 0;
 
+          // Use performance_targets for target if available (Issue 1)
+          const targetFromPerfTargets = perfTargetMap.get(detail.metric_name);
+          const targetUsd = targetFromPerfTargets ?? (detail.target_usd || 0);
+
           vpMetrics.push({
             metricName: detail.metric_name,
-            targetUsd: detail.target_usd || 0,
+            targetUsd,
             actualUsd: detail.actual_usd || 0,
             achievementPct: detail.achievement_pct || 0,
             multiplier: detail.multiplier || 1,
@@ -401,8 +440,8 @@ export function useDashboardPayoutRunData() {
             commissionRatePct: null,
             planName: detail.plan_name,
             weightagePercent: weightage,
-            logicType: detail.notes?.includes('Gated') ? 'Gated_Threshold' : 
-                       detail.notes?.includes('Stepped') ? 'Stepped_Accelerator' : 'Linear',
+            // Will be cross-referenced with planConfig below (Issue 2)
+            logicType: 'Linear',
             gateThreshold: null,
             payoutOnBookingPct,
             payoutOnCollectionPct,
@@ -551,14 +590,29 @@ export function useDashboardPayoutRunData() {
           nrrSummary.nrrOtePct = planConfig.nrrOtePct;
         }
 
+        // Issue 2: Cross-reference ALL VP metrics with planConfig for correct logicType, weightage, gateThreshold
+        for (const vp of vpMetrics) {
+          const configMetric = planConfig.metrics.find(m => m.metricName === vp.metricName);
+          if (configMetric) {
+            vp.logicType = configMetric.logicType;
+            vp.gateThreshold = configMetric.gateThresholdPercent;
+            vp.weightagePercent = configMetric.weightagePercent;
+            vp.payoutOnBookingPct = configMetric.payoutOnBookingPct;
+            vp.payoutOnCollectionPct = configMetric.payoutOnCollectionPct;
+            vp.payoutOnYearEndPct = configMetric.payoutOnYearEndPct;
+          }
+        }
+
         // Fill missing VP metrics from plan config (zero actuals)
         for (const pm of planConfig.metrics) {
           if (!seenVpMetrics.has(pm.metricName)) {
             const targetBonusUsd = employee.tvp_usd || 0;
             const allocated = (targetBonusUsd * pm.weightagePercent) / 100;
+            // Issue 1: Use performance_targets for target value
+            const targetFromPerfTargets = perfTargetMap.get(pm.metricName);
             vpMetrics.push({
               metricName: pm.metricName,
-              targetUsd: 0,
+              targetUsd: targetFromPerfTargets ?? 0,
               actualUsd: 0,
               achievementPct: 0,
               multiplier: 1,
@@ -626,28 +680,85 @@ export function useDashboardPayoutRunData() {
         }
       }
 
-      // 9. Build monthly actuals pivot - include ALL component types
+      // 9. Build monthly actuals pivot from DEALS (deal values, not payout values) - Issue 3
       const allMetricNames = new Set<string>();
       const monthlyDataMap = new Map<string, Record<string, number>>();
       const metricTargetMap: Record<string, number> = {};
 
-      for (const detail of allMetricDetails) {
-        const runMonth = runMonthMap.get(detail.payout_run_id);
-        if (!runMonth) continue;
-        
-        const monthKey = typeof runMonth === 'string' ? runMonth.substring(0, 7) : String(runMonth).substring(0, 7);
-        
-        // Include ALL component types
-        allMetricNames.add(detail.metric_name);
-        
+      // Populate from deals table (actual deal values)
+      for (const deal of deals) {
+        const monthKey = deal.month_year?.substring(0, 7);
+        if (!monthKey) continue;
+
         if (!monthlyDataMap.has(monthKey)) {
           monthlyDataMap.set(monthKey, {});
         }
-        
         const monthData = monthlyDataMap.get(monthKey)!;
-        monthData[detail.metric_name] = (monthData[detail.metric_name] || 0) + (detail.this_month_usd || 0);
-        
-        if (detail.target_usd && detail.target_usd > 0) {
+
+        // Map deal columns to metric names matching plan_metrics/plan_commissions
+        if (deal.new_software_booking_arr_usd) {
+          const name = "New Software Booking ARR";
+          allMetricNames.add(name);
+          monthData[name] = (monthData[name] || 0) + deal.new_software_booking_arr_usd;
+        }
+        if (deal.managed_services_usd) {
+          const name = "Managed Services";
+          allMetricNames.add(name);
+          monthData[name] = (monthData[name] || 0) + deal.managed_services_usd;
+        }
+        if ((deal.cr_usd || 0) + (deal.er_usd || 0) > 0) {
+          const name = "CR/ER";
+          allMetricNames.add(name);
+          monthData[name] = (monthData[name] || 0) + (deal.cr_usd || 0) + (deal.er_usd || 0);
+        }
+        if (deal.implementation_usd) {
+          const name = "Implementation";
+          allMetricNames.add(name);
+          monthData[name] = (monthData[name] || 0) + deal.implementation_usd;
+        }
+        if (deal.perpetual_license_usd) {
+          const name = "Perpetual License";
+          allMetricNames.add(name);
+          monthData[name] = (monthData[name] || 0) + deal.perpetual_license_usd;
+        }
+      }
+
+      // Add Closing ARR monthly snapshots
+      for (const arr of closingArrActuals) {
+        const monthKey = arr.month_year?.substring(0, 7);
+        if (!monthKey || !arr.closing_arr) continue;
+
+        const name = "Closing ARR";
+        allMetricNames.add(name);
+        if (!monthlyDataMap.has(monthKey)) {
+          monthlyDataMap.set(monthKey, {});
+        }
+        const monthData = monthlyDataMap.get(monthKey)!;
+        monthData[name] = (monthData[name] || 0) + arr.closing_arr;
+      }
+
+      // Add NRR / SPIFF from payout_metric_details (computed values, not raw deals)
+      for (const detail of allMetricDetails) {
+        if (detail.component_type === 'nrr' || detail.component_type === 'spiff') {
+          const runMonth = runMonthMap.get(detail.payout_run_id);
+          if (!runMonth) continue;
+          const monthKey = typeof runMonth === 'string' ? runMonth.substring(0, 7) : String(runMonth).substring(0, 7);
+          allMetricNames.add(detail.metric_name);
+          if (!monthlyDataMap.has(monthKey)) {
+            monthlyDataMap.set(monthKey, {});
+          }
+          const monthData = monthlyDataMap.get(monthKey)!;
+          monthData[detail.metric_name] = (monthData[detail.metric_name] || 0) + (detail.this_month_usd || 0);
+        }
+      }
+
+      // Populate metricTargetMap from performance_targets (Issue 1)
+      for (const [metricType, targetVal] of perfTargetMap) {
+        metricTargetMap[metricType] = targetVal;
+      }
+      // Also fill from payout_metric_details for metrics not in performance_targets
+      for (const detail of allMetricDetails) {
+        if (detail.target_usd && detail.target_usd > 0 && !metricTargetMap[detail.metric_name]) {
           metricTargetMap[detail.metric_name] = detail.target_usd;
         }
       }
@@ -672,6 +783,7 @@ export function useDashboardPayoutRunData() {
 
       const metricNames = Array.from(allMetricNames).sort();
       
+      // Only build months that have data (Issue 3: don't show all 12 months)
       const monthlyActuals: MonthlyActuals[] = [];
       for (let m = 1; m <= 12; m++) {
         const monthStr = `${selectedYear}-${m.toString().padStart(2, '0')}`;
