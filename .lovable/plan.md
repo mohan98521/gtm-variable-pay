@@ -1,91 +1,74 @@
 
 
-## Revamp Sales Rep Dashboard: Payout Run-Driven with Status Visibility
+## Sales Rep Dashboard Fixes -- 4 Issues
 
-### Overview
+### Issue 1: Top Summary Cards Restructure
 
-Transform the Dashboard from a real-time calculation view into a **payout-run-sourced** view. All summary cards, metric tables, commission tables, NRR, SPIFF, and monthly breakdowns will pull from the latest payout run data (`monthly_payouts` + `payout_metric_details`). The payout run status (Draft, Review, Approved, Finalized, Paid) will be prominently displayed. Deal-level details and Collection Status will be removed. The Monthly Performance table will be expanded with all metric columns, targets, and YTD Achievement %. The What-If Simulator will be updated to reflect the latest plan structure.
+**Current**: Target Bonus | Total Eligible | Amount Paid | Holding | Commission
+**Problem**: "Total Eligible" is unclear; missing bifurcation into booking/collection/year-end across all components.
+**Fix**: Change the 5 cards to:
+- **Target Bonus** (unchanged)
+- **YTD Total Eligible** -- sum of ALL eligible payouts (VP + Commission + NRR + SPIFF)
+- **Payable (Booking)** -- total booking amounts across all components
+- **Payable Upon Collection** -- total collection holdback across all components
+- **Hold Till Year End** -- total year-end holdback across all components
 
----
-
-### Changes Summary
-
-1. **Show Payout Run Status** -- Display the latest payout run status (Draft / Review / Approved / Finalized / Paid) as a prominent badge in the header, replacing the current "Estimated/Finalized" badge.
-
-2. **Source all data from payout runs** -- Create a new comprehensive hook `useDashboardPayoutRunData` that fetches:
-   - Latest payout run status and month coverage
-   - YTD summary (aggregated from `monthly_payouts`)
-   - Metric-level details (from `payout_metric_details` aggregated across all months)
-   - Commission details (from `payout_metric_details` where `component_type = 'commission'`)
-   - NRR and SPIFF summaries (from `payout_metric_details` where `component_type` is `nrr` / `spiff`)
-   - Monthly actuals breakdown (from `payout_metric_details` pivoted by month)
-
-3. **Remove Collection Status Card** -- Remove `CollectionStatusCard` from the Dashboard entirely.
-
-4. **Remove deal-level details from NRR and SPIFF cards** -- Keep NRR and SPIFF summary metrics but remove the deal breakdown tables within them.
-
-5. **Expand Monthly Performance Table** -- New structure:
-   - One column per metric (New Software Booking ARR, Closing ARR, CR/ER, Implementation, etc.)
-   - A **Target row** at the top showing annual targets
-   - Monthly rows (Jan-Dec) with actuals
-   - **YTD Total** row
-   - **YTD Ach %** row showing achievement percentage vs target
-
-6. **Update What-If Simulator** -- Source the plan structure (metrics, weights, multiplier grids, commission rates) from the latest `payout_metric_details` to ensure it reflects the current comp plan. Keep the interactive input/projection UX but simplify the layout.
+**File**: `src/pages/Dashboard.tsx` -- update the summary card section to aggregate VP + commission + NRR + SPIFF booking/collection/year-end amounts from `payoutData`.
 
 ---
 
-### Technical Details
+### Issue 2: SPIFF Rate Display Fix
 
-**New file: `src/hooks/useDashboardPayoutRunData.ts`**
-- Fetches the current user's employee UUID (same pattern as existing hooks)
-- Queries `payout_runs` for the selected fiscal year to get the latest run status and covered months
-- Queries `monthly_payouts` for this employee across the fiscal year, aggregating YTD totals for Variable Pay, Commissions, NRR, SPIFF, Booking, Collection Holdback, Year-End Holdback
-- Queries `payout_metric_details` for all runs in the fiscal year for this employee, grouping by `component_type` and `metric_name` to produce:
-  - VP metric summaries (target, actual, achievement, multiplier, eligible, booking/collection/year-end splits)
-  - Commission summaries (deal value, rate, gross payout, splits)
-  - NRR/SPIFF summaries (aggregated totals)
-  - Monthly actuals pivot (month x metric_name matrix)
-- Returns the latest payout run status, all summary data, and the plan structure for the simulator
+**Current**: Shows `achievement_pct` (68.33% = eligible actuals / software target) as "Rate".
+**Actual**: SPIFF rate is 25% (from `plan_spiffs.spiff_rate_pct`). The 68.33% is the achievement percentage, not the rate.
+**Fix**:
+- In `useDashboardPayoutRunData.ts`, the SPIFF summary currently maps `detail.achievement_pct` to `spiffRatePct` (line 428). Change this to extract the actual SPIFF rate from the plan configuration.
+- Fetch `plan_spiffs` for the employee's plan and use `spiff_rate_pct` (25%) as the rate.
+- Also display the SPIFF achievement % separately in the `SpiffSummaryCard` for clarity. Add fields like "Achievement %" alongside "SPIFF Rate".
 
-**Modified file: `src/pages/Dashboard.tsx`**
-- Replace `useDashboardPayoutSummary` with `useDashboardPayoutRunData`
-- Keep `useCurrentUserCompensation` as fallback only when no payout run data exists
-- Add payout run status badge (color-coded: Draft=gray, Review=amber, Approved=blue, Finalized=green, Paid=emerald)
-- Remove `CollectionStatusCard` import and usage
-- Pass payout-run-sourced data to `MetricsTable`, `CommissionTable`, `NRRSummaryCard`, `SpiffSummaryCard`
-- Pass expanded monthly data to a new `MonthlyPerformanceTable`
-- Pass updated plan structure to `PayoutSimulator`
+**Files**: `src/hooks/useDashboardPayoutRunData.ts`, `src/components/dashboard/SpiffSummaryCard.tsx`
 
-**Modified file: `src/components/dashboard/MetricsTable.tsx`**
-- Accept data from payout run (same interface but sourced differently)
-- No structural changes needed -- the table already shows the right columns
+---
 
-**Modified file: `src/components/dashboard/CommissionTable.tsx`**
-- Accept data from payout run (same interface)
-- No structural changes needed
+### Issue 3: Monthly Performance -- Add All Metrics
 
-**Modified file: `src/components/dashboard/NRRSummaryCard.tsx`**
-- Remove the deal breakdown table (lines 61-92)
-- Keep only the summary metrics grid (NRR Target, Eligible Actuals, Achievement, Payout) and CR/ER vs Implementation breakdown
+**Current**: Only shows `variable_pay` and `commission` component types in the monthly pivot. Missing Closing ARR (which is a VP metric but may not have monthly deal data), NRR, Managed Services, Perpetual License.
+**Root Cause**: The monthly pivot in the hook (line 451) filters to `variable_pay` or `commission` only, excluding `nrr` and `spiff`. Additionally, Closing ARR is a VP metric but may not have `this_month_usd` populated if data isn't flowing.
+**Fix**:
+- In `useDashboardPayoutRunData.ts`, expand the monthly pivot to include ALL `component_type` values (`variable_pay`, `commission`, `nrr`, `spiff`).
+- Ensure `metricNames` and `metricTargets` include entries for NRR, SPIFF, and all commission types.
+- In `MonthlyPerformanceTable`, no changes needed -- it already renders dynamically from `metricNames`.
 
-**Modified file: `src/components/dashboard/SpiffSummaryCard.tsx`**
-- Remove the deal breakdown table (lines 48-81)
-- Keep only the summary metrics grid (Total SPIFF Payout, Software Variable OTE, Software Target, Eligible Actuals)
+**File**: `src/hooks/useDashboardPayoutRunData.ts`
 
-**Modified file: `src/components/dashboard/MonthlyPerformanceTable.tsx`**
-- Complete rewrite to support dynamic metric columns
-- New props: `monthlyData` (month x metric matrix), `targets` (metric targets map), `metricNames` (list of all metrics)
-- Structure:
-  - Header row: Month | Metric1 | Metric2 | ... | MetricN
-  - Target row (highlighted): "Target" | target values per metric
-  - Monthly rows: Jan through Dec with actuals (dash for zero/missing)
-  - YTD Total footer row
-  - YTD Ach % footer row with color-coded percentages
+---
 
-**Modified file: `src/components/dashboard/PayoutSimulator.tsx`**
-- Source plan metrics and commission structure from payout run data when available
-- Keep the interactive input cards and projected payouts table
-- Add a clear "Your Compensation Structure" summary showing metric weights, logic types, and commission rates before the input section
-- Show the payout split percentages (Booking/Collection/Year-End) in the results
+### Issue 4: Payout Simulator -- Show Full Comp Structure
+
+**Current**: Simulator only shows metrics/commissions that have actuals in payout runs. If no deals exist for a metric (e.g., Closing ARR, Managed Services), it doesn't appear.
+**Fix**: Fetch the employee's full plan configuration (plan_metrics, plan_commissions, plan_spiffs, nrr_ote_percent) and merge with payout run data. Show ALL configured metrics even if actuals are zero.
+
+For the Farmer plan, the full structure is:
+- **Variable Pay**: New Software Booking ARR (60% weight), Closing ARR (40% weight)
+- **Commissions**: Managed Services (1.5%), Perpetual License (4%)
+- **NRR Additional Pay**: 20% of Variable OTE
+- **Large Deal SPIFF**: 25% rate, min deal value $400K
+
+**Changes**:
+1. In `useDashboardPayoutRunData.ts`, add a parallel fetch for `plan_metrics`, `plan_commissions`, `plan_spiffs`, and `comp_plans.nrr_ote_percent` for the employee's assigned plan. Merge these with payout run data, filling in zero actuals for any metric not yet in payout runs.
+2. Update the `PayoutSimulator` component to accept NRR and SPIFF simulation inputs alongside VP metrics and commissions. Add NRR simulation (formula: Variable OTE x NRR OTE % x Achievement) and SPIFF simulation (formula: Software Variable OTE x SPIFF Rate x eligible deals above threshold / target).
+3. Pass full plan config (including multiplier grids) to the simulator so computations match the designed comp structure.
+
+**Files**: `src/hooks/useDashboardPayoutRunData.ts`, `src/pages/Dashboard.tsx`, `src/components/dashboard/PayoutSimulator.tsx`
+
+---
+
+### Technical Summary
+
+| File | Change |
+|------|--------|
+| `src/hooks/useDashboardPayoutRunData.ts` | Fetch plan config; fix SPIFF rate; expand monthly pivot to all components; merge plan metrics with payout data for full coverage |
+| `src/pages/Dashboard.tsx` | Restructure 5 summary cards to Target Bonus / YTD Eligible / Booking / Collection / Year-End; pass full plan config to simulator |
+| `src/components/dashboard/SpiffSummaryCard.tsx` | Show actual SPIFF rate (25%) and achievement % separately |
+| `src/components/dashboard/PayoutSimulator.tsx` | Add NRR and SPIFF simulation sections; show all plan metrics even without actuals; compute payouts per comp structure formulas |
 
