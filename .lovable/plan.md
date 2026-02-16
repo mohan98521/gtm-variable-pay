@@ -1,59 +1,72 @@
 
 
-## Add Customer Logo (Azentio) to Page Headers
+## Redesign Admin Page: Spreadsheet-Style Horizontal Navigation
 
-### What This Does
+### Problem
+The current Admin page uses a fixed left sidebar for section navigation that always occupies screen space, even when you're working on something else. As you go deeper into tabs, the navigation becomes cluttered and rigid.
 
-Adds the Azentio logo as a "customer logo" in the top-left area of every page header, so during demos the customer sees their branding alongside the Qota product branding.
+### New Design
 
-### Where It Appears
+Replace the vertical sidebar navigation with a **two-tier horizontal navigation bar** inspired by spreadsheet headers:
 
-- **Desktop**: In the top header bar (left side), next to the mobile hamburger area -- showing "Powered by Qota | [Customer Logo]" or simply the customer logo with a subtle label like "Demo for"
-- **Mobile**: Same header bar, visible after the hamburger menu button
-- **Auth page**: Below the Qota logo, showing the customer logo
+```text
++-----------------------------------------------------------------------+
+| Administration                                                         |
+| Manage compensation plans and employee accounts                        |
++===============+==========+===========+==========+=====================+
+| COMPENSATION  |  PEOPLE  |  FINANCE  |  SYSTEM  |   (section headers) |
++===============+==========+===========+==========+=====================+
+| Comp Plans | Perf Targets |                        (sub-items as pills)|
++-----------------------------------------------------------------------+
+|                                                                        |
+|              [Full-width content area]                                 |
+|                                                                        |
++-----------------------------------------------------------------------+
+```
 
-### Implementation
+**Tier 1 (Section Headers):** Horizontal row of section tabs (Compensation, People, Finance, System) styled like spreadsheet sheet tabs at the bottom of Excel -- flat, clean, with the active one highlighted.
 
-#### 1. Rename the old AzentioLogo component to a CustomerLogo component
+**Tier 2 (Sub-Items):** When a section is selected, its sub-items appear as a secondary row of pills/tabs below. Only the active section's sub-items are shown.
 
-Update `src/components/AzentioLogo.tsx` to become a generic `CustomerLogo` component that imports the existing `azentio-logo.png`. This keeps the asset as-is and just gives the component a demo-friendly name.
+**Content Area:** The selected sub-item's content renders full-width below, using 100% of the available space (no sidebar stealing 240px).
 
-- Rename component to `CustomerLogo`
-- Update props interface to `CustomerLogoProps`
-- Alt text: "Customer Logo"
+### What Changes
 
-#### 2. Add customer logo to the AppLayout header (`src/components/layout/AppLayout.tsx`)
+**File: `src/pages/Admin.tsx`** -- Complete layout restructure:
+- Remove the two-column grid layout (`grid-cols-[240px_1fr]`)
+- Remove the Card-based vertical nav sidebar
+- Remove the mobile horizontal pill scroller (replaced by the new design for all screen sizes)
+- Add Tier 1: A row of section buttons styled like spreadsheet sheet-tabs
+- Add Tier 2: A row of sub-item buttons/pills for the active section
+- Track both `activeSection` (string) and `activeItem` (string) in state
+- When a section is clicked, auto-select its first sub-item
+- Content renders full-width below
 
-- Import `CustomerLogo`
-- In the header's left section (where the hamburger menu is on mobile), add the customer logo with a small "Demo for" label
-- Layout: `[Hamburger (mobile only)] [Demo for: [Azentio Logo]]`
-- The logo will be small (h-6) to fit the header bar height
+### Mobile Behavior
+- Tier 1 section tabs scroll horizontally if needed
+- Tier 2 sub-item pills scroll horizontally if needed
+- Content remains full-width
 
-#### 3. Add customer logo to the Auth page (`src/pages/Auth.tsx`)
-
-- Import `CustomerLogo`
-- Add it below the Qota logo with a subtle "Prepared for" label
-- This gives the demo a professional, customer-specific landing page feel
+### Visual Style
+- Section tabs: Bottom-border style (underline indicator), uppercase text, small icons
+- Sub-item pills: Rounded pills with subtle background on active, muted text on inactive
+- A thin border separates the nav area from the content
+- Matches existing Qota design tokens (primary colors, Inter font, muted backgrounds)
 
 ### Technical Details
 
-**File 1: `src/components/AzentioLogo.tsx`** (rename internals)
-- Component: `AzentioLogo` becomes `CustomerLogo`
-- Interface: `AzentioLogoProps` becomes `CustomerLogoProps`
-- Keeps importing `azentio-logo.png` (the actual Azentio logo asset)
+Only one file changes: **`src/pages/Admin.tsx`**
 
-**File 2: `src/components/layout/AppLayout.tsx`**
-- Import `CustomerLogo` from `@/components/AzentioLogo`
-- Add to header left section: a flex row with "Demo for" text label and the customer logo (size "sm")
-- Styled with muted text color for the label, logo displayed at h-5/h-6
+The section/item data structure (`sections`, `contentMap`, permission filtering) stays identical -- only the rendering JSX changes.
 
-**File 3: `src/pages/Auth.tsx`**
-- Import `CustomerLogo`
-- Add below the Qota logo section: a separator line, then "Prepared for" label with the Azentio logo
+Key layout changes:
+- Replace `grid grid-cols-1 lg:grid-cols-[240px_1fr]` with a single column stack
+- Tier 1: `flex` row with `overflow-x-auto` for section buttons, styled with `border-b` and active state using `border-b-2 border-primary`
+- Tier 2: `flex` row with `gap-2` for sub-item pills, using existing pill styling (`rounded-full`, `bg-primary/10`)
+- Content: full-width `div` below, no `min-w-0` constraint needed
+- Add `activeSection` state (defaults to first visible section ID)
+- Clicking a section sets `activeSection` and auto-selects first item in that section
+- Clicking a sub-item sets `activeItem` as before
 
-### What Does NOT Change
-- The Qota sidebar logo stays as-is
-- Navigation, permissions, and functionality are untouched
-- The `qota-logo.png` asset and `QotaLogo` component are unchanged
-- No database changes needed
+No new components or dependencies are needed. No other files change.
 
