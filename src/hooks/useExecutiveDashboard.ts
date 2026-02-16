@@ -7,6 +7,7 @@ export interface MonthlyTrend {
   month: string;
   label: string;
   totalPayout: number;
+  cumulativePayout: number;
   avgAttainment: number;
 }
 
@@ -152,16 +153,20 @@ export function useExecutiveDashboard() {
     const deals = dealsQuery.data || [];
     const closingArrActuals = closingArrQuery.data || [];
 
+    // Filter to eligible (earned) payouts only — exclude release/clawback types
+    const excludedTypes = new Set(['Collection Release', 'Year-End Release', 'Clawback']);
+    const eligiblePayouts = payouts.filter(p => !excludedTypes.has(p.payout_type));
+
     // Maps: UUID <-> string employee_id
     const employeeMap = new Map(employees.map((e) => [e.id, e]));
     const uuidToStringId = new Map(employees.map((e) => [e.id, e.employee_id]));
 
-    // Total payout YTD (only from finalized/paid runs)
-    const totalPayoutYtd = payouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
+    // Total payout YTD (eligible payouts only from finalized/paid runs)
+    const totalPayoutYtd = eligiblePayouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
 
     // Active payees
     const activePayeeSet = new Set(
-      payouts
+      eligiblePayouts
         .filter((p) => employeeMap.get(p.employee_id)?.sales_function)
         .map((p) => p.employee_id)
     );
@@ -269,30 +274,33 @@ export function useExecutiveDashboard() {
       const key = `${selectedYear}-${String(m + 1).padStart(2, "0")}-01`;
       monthMap.set(key, { total: 0, attPcts: [] });
     }
-    for (const p of payouts) {
+    for (const p of eligiblePayouts) {
       const entry = monthMap.get(p.month_year);
       if (entry) entry.total += p.calculated_amount_usd || 0;
     }
-    for (const p of payouts) {
+    for (const p of eligiblePayouts) {
       const entry = monthMap.get(p.month_year);
       const stringId = uuidToStringId.get(p.employee_id);
       const att = stringId ? attainments.find((a) => a.employeeId === stringId) : undefined;
       if (entry && att) entry.attPcts.push(att.pct);
     }
 
+    let cumulativeTotal = 0;
     const monthlyTrend: MonthlyTrend[] = Array.from(monthMap.entries()).map(([key, val]) => {
       const monthIdx = parseInt(key.substring(5, 7), 10) - 1;
+      cumulativeTotal += val.total;
       return {
         month: key,
         label: monthNames[monthIdx],
         totalPayout: val.total,
+        cumulativePayout: cumulativeTotal,
         avgAttainment: val.attPcts.length > 0 ? val.attPcts.reduce((s, v) => s + v, 0) / val.attPcts.length : 0,
       };
     });
 
     // Payout by sales function
     const fnMap = new Map<string, number>();
-    for (const p of payouts) {
+    for (const p of eligiblePayouts) {
       const emp = employeeMap.get(p.employee_id);
       const fn = emp?.sales_function || "Other";
       fnMap.set(fn, (fnMap.get(fn) || 0) + (p.calculated_amount_usd || 0));
@@ -303,7 +311,7 @@ export function useExecutiveDashboard() {
 
     // Per-employee total payouts (keyed by UUID)
     const empPayoutMap = new Map<string, number>();
-    for (const p of payouts) {
+    for (const p of eligiblePayouts) {
       empPayoutMap.set(p.employee_id, (empPayoutMap.get(p.employee_id) || 0) + (p.calculated_amount_usd || 0));
     }
 

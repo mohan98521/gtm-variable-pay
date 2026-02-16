@@ -52,7 +52,7 @@ export function PayoutTrendChart({ data, isLoading }: PayoutTrendChartProps) {
             />
             <Tooltip
               formatter={(value: number, name: string) =>
-                name === "totalPayout" ? formatCompact(value) : `${value.toFixed(1)}%`
+                name === "avgAttainment" ? `${value.toFixed(1)}%` : formatCompact(value)
               }
               labelStyle={{ color: "hsl(var(--foreground))" }}
               contentStyle={{
@@ -63,10 +63,23 @@ export function PayoutTrendChart({ data, isLoading }: PayoutTrendChartProps) {
               }}
             />
             <Legend
-              formatter={(value) => (value === "totalPayout" ? "Total Payout" : "Avg Attainment %")}
+              formatter={(value) => {
+                if (value === "totalPayout") return "Monthly Eligible Payout";
+                if (value === "cumulativePayout") return "Cumulative YTD";
+                return "Avg Attainment %";
+              }}
               wrapperStyle={{ fontSize: 12 }}
             />
             <Bar yAxisId="left" dataKey="totalPayout" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} barSize={28} />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="cumulativePayout"
+              stroke="hsl(38 92% 50%)"
+              strokeWidth={2}
+              strokeDasharray="6 3"
+              dot={{ r: 3, fill: "hsl(38 92% 50%)" }}
+            />
             <Line
               yAxisId="right"
               type="monotone"
