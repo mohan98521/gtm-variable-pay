@@ -15,6 +15,7 @@ import DataInputs from "./pages/DataInputs";
 import PlanBuilder from "./pages/PlanBuilder";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
+import ExecutiveDashboard from "./pages/ExecutiveDashboard";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ const App = () => (
               }
             />
             <Route path="/data-inputs" element={<ProtectedRoute permissionKey="page:data_inputs"><DataInputs /></ProtectedRoute>} />
+            <Route path="/executive" element={<ProtectedRoute permissionKey="page:executive_dashboard"><ExecutiveDashboard /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
