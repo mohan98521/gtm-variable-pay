@@ -58,6 +58,7 @@ const sections: NavSection[] = [
       { id: "accounts", label: "Employee Accounts", icon: UserCog, permissionCheck: (c) => c.canAccessTab("tab:employee_accounts") },
       { id: "roles", label: "Role Management", icon: Shield, permissionCheck: (c) => c.canAccessTab("tab:role_management") },
       { id: "support-teams", label: "Support Teams", icon: UsersRound, permissionCheck: (c) => c.canAccessTab("tab:support_teams") },
+      { id: "sales-functions", label: "Sales Functions", icon: Briefcase, permissionCheck: (c) => c.canAccessTab("tab:sales_functions") },
     ],
   },
   {
@@ -77,7 +78,6 @@ const sections: NavSection[] = [
     icon: Settings,
     items: [
       { id: "roles-builder", label: "Roles", icon: UserPlus, permissionCheck: (c) => c.canAccessTab("tab:roles") },
-      { id: "sales-functions", label: "Sales Functions", icon: Briefcase, permissionCheck: (c) => c.canAccessTab("tab:sales_functions") },
       { id: "permissions", label: "Permissions", icon: Lock, permissionCheck: (c) => c.isAdmin() },
     ],
   },
