@@ -1,72 +1,66 @@
 
 
-## Redesign Admin Page: Spreadsheet-Style Horizontal Navigation
+## Fix: Auto-Reload on Idle (Auth Token Refresh Issue)
 
-### Problem
-The current Admin page uses a fixed left sidebar for section navigation that always occupies screen space, even when you're working on something else. As you go deeper into tabs, the navigation becomes cluttered and rigid.
+### Root Cause
 
-### New Design
+The authentication state change listener in `useUserRole.ts` reacts to **all** auth events, including `TOKEN_REFRESHED`. Supabase automatically refreshes tokens periodically and when a browser tab regains focus after being idle. Each refresh:
 
-Replace the vertical sidebar navigation with a **two-tier horizontal navigation bar** inspired by spreadsheet headers:
+1. Sets `isLoading = true` in `useUserRole`
+2. `ProtectedRoute` shows a loading spinner (briefly unmounting the admin page)
+3. If there's a brief race condition, `isAuthenticated` reads as `false`, triggering a redirect to `/auth`
+4. `/auth` detects you're logged in and sends you to `/dashboard` instead of back to `/admin`
 
-```text
-+-----------------------------------------------------------------------+
-| Administration                                                         |
-| Manage compensation plans and employee accounts                        |
-+===============+==========+===========+==========+=====================+
-| COMPENSATION  |  PEOPLE  |  FINANCE  |  SYSTEM  |   (section headers) |
-+===============+==========+===========+==========+=====================+
-| Comp Plans | Perf Targets |                        (sub-items as pills)|
-+-----------------------------------------------------------------------+
-|                                                                        |
-|              [Full-width content area]                                 |
-|                                                                        |
-+-----------------------------------------------------------------------+
-```
+### Fix (2 files)
 
-**Tier 1 (Section Headers):** Horizontal row of section tabs (Compensation, People, Finance, System) styled like spreadsheet sheet tabs at the bottom of Excel -- flat, clean, with the active one highlighted.
+#### 1. `src/hooks/useUserRole.ts`
+- Filter the `onAuthStateChange` callback to only react to `SIGNED_IN`, `SIGNED_OUT`, and `INITIAL_SESSION` events
+- Ignore `TOKEN_REFRESHED` events -- these don't change roles or auth status
+- This prevents unnecessary loading states and redirects
 
-**Tier 2 (Sub-Items):** When a section is selected, its sub-items appear as a secondary row of pills/tabs below. Only the active section's sub-items are shown.
-
-**Content Area:** The selected sub-item's content renders full-width below, using 100% of the available space (no sidebar stealing 240px).
-
-### What Changes
-
-**File: `src/pages/Admin.tsx`** -- Complete layout restructure:
-- Remove the two-column grid layout (`grid-cols-[240px_1fr]`)
-- Remove the Card-based vertical nav sidebar
-- Remove the mobile horizontal pill scroller (replaced by the new design for all screen sizes)
-- Add Tier 1: A row of section buttons styled like spreadsheet sheet-tabs
-- Add Tier 2: A row of sub-item buttons/pills for the active section
-- Track both `activeSection` (string) and `activeItem` (string) in state
-- When a section is clicked, auto-select its first sub-item
-- Content renders full-width below
-
-### Mobile Behavior
-- Tier 1 section tabs scroll horizontally if needed
-- Tier 2 sub-item pills scroll horizontally if needed
-- Content remains full-width
-
-### Visual Style
-- Section tabs: Bottom-border style (underline indicator), uppercase text, small icons
-- Sub-item pills: Rounded pills with subtle background on active, muted text on inactive
-- A thin border separates the nav area from the content
-- Matches existing Qota design tokens (primary colors, Inter font, muted backgrounds)
+#### 2. `src/pages/Index.tsx`
+- Similarly filter `onAuthStateChange` to ignore `TOKEN_REFRESHED` events
+- This prevents the Index page logic from interfering if the event fires globally
 
 ### Technical Details
 
-Only one file changes: **`src/pages/Admin.tsx`**
+**File: `src/hooks/useUserRole.ts`** -- Change the `onAuthStateChange` callback:
 
-The section/item data structure (`sections`, `contentMap`, permission filtering) stays identical -- only the rendering JSX changes.
+```typescript
+// Before (reacts to ALL events including TOKEN_REFRESHED)
+supabase.auth.onAuthStateChange(() => {
+  setIsLoading(true);
+  fetchRoles();
+});
 
-Key layout changes:
-- Replace `grid grid-cols-1 lg:grid-cols-[240px_1fr]` with a single column stack
-- Tier 1: `flex` row with `overflow-x-auto` for section buttons, styled with `border-b` and active state using `border-b-2 border-primary`
-- Tier 2: `flex` row with `gap-2` for sub-item pills, using existing pill styling (`rounded-full`, `bg-primary/10`)
-- Content: full-width `div` below, no `min-w-0` constraint needed
-- Add `activeSection` state (defaults to first visible section ID)
-- Clicking a section sets `activeSection` and auto-selects first item in that section
-- Clicking a sub-item sets `activeItem` as before
+// After (only reacts to meaningful auth changes)
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'TOKEN_REFRESHED') return; // skip token refreshes
+  setIsLoading(true);
+  fetchRoles();
+});
+```
 
-No new components or dependencies are needed. No other files change.
+**File: `src/pages/Index.tsx`** -- Same filtering:
+
+```typescript
+// Before
+supabase.auth.onAuthStateChange((event, session) => {
+  if (session) { navigate("/dashboard"); }
+  else { navigate("/auth"); }
+});
+
+// After
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED') return;
+  if (session) { navigate("/dashboard"); }
+  else { navigate("/auth"); }
+});
+```
+
+### What Does NOT Change
+- Login/logout behavior works exactly the same
+- Role detection on sign-in/sign-out still works
+- No database or schema changes
+- No other files affected
 
