@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { PlanMetric } from "@/hooks/usePlanMetrics";
 import { MetricCompensation, CommissionCompensation } from "@/hooks/useCurrentUserCompensation";
 import { PlanConfig, NRRSummaryData, SpiffSummaryData } from "@/hooks/useDashboardPayoutRunData";
-import { getMultiplierFromGrid } from "@/lib/compensationEngine";
+import { getMultiplierFromGrid, calculateMarginalPayout } from "@/lib/compensationEngine";
 
 interface PayoutSimulatorProps {
   metrics: MetricCompensation[];
@@ -122,11 +122,11 @@ export function PayoutSimulator({ metrics, commissions, planMetrics, targetBonus
       const achievementPct = targetValue > 0 ? (simulatedActual / targetValue) * 100 : 0;
       const allocation = metric.allocation;
 
-      // Find multiplier from plan config grids
-      let multiplier = 1.0;
+      // Build PlanMetric from config or fallback to planMetrics
+      let resolvedMetric: PlanMetric | null = null;
       const configMetric = planConfig?.metrics.find(pm => pm.metricName === metric.metricName);
       if (configMetric && configMetric.multiplierGrids.length > 0) {
-        const fakeMetric: PlanMetric = {
+        resolvedMetric = {
           id: "", plan_id: "", metric_name: metric.metricName,
           weightage_percent: configMetric.weightagePercent,
           logic_type: configMetric.logicType as any,
@@ -139,15 +139,30 @@ export function PayoutSimulator({ metrics, commissions, planMetrics, targetBonus
             id: "", plan_metric_id: "", ...g,
           })),
         };
-        multiplier = getMultiplierFromGrid(achievementPct, fakeMetric);
       } else {
-        const pm = planMetrics.find(pm => pm.metric_name === metric.metricName);
-        if (pm) multiplier = getMultiplierFromGrid(achievementPct, pm);
+        resolvedMetric = planMetrics.find(pm => pm.metric_name === metric.metricName) || null;
       }
 
+      // Calculate multiplier and payout using marginal or flat model
+      let multiplier = 1.0;
+      let payout = 0;
       const isGated = metric.logicType === "Gated_Threshold";
       const belowGate = isGated && metric.gateThreshold != null && achievementPct <= metric.gateThreshold;
-      const payout = belowGate ? 0 : (achievementPct / 100) * allocation * multiplier;
+
+      if (belowGate) {
+        multiplier = 0;
+        payout = 0;
+      } else if (resolvedMetric && (
+        resolvedMetric.logic_type === "Stepped_Accelerator" ||
+        (resolvedMetric.logic_type === "Gated_Threshold" && (resolvedMetric.multiplier_grids?.length ?? 0) > 0)
+      )) {
+        const result = calculateMarginalPayout(achievementPct, allocation, resolvedMetric);
+        payout = result.payout;
+        multiplier = result.weightedMultiplier;
+      } else {
+        if (resolvedMetric) multiplier = getMultiplierFromGrid(achievementPct, resolvedMetric);
+        payout = (achievementPct / 100) * allocation * multiplier;
+      }
 
       results.push({
         metricName: metric.metricName,
