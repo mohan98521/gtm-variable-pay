@@ -7,21 +7,32 @@ import { StaffLandingPage } from "@/components/dashboard/StaffLandingPage";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { NRRSummaryCard } from "@/components/dashboard/NRRSummaryCard";
 import { SpiffSummaryCard } from "@/components/dashboard/SpiffSummaryCard";
-import { CollectionStatusCard } from "@/components/dashboard/CollectionStatusCard";
-import { Calendar, Loader2, Target, DollarSign, Briefcase, Info, Layers, FileText } from "lucide-react";
+import { Calendar, Loader2, Target, DollarSign, Briefcase, Layers, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDashboardPayoutRunData } from "@/hooks/useDashboardPayoutRunData";
 import { useCurrentUserCompensation } from "@/hooks/useCurrentUserCompensation";
-import { useDashboardPayoutSummary } from "@/hooks/useDashboardPayoutSummary";
 import { formatCurrencyValue } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
 
+const STATUS_COLORS: Record<string, string> = {
+  Draft: "bg-muted text-muted-foreground",
+  Calculating: "bg-muted text-muted-foreground",
+  Review: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+  Approved: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  Finalized: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+  Paid: "bg-emerald-200 text-emerald-900 dark:bg-emerald-800/40 dark:text-emerald-300",
+};
+
 export default function Dashboard() {
-  const { data: compensation, isLoading, error } = useCurrentUserCompensation();
-  const { data: payoutSummary, isLoading: payoutLoading } = useDashboardPayoutSummary();
+  const { data: payoutData, isLoading: payoutLoading, error: payoutError } = useDashboardPayoutRunData();
+  const { data: compensation, isLoading: compLoading, error: compError } = useCurrentUserCompensation();
+
+  const isLoading = payoutLoading || compLoading;
+  const error = payoutError || compError;
 
   if (isLoading) {
     return (
@@ -39,14 +50,15 @@ export default function Dashboard() {
         <div className="flex h-full items-center justify-center p-8">
           <div className="text-center">
             <p className="text-destructive font-medium">Error loading dashboard</p>
-            <p className="text-sm text-muted-foreground mt-1">{error.message}</p>
+            <p className="text-sm text-muted-foreground mt-1">{(error as Error).message}</p>
           </div>
         </div>
       </AppLayout>
     );
   }
 
-  if (!compensation) {
+  // If no compensation data at all, show staff landing
+  if (!compensation && !payoutData?.hasPayoutData) {
     return (
       <AppLayout>
         <StaffLandingPage />
@@ -56,29 +68,91 @@ export default function Dashboard() {
 
   const formatCurrency = (value: number) => formatCurrencyValue(value);
 
-  // Use payout run data when available, otherwise fall back to calculated values
-  const usePayoutData = payoutSummary?.isFromPayoutRun === true;
+  // Use payout run data when available, fall back to real-time compensation
+  const hasPayoutRun = payoutData?.hasPayoutData === true;
   
-  const grandTotalEligible = usePayoutData
-    ? payoutSummary.totalEligible
-    : compensation.totalEligiblePayout + compensation.totalCommissionPayout;
-  
-  const grandTotalPaid = usePayoutData
-    ? payoutSummary.totalPaid
-    : compensation.totalPaid + compensation.totalCommissionPaid;
-  
-  const grandTotalHoldback = usePayoutData
-    ? payoutSummary.totalHolding
-    : compensation.totalHoldback + compensation.totalCommissionHoldback;
-  
-  const commissionTotal = usePayoutData
-    ? payoutSummary.totalCommission
-    : compensation.totalCommissionPayout;
+  const employeeName = hasPayoutRun ? payoutData.employeeName : compensation?.employeeName || "User";
+  const fiscalYear = hasPayoutRun ? payoutData.fiscalYear : compensation?.fiscalYear || new Date().getFullYear();
+  const currentPlanName = hasPayoutRun ? payoutData.planName : compensation?.planName || "No Plan";
+  const targetBonus = hasPayoutRun ? payoutData.targetBonusUsd : compensation?.targetBonusUsd || 0;
 
-  const dataSourceLabel = usePayoutData ? "Finalized" : "Estimated";
-  const dataSourceTooltip = usePayoutData
-    ? `Based on finalized payout runs (${payoutSummary.monthsCovered} month${payoutSummary.monthsCovered !== 1 ? 's' : ''})`
-    : "Estimated from real-time calculation. Run payouts to finalize.";
+  const totalEligible = hasPayoutRun ? payoutData.totalEligible : (compensation?.totalEligiblePayout || 0) + (compensation?.totalCommissionPayout || 0);
+  const totalPaid = hasPayoutRun ? payoutData.totalPaid : (compensation?.totalPaid || 0) + (compensation?.totalCommissionPaid || 0);
+  const totalHolding = hasPayoutRun ? payoutData.totalHolding : (compensation?.totalHoldback || 0) + (compensation?.totalCommissionHoldback || 0);
+  const commissionTotal = hasPayoutRun ? payoutData.totalCommission : compensation?.totalCommissionPayout || 0;
+
+  // Metrics for tables — convert from payout run format to MetricCompensation format
+  const metricsForTable = hasPayoutRun
+    ? payoutData.vpMetrics.map(m => ({
+        metricName: m.metricName,
+        targetValue: m.targetUsd,
+        actualValue: m.actualUsd,
+        achievementPct: m.achievementPct,
+        weightagePercent: m.weightagePercent,
+        allocation: m.allocatedOteUsd,
+        multiplier: m.multiplier,
+        eligiblePayout: m.ytdEligibleUsd,
+        amountPaid: m.bookingUsd,
+        holdback: m.collectionUsd,
+        yearEndHoldback: m.yearEndUsd,
+        logicType: m.logicType,
+        gateThreshold: m.gateThreshold,
+        multiplierGrids: [],
+        payoutOnBookingPct: m.payoutOnBookingPct,
+        payoutOnCollectionPct: m.payoutOnCollectionPct,
+        payoutOnYearEndPct: m.payoutOnYearEndPct,
+      }))
+    : compensation?.metrics || [];
+
+  const commissionsForTable = hasPayoutRun
+    ? payoutData.commissions.map(c => ({
+        commissionType: c.commissionType,
+        dealValue: c.dealValueUsd,
+        rate: c.ratePct,
+        minThreshold: c.minThreshold,
+        grossPayout: c.grossPayoutUsd,
+        amountPaid: c.bookingUsd,
+        holdback: c.collectionUsd,
+        yearEndHoldback: c.yearEndUsd,
+        payoutOnBookingPct: c.payoutOnBookingPct,
+        payoutOnCollectionPct: c.payoutOnCollectionPct,
+        payoutOnYearEndPct: c.payoutOnYearEndPct,
+      }))
+    : compensation?.commissions || [];
+
+  const vpEligibleTotal = hasPayoutRun
+    ? payoutData.vpMetrics.reduce((s, m) => s + m.ytdEligibleUsd, 0)
+    : compensation?.totalEligiblePayout || 0;
+  const vpPaidTotal = hasPayoutRun
+    ? payoutData.vpMetrics.reduce((s, m) => s + m.bookingUsd, 0)
+    : compensation?.totalPaid || 0;
+  const vpHoldbackTotal = hasPayoutRun
+    ? payoutData.vpMetrics.reduce((s, m) => s + m.collectionUsd, 0)
+    : compensation?.totalHoldback || 0;
+  const vpYearEndTotal = hasPayoutRun
+    ? payoutData.vpMetrics.reduce((s, m) => s + m.yearEndUsd, 0)
+    : compensation?.totalYearEndHoldback || 0;
+
+  const commGrossTotal = hasPayoutRun
+    ? payoutData.commissions.reduce((s, c) => s + c.grossPayoutUsd, 0)
+    : compensation?.totalCommissionPayout || 0;
+  const commPaidTotal = hasPayoutRun
+    ? payoutData.commissions.reduce((s, c) => s + c.bookingUsd, 0)
+    : compensation?.totalCommissionPaid || 0;
+  const commHoldbackTotal = hasPayoutRun
+    ? payoutData.commissions.reduce((s, c) => s + c.collectionUsd, 0)
+    : compensation?.totalCommissionHoldback || 0;
+  const commYearEndTotal = hasPayoutRun
+    ? payoutData.commissions.reduce((s, c) => s + c.yearEndUsd, 0)
+    : compensation?.totalCommissionYearEndHoldback || 0;
+
+  const clawbackAmount = hasPayoutRun ? payoutData.clawbackAmount : compensation?.clawbackAmount || 0;
+  const assignmentSegments = hasPayoutRun ? payoutData.assignmentSegments : [];
+
+  // Payout run status badge
+  const runStatus = payoutData?.payoutRunStatus;
+  const statusLabel = runStatus?.runStatus || (hasPayoutRun ? "Finalized" : "Estimated");
+  const statusColor = STATUS_COLORS[statusLabel] || STATUS_COLORS.Draft;
 
   return (
     <AppLayout>
@@ -88,7 +162,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
             <p className="text-muted-foreground">
-              Welcome back, {compensation.employeeName}
+              Welcome back, {employeeName}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -101,27 +175,30 @@ export default function Dashboard() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
-                  <Badge
-                    variant={usePayoutData ? "default" : "secondary"}
-                    className={usePayoutData 
-                      ? "bg-success text-success-foreground" 
-                      : ""}
-                  >
-                    <Info className="mr-1 h-3 w-3" />
-                    {dataSourceLabel}
+                  <Badge className={`${statusColor} border-0`}>
+                    {statusLabel}
+                    {runStatus && (
+                      <span className="ml-1 opacity-75">
+                        ({runStatus.monthsCovered} mo)
+                      </span>
+                    )}
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{dataSourceTooltip}</p>
+                  <p>
+                    {hasPayoutRun
+                      ? `Latest payout run status: ${statusLabel} — ${runStatus?.monthsCovered || 0} month(s) processed`
+                      : "No payout runs found. Showing estimated calculations."}
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <Badge variant="outline" className="border-primary/30 text-primary">
               <Calendar className="mr-1.5 h-3.5 w-3.5" />
-              FY {compensation.fiscalYear}
+              FY {fiscalYear}
             </Badge>
             <Badge className="bg-primary text-primary-foreground">
-              {compensation.planName}
+              {currentPlanName}
             </Badge>
           </div>
         </div>
@@ -130,24 +207,24 @@ export default function Dashboard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard
             title="Target Bonus"
-            value={formatCurrency(compensation.targetBonusUsd)}
+            value={formatCurrency(targetBonus)}
             icon={<Target className="h-5 w-5" />}
           />
           <MetricCard
             title="Total Eligible"
-            value={formatCurrency(grandTotalEligible)}
+            value={formatCurrency(totalEligible)}
             icon={<DollarSign className="h-5 w-5" />}
             variant="success"
           />
           <MetricCard
             title="Amount Paid"
-            value={formatCurrency(grandTotalPaid)}
+            value={formatCurrency(totalPaid)}
             icon={<DollarSign className="h-5 w-5" />}
             variant="accent"
           />
           <MetricCard
             title="Holding"
-            value={formatCurrency(grandTotalHoldback)}
+            value={formatCurrency(totalHolding)}
             icon={<DollarSign className="h-5 w-5" />}
           />
           <MetricCard
@@ -157,8 +234,8 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Blended Target Info for Multi-Assignment Years */}
-        {payoutSummary?.assignmentSegments && payoutSummary.assignmentSegments.length > 1 && (
+        {/* Assignment Periods */}
+        {assignmentSegments.length > 1 && (
           <Card className="border-primary/20">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -168,7 +245,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-1.5">
-                {payoutSummary.assignmentSegments.map((seg, i) => (
+                {assignmentSegments.map((seg, i) => (
                   <div key={i} className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">
                       {format(parseISO(seg.startDate), 'MMM yyyy')} – {format(parseISO(seg.endDate), 'MMM yyyy')}:
@@ -186,49 +263,85 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Table 1: Variable Pay Metrics Summary */}
+        {/* Metric-wise Performance Summary */}
         <MetricsTable
-          metrics={compensation.metrics}
-          totalEligiblePayout={compensation.totalEligiblePayout}
-          totalPaid={compensation.totalPaid}
-          totalHoldback={compensation.totalHoldback}
-          totalYearEndHoldback={compensation.totalYearEndHoldback}
-          clawbackAmount={compensation.clawbackAmount}
+          metrics={metricsForTable}
+          totalEligiblePayout={vpEligibleTotal}
+          totalPaid={vpPaidTotal}
+          totalHoldback={vpHoldbackTotal}
+          totalYearEndHoldback={vpYearEndTotal}
+          clawbackAmount={clawbackAmount}
         />
 
-        {/* Table 2: Commission Structure Summary */}
+        {/* Commission Structure Summary */}
         <CommissionTable
-          commissions={compensation.commissions}
-          totalGrossPayout={compensation.totalCommissionPayout}
-          totalPaid={compensation.totalCommissionPaid}
-          totalHoldback={compensation.totalCommissionHoldback}
-          totalYearEndHoldback={compensation.totalCommissionYearEndHoldback}
+          commissions={commissionsForTable}
+          totalGrossPayout={commGrossTotal}
+          totalPaid={commPaidTotal}
+          totalHoldback={commHoldbackTotal}
+          totalYearEndHoldback={commYearEndTotal}
         />
-
-        {/* Collection Status */}
-        {compensation.dealCollections.length > 0 && (
-          <CollectionStatusCard dealCollections={compensation.dealCollections} />
-        )}
 
         {/* NRR Additional Pay */}
-        {compensation.nrrOtePct > 0 && compensation.nrrResult && (
-          <NRRSummaryCard nrrResult={compensation.nrrResult} nrrOtePct={compensation.nrrOtePct} />
+        {hasPayoutRun && payoutData.nrrSummary && payoutData.nrrSummary.payoutUsd > 0 && (
+          <NRRSummaryCard nrrSummary={payoutData.nrrSummary} />
+        )}
+        {!hasPayoutRun && compensation?.nrrOtePct && compensation.nrrOtePct > 0 && compensation.nrrResult && (
+          <NRRSummaryCard nrrSummary={{
+            nrrTarget: compensation.nrrResult.nrrTarget,
+            nrrActuals: compensation.nrrResult.nrrActuals,
+            achievementPct: compensation.nrrResult.achievementPct,
+            payoutUsd: compensation.nrrResult.payoutUsd,
+            eligibleCrErUsd: compensation.nrrResult.eligibleCrErUsd,
+            totalCrErUsd: compensation.nrrResult.totalCrErUsd,
+            eligibleImplUsd: compensation.nrrResult.eligibleImplUsd,
+            totalImplUsd: compensation.nrrResult.totalImplUsd,
+            nrrOtePct: compensation.nrrOtePct,
+          }} />
         )}
 
         {/* SPIFF Summary */}
-        {compensation.spiffResult && compensation.spiffResult.totalSpiffUsd > 0 && (
-          <SpiffSummaryCard spiffResult={compensation.spiffResult} />
+        {hasPayoutRun && payoutData.spiffSummary && payoutData.spiffSummary.totalSpiffUsd > 0 && (
+          <SpiffSummaryCard spiffSummary={payoutData.spiffSummary} />
+        )}
+        {!hasPayoutRun && compensation?.spiffResult && compensation.spiffResult.totalSpiffUsd > 0 && (
+          <SpiffSummaryCard spiffSummary={{
+            totalSpiffUsd: compensation.spiffResult.totalSpiffUsd,
+            softwareVariableOteUsd: compensation.spiffResult.softwareVariableOteUsd,
+            softwareTargetUsd: compensation.spiffResult.softwareTargetUsd,
+            eligibleActualsUsd: compensation.spiffResult.eligibleActualsUsd,
+            spiffRatePct: compensation.spiffResult.spiffRatePct,
+          }} />
         )}
 
-        {/* Table 3: Monthly Performance */}
-        <MonthlyPerformanceTable monthlyBreakdown={compensation.monthlyBreakdown} />
+        {/* Monthly Performance Breakdown */}
+        {hasPayoutRun ? (
+          <MonthlyPerformanceTable
+            monthlyActuals={payoutData.monthlyActuals}
+            metricNames={payoutData.metricNames}
+            metricTargets={payoutData.metricTargets}
+          />
+        ) : compensation?.monthlyBreakdown && (
+          <MonthlyPerformanceTable
+            monthlyActuals={compensation.monthlyBreakdown.map(m => ({
+              month: m.month,
+              monthLabel: m.monthLabel,
+              metrics: {
+                "New Software Booking ARR": m.newSoftwareArr,
+                "Closing ARR": m.closingArr,
+              },
+            }))}
+            metricNames={["New Software Booking ARR", "Closing ARR"]}
+            metricTargets={{}}
+          />
+        )}
 
-        {/* Table 4: What-If Simulator */}
+        {/* What-If Simulator */}
         <PayoutSimulator
-          metrics={compensation.metrics}
-          commissions={compensation.commissions}
-          planMetrics={compensation.planMetrics}
-          targetBonusUsd={compensation.targetBonusUsd}
+          metrics={metricsForTable}
+          commissions={commissionsForTable}
+          planMetrics={compensation?.planMetrics || []}
+          targetBonusUsd={targetBonus}
         />
       </div>
     </AppLayout>
