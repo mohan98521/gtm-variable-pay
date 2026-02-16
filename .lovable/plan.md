@@ -1,129 +1,125 @@
 
 
-## Dashboard Enhancement: 5 Missing Features
+## Executive Summary Dashboard
 
 ### Overview
-Add five missing sections to the Sales Rep Dashboard: Clawback calculation, NRR Additional Pay, SPIFF display, Collection status per deal, and a direct link to the Payout Statement report.
+A new page at `/executive` providing CIO, CFO, and Sales Heads with a real-time, data-dense overview of compensation spend, quota attainment, and sales force distribution. Built on top of existing data from `monthly_payouts`, `performance_targets`, `employees`, and `user_targets` tables -- no schema changes needed.
 
 ---
 
-### 1. Clawback Calculation (replace placeholder `$0`)
+### Page Structure
 
-**Current state:** Line 507 of `useCurrentUserCompensation.ts` has `const clawbackAmount = 0; // TODO`
-
-**Change:** Query the `clawback_ledger` table for the current employee's pending/partial clawback entries in the fiscal year and sum `remaining_amount_usd`.
-
-**File:** `src/hooks/useCurrentUserCompensation.ts`
-- After fetching the employee UUID (needed for clawback_ledger which uses the `employees.id` UUID, not `employee_id` string), query:
-  ```sql
-  SELECT SUM(remaining_amount_usd) FROM clawback_ledger
-  WHERE employee_id = <employee_uuid>
-  AND status IN ('pending', 'partial')
-  AND triggered_month >= <fiscal_year_start>
-  ```
-- Replace the hardcoded `0` with the queried sum.
-
----
-
-### 2. NRR Additional Pay Section
-
-**Current state:** Engine exists in `nrrCalculation.ts`, used by `payoutEngine.ts`, but not surfaced on dashboard.
-
-**Changes:**
-
-**File: `src/hooks/useCurrentUserCompensation.ts`**
-- Add NRR fields to the `CurrentUserCompensation` interface: `nrrResult` (NRRCalculationResult or null), `nrrOtePct`, `nrrTarget`, `nrrActuals`, `nrrPayoutUsd`
-- After computing metrics, fetch the plan's `nrr_ote_percent`, `cr_er_min_gp_margin_pct`, `impl_min_gp_margin_pct` from `comp_plans`
-- If `nrr_ote_percent > 0`, call `calculateNRRPayout()` using the employee's deals (with `gp_margin_percent` added to the deal select) and CR/ER + Implementation targets
-- Attach the result to the returned compensation object
-
-**File: `src/components/dashboard/NRRSummaryCard.tsx`** (new)
-- A Card component showing: NRR Target, Eligible Actuals, Achievement %, Payout USD
-- Breakdown: CR/ER eligible vs total, Implementation eligible vs total
-- GP margin eligibility indicators per category
-- Only renders if `nrrOtePct > 0`
-
-**File: `src/pages/Dashboard.tsx`**
-- Import and render `NRRSummaryCard` between the Commission table and Monthly Performance table
+```text
++-----------------------------------------------------------------------+
+| Executive Compensation Overview     [FY Dropdown] [USD/Local Toggle]  |
++===============================+=======================================+
+| Total Variable     | Global Quota  | Payout vs   | Active            |
+| Payout (YTD)       | Attainment    | Budget      | Payees            |
+| $2.4M  +12% YoY   | 87% (radial)  | 92% bar     | 47                |
++===============================+=======================================+
+|  Payout & Attainment Trend (Bar+Line)  |  Attainment Distribution    |
+|  Monthly: bars=payout, line=avg att%   |  Histogram: <50 50-80 etc   |
++========================================+=============================+
+|  Payout by Sales Function (Donut)      |  Top 5 Performers Table     |
+|  Hunters, Farmers, SEs, Heads...       |  Name, Role, Payout, Att%   |
++========================================+=============================+
+```
 
 ---
 
-### 3. SPIFF Display
+### Data Hook: `useExecutiveDashboard.ts`
 
-**Current state:** Engine in `spiffCalculation.ts`, `plan_spiffs` table exists, used in payout engine but not on dashboard.
+Single hook that fetches all data for the page in parallel:
 
-**Changes:**
+**Query 1 -- Current Year Payouts:** `monthly_payouts` filtered to selected FY. Groups by employee, month, and payout_type to compute:
+- Total variable payout (YTD) using `classifyPayoutType` from `payoutTypes.ts`
+- Monthly payout totals for the trend chart
+- Distinct active payees count
 
-**File: `src/hooks/useCurrentUserCompensation.ts`**
-- Add SPIFF fields to interface: `spiffResult` (SpiffAggregateResult or null)
-- Fetch `plan_spiffs` for the active plan
-- If any active spiffs exist, call `calculateAllSpiffs()` with the employee's deals, plan metrics, target bonus, and targets
-- Attach result to returned data
+**Query 2 -- Prior Year Payouts:** Same query for FY-1, used only for YoY percentage change on the north star card.
 
-**File: `src/components/dashboard/SpiffSummaryCard.tsx`** (new)
-- Card showing: Total SPIFF Payout, Software Variable OTE used, SPIFF Rate
-- Deal-level breakdown table: Project ID, Customer, Deal ARR, Eligible (yes/no), SPIFF Payout
-- Threshold indicator showing minimum deal value
-- Only renders if plan has active SPIFFs
+**Query 3 -- Employees:** `employees` table for `sales_function`, `full_name`, `region`, `employee_role`, `ote_usd` (budget proxy), `tvp_usd`.
 
-**File: `src/pages/Dashboard.tsx`**
-- Import and render `SpiffSummaryCard` after NRR card
+**Query 4 -- Performance Targets + Actuals:** Join `performance_targets` (target_value_usd) with aggregated deal actuals per employee to compute attainment percentages. Uses the same metric aggregation logic already in `useCurrentUserCompensation.ts` but across all employees.
 
----
-
-### 4. Collection Status per Deal
-
-**Current state:** `deal_collections` table tracks per-deal collection status but is not shown on the dashboard.
-
-**Changes:**
-
-**File: `src/hooks/useCurrentUserCompensation.ts`**
-- Add `dealCollections` array to the interface with: `projectId`, `customerName`, `dealValueUsd`, `isCollected`, `collectionDate`, `isClawbackTriggered`, `bookingMonth`
-- Query `deal_collections` joined with `deals` filtered to the employee's deals in the fiscal year
-
-**File: `src/components/dashboard/CollectionStatusCard.tsx`** (new)
-- Card with title "Deal Collection Status"
-- Summary row: X Collected, Y Pending, Z Clawback-triggered
-- Table: Project ID, Customer, Deal Value, Status (badge: Collected/Pending/Overdue/Clawback), Collection Date, Booking Month
-- Status badges color-coded: green for Collected, yellow for Pending, red for Clawback
-- Only renders if there are deal collections
-
-**File: `src/pages/Dashboard.tsx`**
-- Render `CollectionStatusCard` after Commission table
+**Computed Fields:**
+- **Global Quota Attainment:** Weighted average of individual attainment percentages (weighted by target size)
+- **Payout vs Budget:** Sum of all payouts / Sum of all `tvp_usd` for active employees
+- **Attainment Distribution:** Bucket each employee's attainment into <50%, 50-80%, 80-100%, 100-120%, >120%
+- **Top 5 Performers:** Sorted by total payout descending, limited to 5
 
 ---
 
-### 5. Payout Statement Link
+### New Files
 
-**File: `src/pages/Dashboard.tsx`**
-- Add a "View Payout Statement" button/link in the header area (next to the FY badge)
-- Uses `react-router-dom` `Link` to navigate to `/reports` (where PayoutStatement component lives)
-- Styled as a small outlined button with a FileText icon
+| File | Purpose |
+|------|---------|
+| `src/pages/ExecutiveDashboard.tsx` | Main page component with header, FY dropdown, currency toggle, and four sections |
+| `src/hooks/useExecutiveDashboard.ts` | Data fetching hook with all queries and computed metrics |
+| `src/components/executive/NorthStarCards.tsx` | 4 top-row metric cards (total payout, radial attainment, budget progress bar, active payees) |
+| `src/components/executive/PayoutTrendChart.tsx` | Dual-axis composed chart -- bars for monthly payout, line for avg attainment % |
+| `src/components/executive/AttainmentDistribution.tsx` | Histogram bar chart with color-coded buckets |
+| `src/components/executive/PayoutByFunction.tsx` | Donut/pie chart by sales function |
+| `src/components/executive/TopPerformers.tsx` | Compact leaderboard table with rank, name, role/region, payout, attainment % |
 
 ---
 
-### Dashboard Section Order (after changes)
+### Modified Files
 
-1. Header + Summary Cards (existing)
-2. Assignment Periods card (existing, conditional)
-3. Metrics Table (existing) -- now with real clawback amount
-4. Commission Table (existing)
-5. **Collection Status** (new)
-6. **NRR Additional Pay** (new, conditional)
-7. **SPIFF Summary** (new, conditional)
-8. Monthly Performance (existing)
-9. What-If Simulator (existing)
-10. **View Payout Statement link** (new, in header)
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Add route `/executive` with `ProtectedRoute permissionKey="page:executive_dashboard"` |
+| `src/components/layout/AppSidebar.tsx` | Add "Executive" nav item with `PieChart` icon, gated by `page:executive_dashboard` permission |
+| `src/lib/permissions.ts` | Add `"page:executive_dashboard"` to the `PermissionKey` type and `PERMISSION_DEFINITIONS` array |
 
-### Files Modified
-- `src/hooks/useCurrentUserCompensation.ts` -- add clawback query, NRR calculation, SPIFF calculation, deal collections fetch
-- `src/pages/Dashboard.tsx` -- add new sections and payout statement link
+---
 
-### Files Created
-- `src/components/dashboard/NRRSummaryCard.tsx`
-- `src/components/dashboard/SpiffSummaryCard.tsx`
-- `src/components/dashboard/CollectionStatusCard.tsx`
+### Permission Integration
 
-### No Database Changes Required
-All data is already in existing tables (`clawback_ledger`, `comp_plans`, `plan_spiffs`, `deal_collections`). Only client-side queries and UI components are added.
+- New permission key: `page:executive_dashboard` (category: "page", label: "Executive Dashboard")
+- Added to `PERMISSION_DEFINITIONS` so it automatically appears in the Permissions matrix UI
+- Database migration: Insert default permission rows for all existing roles (default `is_allowed = false` except for `admin` and `executive` roles which get `true`)
+- The existing `auto_generate_role_permissions` trigger handles future roles automatically
+
+---
+
+### Visual Design Specifications
+
+- **Color palette:** Qota Deep Navy (`--qota-navy`) for primary text/headers, Teal (`--qota-teal`) for accent highlights and positive metrics
+- **North Star Cards:** Clean white cards with subtle `border` and `shadow-sm`. Large `text-3xl font-bold` numbers. YoY trend uses `TrendingUp`/`TrendingDown` icons in success/destructive colors
+- **Radial Progress (Quota Attainment):** Built with Recharts `RadialBarChart` -- single ring, teal fill, centered percentage text
+- **Budget Progress Bar:** Reuses the existing `Progress` component with a percentage label
+- **Charts:** All use `ChartContainer` from `src/components/ui/chart.tsx` for consistent theming
+- **Histogram colors:** Red (`hsl(0 72% 51%)`) for <50%, warning amber for 50-80%, muted for 80-100%, teal for 100-120%, deep teal for >120%
+- **Donut chart:** Uses chart color variables (`--chart-1` through `--chart-5`)
+- **Top 5 table:** Compact shadcn `Table` with rank badges, avatar initials circle, and right-aligned currency values
+- **Loading states:** `Skeleton` loaders matching each card/chart dimensions
+- **Inter font, strict alignment, no decorative elements** -- fintech aesthetic
+
+---
+
+### Technical Details
+
+**Database Migration (1 statement):**
+```sql
+INSERT INTO role_permissions (role, permission_key, is_allowed)
+SELECT r.name, 'page:executive_dashboard', 
+  CASE WHEN r.name IN ('admin', 'executive') THEN true ELSE false END
+FROM roles r
+ON CONFLICT DO NOTHING;
+```
+
+**Recharts Components Used:**
+- `ComposedChart` with `Bar` + `Line` for the trend chart (dual Y-axes via `YAxis yAxisId`)
+- `BarChart` for histogram
+- `PieChart` with `Pie innerRadius` for donut
+- `RadialBarChart` for the quota attainment circle
+
+**Currency Toggle Logic:**
+- State: `currencyMode: 'usd' | 'local'`
+- When `usd`: use `calculated_amount_usd` from payouts
+- When `local`: use `calculated_amount_local` (with mixed currencies, show a warning badge that local mode aggregates across currencies)
+- Default: USD (executive view is primarily USD-denominated)
+
+**FY Dropdown:** Reuses `useFiscalYear` context already available globally.
 
