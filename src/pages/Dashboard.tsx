@@ -7,7 +7,7 @@ import { StaffLandingPage } from "@/components/dashboard/StaffLandingPage";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { NRRSummaryCard } from "@/components/dashboard/NRRSummaryCard";
 import { SpiffSummaryCard } from "@/components/dashboard/SpiffSummaryCard";
-import { Calendar, Loader2, Target, DollarSign, Briefcase, Layers, FileText } from "lucide-react";
+import { Calendar, Loader2, Target, DollarSign, Briefcase, Layers, FileText, BookOpen, Clock, CalendarClock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -57,7 +57,6 @@ export default function Dashboard() {
     );
   }
 
-  // If no compensation data at all, show staff landing
   if (!compensation && !payoutData?.hasPayoutData) {
     return (
       <AppLayout>
@@ -68,7 +67,6 @@ export default function Dashboard() {
 
   const formatCurrency = (value: number) => formatCurrencyValue(value);
 
-  // Use payout run data when available, fall back to real-time compensation
   const hasPayoutRun = payoutData?.hasPayoutData === true;
   
   const employeeName = hasPayoutRun ? payoutData.employeeName : compensation?.employeeName || "User";
@@ -76,12 +74,21 @@ export default function Dashboard() {
   const currentPlanName = hasPayoutRun ? payoutData.planName : compensation?.planName || "No Plan";
   const targetBonus = hasPayoutRun ? payoutData.targetBonusUsd : compensation?.targetBonusUsd || 0;
 
-  const totalEligible = hasPayoutRun ? payoutData.totalEligible : (compensation?.totalEligiblePayout || 0) + (compensation?.totalCommissionPayout || 0);
-  const totalPaid = hasPayoutRun ? payoutData.totalPaid : (compensation?.totalPaid || 0) + (compensation?.totalCommissionPaid || 0);
-  const totalHolding = hasPayoutRun ? payoutData.totalHolding : (compensation?.totalHoldback || 0) + (compensation?.totalCommissionHoldback || 0);
-  const commissionTotal = hasPayoutRun ? payoutData.totalCommission : compensation?.totalCommissionPayout || 0;
+  // Bifurcated YTD totals (Issue 1)
+  const ytdTotalEligible = hasPayoutRun
+    ? payoutData.ytdTotalEligible
+    : (compensation?.totalEligiblePayout || 0) + (compensation?.totalCommissionPayout || 0);
+  const ytdBookingUsd = hasPayoutRun
+    ? payoutData.ytdBookingUsd
+    : (compensation?.totalPaid || 0) + (compensation?.totalCommissionPaid || 0);
+  const ytdCollectionUsd = hasPayoutRun
+    ? payoutData.ytdCollectionUsd
+    : (compensation?.totalHoldback || 0) + (compensation?.totalCommissionHoldback || 0);
+  const ytdYearEndUsd = hasPayoutRun
+    ? payoutData.ytdYearEndUsd
+    : (compensation?.totalYearEndHoldback || 0) + (compensation?.totalCommissionYearEndHoldback || 0);
 
-  // Metrics for tables — convert from payout run format to MetricCompensation format
+  // Metrics for tables
   const metricsForTable = hasPayoutRun
     ? payoutData.vpMetrics.map(m => ({
         metricName: m.metricName,
@@ -149,7 +156,6 @@ export default function Dashboard() {
   const clawbackAmount = hasPayoutRun ? payoutData.clawbackAmount : compensation?.clawbackAmount || 0;
   const assignmentSegments = hasPayoutRun ? payoutData.assignmentSegments : [];
 
-  // Payout run status badge
   const runStatus = payoutData?.payoutRunStatus;
   const statusLabel = runStatus?.runStatus || (hasPayoutRun ? "Finalized" : "Estimated");
   const statusColor = STATUS_COLORS[statusLabel] || STATUS_COLORS.Draft;
@@ -203,7 +209,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards - Bifurcated (Issue 1) */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard
             title="Target Bonus"
@@ -211,26 +217,26 @@ export default function Dashboard() {
             icon={<Target className="h-5 w-5" />}
           />
           <MetricCard
-            title="Total Eligible"
-            value={formatCurrency(totalEligible)}
+            title="YTD Total Eligible"
+            value={formatCurrency(ytdTotalEligible)}
             icon={<DollarSign className="h-5 w-5" />}
             variant="success"
           />
           <MetricCard
-            title="Amount Paid"
-            value={formatCurrency(totalPaid)}
-            icon={<DollarSign className="h-5 w-5" />}
+            title="Payable (Booking)"
+            value={formatCurrency(ytdBookingUsd)}
+            icon={<BookOpen className="h-5 w-5" />}
             variant="accent"
           />
           <MetricCard
-            title="Holding"
-            value={formatCurrency(totalHolding)}
-            icon={<DollarSign className="h-5 w-5" />}
+            title="Payable Upon Collection"
+            value={formatCurrency(ytdCollectionUsd)}
+            icon={<Clock className="h-5 w-5" />}
           />
           <MetricCard
-            title="Commission"
-            value={formatCurrency(commissionTotal)}
-            icon={<Briefcase className="h-5 w-5" />}
+            title="Hold Till Year End"
+            value={formatCurrency(ytdYearEndUsd)}
+            icon={<CalendarClock className="h-5 w-5" />}
           />
         </div>
 
@@ -283,7 +289,7 @@ export default function Dashboard() {
         />
 
         {/* NRR Additional Pay */}
-        {hasPayoutRun && payoutData.nrrSummary && payoutData.nrrSummary.payoutUsd > 0 && (
+        {hasPayoutRun && payoutData.nrrSummary && (
           <NRRSummaryCard nrrSummary={payoutData.nrrSummary} />
         )}
         {!hasPayoutRun && compensation?.nrrOtePct && compensation.nrrOtePct > 0 && compensation.nrrResult && (
@@ -301,7 +307,7 @@ export default function Dashboard() {
         )}
 
         {/* SPIFF Summary */}
-        {hasPayoutRun && payoutData.spiffSummary && payoutData.spiffSummary.totalSpiffUsd > 0 && (
+        {hasPayoutRun && payoutData.spiffSummary && (
           <SpiffSummaryCard spiffSummary={payoutData.spiffSummary} />
         )}
         {!hasPayoutRun && compensation?.spiffResult && compensation.spiffResult.totalSpiffUsd > 0 && (
@@ -311,6 +317,7 @@ export default function Dashboard() {
             softwareTargetUsd: compensation.spiffResult.softwareTargetUsd,
             eligibleActualsUsd: compensation.spiffResult.eligibleActualsUsd,
             spiffRatePct: compensation.spiffResult.spiffRatePct,
+            achievementPct: 0,
           }} />
         )}
 
@@ -342,6 +349,9 @@ export default function Dashboard() {
           commissions={commissionsForTable}
           planMetrics={compensation?.planMetrics || []}
           targetBonusUsd={targetBonus}
+          planConfig={hasPayoutRun ? payoutData.planConfig : null}
+          nrrSummary={hasPayoutRun ? payoutData.nrrSummary : null}
+          spiffSummary={hasPayoutRun ? payoutData.spiffSummary : null}
         />
       </div>
     </AppLayout>

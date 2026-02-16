@@ -18,12 +18,12 @@ export function SpiffSummaryCard({ spiffSummary }: SpiffSummaryCardProps) {
           <Zap className="h-4 w-4 text-primary" />
           SPIFF Bonus
           <Badge variant="secondary" className="ml-auto text-xs">
-            Rate: {spiffSummary.spiffRatePct}%
+            SPIFF Rate: {spiffSummary.spiffRatePct}%
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <div>
             <p className="text-xs text-muted-foreground">Total SPIFF Payout</p>
             <p className="text-sm font-semibold text-success">{fmt(spiffSummary.totalSpiffUsd)}</p>
@@ -39,6 +39,14 @@ export function SpiffSummaryCard({ spiffSummary }: SpiffSummaryCardProps) {
           <div>
             <p className="text-xs text-muted-foreground">Eligible Actuals</p>
             <p className="text-sm font-semibold">{fmt(spiffSummary.eligibleActualsUsd)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Achievement %</p>
+            <p className="text-sm font-semibold">
+              <Badge variant={spiffSummary.achievementPct >= 100 ? "default" : "secondary"} className="font-mono">
+                {spiffSummary.achievementPct.toFixed(1)}%
+              </Badge>
+            </p>
           </div>
         </div>
       </CardContent>
