@@ -61,7 +61,7 @@ export function TopPerformers({ data, isLoading }: TopPerformersProps) {
               <TableHead className="text-right">Payout</TableHead>
               <TableHead className="text-right">Software %</TableHead>
               <TableHead className="text-right">Closing ARR %</TableHead>
-              <TableHead className="text-right">Att. %</TableHead>
+              
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -96,16 +96,11 @@ export function TopPerformers({ data, isLoading }: TopPerformersProps) {
                     {(p.closingArrAchPct ?? 0).toFixed(0)}%
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
-                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.attainmentPct ?? 0)}`}>
-                    {(p.attainmentPct ?? 0).toFixed(0)}%
-                  </Badge>
-                </TableCell>
               </TableRow>
             ))}
             {data.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   No payout data available
                 </TableCell>
               </TableRow>
