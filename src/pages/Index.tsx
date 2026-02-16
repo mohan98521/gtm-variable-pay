@@ -7,6 +7,7 @@ const Index = () => {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') return;
       if (session) {
         navigate("/dashboard");
       } else {

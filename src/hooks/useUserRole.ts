@@ -41,7 +41,8 @@ export function useUserRole() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'TOKEN_REFRESHED') return;
       setIsLoading(true);
       fetchRoles();
     });
