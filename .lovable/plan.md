@@ -1,88 +1,59 @@
 
 
-## Rebrand from "Azentio" to "Qota" -- Implementation Plan
+## Add Customer Logo (Azentio) to Page Headers
 
-The Qota logo has been uploaded. Here is the complete implementation plan covering all files.
+### What This Does
 
-### 1. Logo Asset
-- Copy `user-uploads://image-88.png` to `src/assets/qota-logo.png`
-- The old `src/assets/azentio-logo.png` remains (unused after refactor)
+Adds the Azentio logo as a "customer logo" in the top-left area of every page header, so during demos the customer sees their branding alongside the Qota product branding.
 
-### 2. Logo Component
-- Rename `src/components/AzentioLogo.tsx` content to create `src/components/QotaLogo.tsx`
-- New component imports `qota-logo.png`, uses `QotaLogo` name, `QotaLogoProps` interface, alt text "Qota"
+### Where It Appears
 
-### 3. HTML Metadata (`index.html`)
-- Title: "Qota | Variable Pay Management"
-- Author: "Qota"
-- OG title: "Qota | Variable Pay Management"
-- Twitter site: "@Qota"
+- **Desktop**: In the top header bar (left side), next to the mobile hamburger area -- showing "Powered by Qota | [Customer Logo]" or simply the customer logo with a subtle label like "Demo for"
+- **Mobile**: Same header bar, visible after the hamburger menu button
+- **Auth page**: Below the Qota logo, showing the customer logo
 
-### 4. CSS Tokens (`src/index.css`)
-- Comments: remove "Azentio" references, update to "Qota"
-- `--azentio-navy` becomes `--qota-navy`
-- `--azentio-teal` becomes `--qota-teal`
+### Implementation
 
-### 5. Tailwind Config (`tailwind.config.ts`)
-- `azentio.navy` becomes `qota.navy`
-- `azentio.teal` becomes `qota.teal`
+#### 1. Rename the old AzentioLogo component to a CustomerLogo component
 
-### 6. Sidebar (`src/components/layout/AppSidebar.tsx`)
-- Import `QotaLogo` instead of `AzentioLogo`
-- Footer text "GTM Variable Compensation" becomes "Qota"
+Update `src/components/AzentioLogo.tsx` to become a generic `CustomerLogo` component that imports the existing `azentio-logo.png`. This keeps the asset as-is and just gives the component a demo-friendly name.
 
-### 7. Auth Page (`src/pages/Auth.tsx`)
-- Import `QotaLogo` instead of `AzentioLogo`
-- Email placeholder: `EmployeeID@azentio.com` becomes `you@company.com`
+- Rename component to `CustomerLogo`
+- Update props interface to `CustomerLogoProps`
+- Alt text: "Customer Logo"
 
-### 8. Staff User Form (`src/components/admin/StaffUserFormDialog.tsx`)
-- Remove `@azentio.com` email domain restriction from Zod validation
-- Update placeholder from `name@azentio.com` to `name@company.com`
+#### 2. Add customer logo to the AppLayout header (`src/components/layout/AppLayout.tsx`)
 
-### 9. Edge Function (`supabase/functions/create-employee-account/index.ts`)
-- Remove the `@azentio.com` domain check (lines 77-83) so any email domain is accepted
-- This is important: without this change, creating employee accounts for non-azentio emails will fail
+- Import `CustomerLogo`
+- In the header's left section (where the hamburger menu is on mobile), add the customer logo with a small "Demo for" label
+- Layout: `[Hamburger (mobile only)] [Demo for: [Azentio Logo]]`
+- The logo will be small (h-6) to fit the header bar height
 
-### 10. Component Color References (find-and-replace across ~13 files)
-All occurrences of `azentio-navy` and `azentio-teal` in className strings become `qota-navy` and `qota-teal`. Files affected:
+#### 3. Add customer logo to the Auth page (`src/pages/Auth.tsx`)
 
-- `src/components/reports/AuditTrailExport.tsx`
-- `src/components/reports/ManagementSummary.tsx`
-- `src/components/reports/CurrencyBreakdown.tsx`
-- `src/components/reports/PayoutStatement.tsx`
-- `src/components/reports/MyDealsReport.tsx`
-- `src/components/reports/MyClosingARRReport.tsx`
-- `src/components/reports/YearEndHoldbackTracker.tsx`
-- `src/components/audit/AuditDashboard.tsx`
-- `src/components/audit/AuditTimeline.tsx`
-- `src/components/admin/BulkUpload.tsx`
-- `src/components/admin/ExchangeRateManagement.tsx`
-- `src/components/admin/CurrencyManagement.tsx`
-- `src/components/admin/PerformanceTargetsBulkUpload.tsx`
-- `src/pages/Reports.tsx`
-- `src/pages/Admin.tsx`
-- `src/pages/DataInputs.tsx`
-- `src/pages/Dashboard.tsx`
-
-### What does NOT change
-- Color values (navy #002D72 and teal #00A3AD stay identical)
-- Layout, functionality, calculation logic
-- Database schema
+- Import `CustomerLogo`
+- Add it below the Qota logo with a subtle "Prepared for" label
+- This gives the demo a professional, customer-specific landing page feel
 
 ### Technical Details
 
-| Find | Replace |
-|---|---|
-| `AzentioLogo` (component) | `QotaLogo` |
-| `AzentioLogoProps` (interface) | `QotaLogoProps` |
-| `azentio-logo.png` (asset) | `qota-logo.png` |
-| `--azentio-navy` (CSS var) | `--qota-navy` |
-| `--azentio-teal` (CSS var) | `--qota-teal` |
-| `azentio.navy` (Tailwind) | `qota.navy` |
-| `azentio.teal` (Tailwind) | `qota.teal` |
-| `GTM Variable Comp` (text) | `Qota` |
-| `Azentio` (brand text) | `Qota` |
-| `@azentio.com` (email domain) | removed / generic |
+**File 1: `src/components/AzentioLogo.tsx`** (rename internals)
+- Component: `AzentioLogo` becomes `CustomerLogo`
+- Interface: `AzentioLogoProps` becomes `CustomerLogoProps`
+- Keeps importing `azentio-logo.png` (the actual Azentio logo asset)
 
-Total: ~20 frontend files + 1 edge function. No new dependencies needed.
+**File 2: `src/components/layout/AppLayout.tsx`**
+- Import `CustomerLogo` from `@/components/AzentioLogo`
+- Add to header left section: a flex row with "Demo for" text label and the customer logo (size "sm")
+- Styled with muted text color for the label, logo displayed at h-5/h-6
+
+**File 3: `src/pages/Auth.tsx`**
+- Import `CustomerLogo`
+- Add below the Qota logo section: a separator line, then "Prepared for" label with the Azentio logo
+
+### What Does NOT Change
+- The Qota sidebar logo stays as-is
+- Navigation, permissions, and functionality are untouched
+- The `qota-logo.png` asset and `QotaLogo` component are unchanged
+- No database changes needed
 
