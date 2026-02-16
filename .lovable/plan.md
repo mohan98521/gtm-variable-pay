@@ -1,74 +1,46 @@
 
 
-## Sales Rep Dashboard Fixes -- 4 Issues
+## Dashboard Fixes: 3 Issues
 
-### Issue 1: Top Summary Cards Restructure
+### Issue 1: Closing ARR Target Shows Zero
 
-**Current**: Target Bonus | Total Eligible | Amount Paid | Holding | Commission
-**Problem**: "Total Eligible" is unclear; missing bifurcation into booking/collection/year-end across all components.
-**Fix**: Change the 5 cards to:
-- **Target Bonus** (unchanged)
-- **YTD Total Eligible** -- sum of ALL eligible payouts (VP + Commission + NRR + SPIFF)
-- **Payable (Booking)** -- total booking amounts across all components
-- **Payable Upon Collection** -- total collection holdback across all components
-- **Hold Till Year End** -- total year-end holdback across all components
+**Root Cause**: When Closing ARR has no data in `payout_metric_details` (no closing_arr_actuals for Jan 2026), the hook fills it from plan config with `targetUsd: 0` (line 561). The target should come from `performance_targets` table, which has a $1,600,000 Closing ARR target.
 
-**File**: `src/pages/Dashboard.tsx` -- update the summary card section to aggregate VP + commission + NRR + SPIFF booking/collection/year-end amounts from `payoutData`.
+**Fix in `src/hooks/useDashboardPayoutRunData.ts`**:
+- Add a parallel fetch for `performance_targets` for this employee in the selected fiscal year
+- When filling missing VP metrics from plan config, look up the target from `performance_targets` instead of defaulting to 0
+- Also populate `metricTargetMap` from performance_targets for metrics not present in payout_metric_details (so Monthly Performance table also shows Closing ARR target)
 
 ---
 
-### Issue 2: SPIFF Rate Display Fix
+### Issue 2: Multiplier Logic Type Shows "Linear" Instead of "Stepped Accelerator"
 
-**Current**: Shows `achievement_pct` (68.33% = eligible actuals / software target) as "Rate".
-**Actual**: SPIFF rate is 25% (from `plan_spiffs.spiff_rate_pct`). The 68.33% is the achievement percentage, not the rate.
-**Fix**:
-- In `useDashboardPayoutRunData.ts`, the SPIFF summary currently maps `detail.achievement_pct` to `spiffRatePct` (line 428). Change this to extract the actual SPIFF rate from the plan configuration.
-- Fetch `plan_spiffs` for the employee's plan and use `spiff_rate_pct` (25%) as the rate.
-- Also display the SPIFF achievement % separately in the `SpiffSummaryCard` for clarity. Add fields like "Achievement %" alongside "SPIFF Rate".
+**Root Cause**: For VP metrics that DO exist in `payout_metric_details`, the logic type is inferred from `detail.notes` string matching (line 404): it checks if notes contain "Gated" or "Stepped". Since notes for this record is null, it falls back to "Linear". The actual plan config correctly has `Stepped_Accelerator`.
 
-**Files**: `src/hooks/useDashboardPayoutRunData.ts`, `src/components/dashboard/SpiffSummaryCard.tsx`
+**Fix in `src/hooks/useDashboardPayoutRunData.ts`**:
+- After building vpMetrics from payout_metric_details AND after fetching planConfig, cross-reference each VP metric with planConfig.metrics to get the correct `logicType`, `gateThreshold`, and `weightagePercent` from the plan definition rather than deriving them from notes or calculating from amounts
+- This ensures the dashboard always reflects the plan's actual configuration
 
 ---
 
-### Issue 3: Monthly Performance -- Add All Metrics
+### Issue 3: Monthly Performance Shows Payout Values Instead of Deal Values; Show Only Months With Data
 
-**Current**: Only shows `variable_pay` and `commission` component types in the monthly pivot. Missing Closing ARR (which is a VP metric but may not have monthly deal data), NRR, Managed Services, Perpetual License.
-**Root Cause**: The monthly pivot in the hook (line 451) filters to `variable_pay` or `commission` only, excluding `nrr` and `spiff`. Additionally, Closing ARR is a VP metric but may not have `this_month_usd` populated if data isn't flowing.
-**Fix**:
-- In `useDashboardPayoutRunData.ts`, expand the monthly pivot to include ALL `component_type` values (`variable_pay`, `commission`, `nrr`, `spiff`).
-- Ensure `metricNames` and `metricTargets` include entries for NRR, SPIFF, and all commission types.
-- In `MonthlyPerformanceTable`, no changes needed -- it already renders dynamically from `metricNames`.
+**Root Cause**: The monthly pivot (line 648) uses `detail.this_month_usd` which is the incremental payout amount for that month, not the deal value. For a sales rep, the monthly breakdown should show deal values (actuals) not payouts.
 
-**File**: `src/hooks/useDashboardPayoutRunData.ts`
+**Fix in `src/hooks/useDashboardPayoutRunData.ts`**:
+- Change the monthly pivot to use `detail.actual_usd` for the month's metric value instead of `this_month_usd`. Since `actual_usd` in payout_metric_details is the YTD cumulative actual, we need to compute the incremental by subtracting prior month's actual. Alternatively, source monthly deal values directly from the `deals` table grouped by month and metric type.
+- The cleaner approach: query deals directly for this employee in the fiscal year, sum by month and metric type (new_software_booking_arr_usd, managed_services_usd, cr_usd + er_usd as "CR/ER", implementation_usd, perpetual_license_usd). For Closing ARR, use closing_arr_actuals monthly snapshots. For NRR/SPIFF, keep using payout_metric_details since those are computed values.
 
----
-
-### Issue 4: Payout Simulator -- Show Full Comp Structure
-
-**Current**: Simulator only shows metrics/commissions that have actuals in payout runs. If no deals exist for a metric (e.g., Closing ARR, Managed Services), it doesn't appear.
-**Fix**: Fetch the employee's full plan configuration (plan_metrics, plan_commissions, plan_spiffs, nrr_ote_percent) and merge with payout run data. Show ALL configured metrics even if actuals are zero.
-
-For the Farmer plan, the full structure is:
-- **Variable Pay**: New Software Booking ARR (60% weight), Closing ARR (40% weight)
-- **Commissions**: Managed Services (1.5%), Perpetual License (4%)
-- **NRR Additional Pay**: 20% of Variable OTE
-- **Large Deal SPIFF**: 25% rate, min deal value $400K
-
-**Changes**:
-1. In `useDashboardPayoutRunData.ts`, add a parallel fetch for `plan_metrics`, `plan_commissions`, `plan_spiffs`, and `comp_plans.nrr_ote_percent` for the employee's assigned plan. Merge these with payout run data, filling in zero actuals for any metric not yet in payout runs.
-2. Update the `PayoutSimulator` component to accept NRR and SPIFF simulation inputs alongside VP metrics and commissions. Add NRR simulation (formula: Variable OTE x NRR OTE % x Achievement) and SPIFF simulation (formula: Software Variable OTE x SPIFF Rate x eligible deals above threshold / target).
-3. Pass full plan config (including multiplier grids) to the simulator so computations match the designed comp structure.
-
-**Files**: `src/hooks/useDashboardPayoutRunData.ts`, `src/pages/Dashboard.tsx`, `src/components/dashboard/PayoutSimulator.tsx`
+**Fix in `src/components/dashboard/MonthlyPerformanceTable.tsx`**:
+- Filter to only show months that have any data (at least one metric > 0), instead of showing all 12 months
+- Keep the Target row and YTD footer rows visible always
 
 ---
 
 ### Technical Summary
 
-| File | Change |
-|------|--------|
-| `src/hooks/useDashboardPayoutRunData.ts` | Fetch plan config; fix SPIFF rate; expand monthly pivot to all components; merge plan metrics with payout data for full coverage |
-| `src/pages/Dashboard.tsx` | Restructure 5 summary cards to Target Bonus / YTD Eligible / Booking / Collection / Year-End; pass full plan config to simulator |
-| `src/components/dashboard/SpiffSummaryCard.tsx` | Show actual SPIFF rate (25%) and achievement % separately |
-| `src/components/dashboard/PayoutSimulator.tsx` | Add NRR and SPIFF simulation sections; show all plan metrics even without actuals; compute payouts per comp structure formulas |
+| File | Changes |
+|------|---------|
+| `src/hooks/useDashboardPayoutRunData.ts` | (1) Fetch performance_targets for employee to populate correct target values for all metrics including Closing ARR. (2) Cross-reference VP metric logicType/gateThreshold with planConfig instead of deriving from notes. (3) Build monthly actuals from deals table (deal values) instead of payout_metric_details (payout values). Add Closing ARR monthly from closing_arr_actuals. |
+| `src/components/dashboard/MonthlyPerformanceTable.tsx` | Only render months that have at least one metric with data > 0. Hide future months with no data. |
 
