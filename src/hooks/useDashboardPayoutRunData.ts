@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { calculateBlendedProRata, BlendedProRataSegment } from "@/lib/compensation";
+import { NRR_DISPLAY_NAME } from "@/lib/payoutTypes";
 
 export interface PayoutRunStatus {
   runStatus: string;
@@ -754,10 +755,12 @@ export function useDashboardPayoutRunData() {
         const runMonth = runMonthMap.get(detail.payout_run_id);
         if (!runMonth) continue;
         const monthKey = typeof runMonth === 'string' ? runMonth.substring(0, 7) : String(runMonth).substring(0, 7);
-        // Normalize SPIFF metric name to match plan config name (avoid duplicate columns)
+        // Normalize metric names to match display labels (avoid duplicate columns)
         let metricName = detail.metric_name;
         if (detail.component_type === 'spiff' && planConfig?.spiffs?.length) {
           metricName = planConfig.spiffs[0].spiffName || "Large Deal SPIFF";
+        } else if (detail.component_type === 'nrr') {
+          metricName = NRR_DISPLAY_NAME;
         }
         allMetricNames.add(metricName);
 
@@ -798,7 +801,7 @@ export function useDashboardPayoutRunData() {
           allMetricNames.add(pc.commissionType);
         }
         if (planConfig.nrrOtePct > 0) {
-          allMetricNames.add("NRR Additional Pay");
+          allMetricNames.add(NRR_DISPLAY_NAME);
         }
         if (planConfig.spiffs.length > 0) {
           for (const s of planConfig.spiffs) {
@@ -810,7 +813,7 @@ export function useDashboardPayoutRunData() {
       const METRIC_PRIORITY: Record<string, number> = {
         "New Software Booking ARR": 1,
         "Closing ARR": 2,
-        "NRR Additional Pay": 3,
+        [NRR_DISPLAY_NAME]: 3,
         "Large Deal SPIFF": 4,
       };
       const metricNames = Array.from(allMetricNames).sort((a, b) => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateNRRPayout } from '../nrrCalculation';
 
-describe('Section 5: NRR Additional Pay', () => {
+describe('Section 5: (CR/ER + Implementation)', () => {
   it('Test 5.1: Farmer NRR with GP margin filter → $1,600', () => {
     const result = calculateNRRPayout(
       [

@@ -537,7 +537,7 @@ export default function PlanBuilder() {
           metricNames={metrics.map(m => m.metric_name)}
         />
 
-        {/* NRR Additional Pay Section */}
+        {/* (CR/ER + Implementation) Section */}
         <NrrSettingsCard
           planId={planId!}
           nrrOtePercent={(plan as any).nrr_ote_percent ?? 0}

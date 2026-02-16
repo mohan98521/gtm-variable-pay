@@ -12,6 +12,9 @@ export const ADDITIONAL_PAY_TYPES = ['NRR Additional Pay', 'SPIFF', 'Deal Team S
 export const RELEASE_TYPES = ['Collection Release', 'Year-End Release'] as const;
 export const DEDUCTION_TYPES = ['Clawback'] as const;
 
+/** Display name for the NRR Additional Pay payout type (database value stays 'NRR Additional Pay') */
+export const NRR_DISPLAY_NAME = '(CR/ER + Implementation)';
+
 export type PayoutCategory = 'vp' | 'commission' | 'additional_pay' | 'release' | 'deduction' | 'unknown';
 
 const VP_SET = new Set<string>(VP_TYPES);

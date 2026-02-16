@@ -10,6 +10,7 @@ import { PlanMetric } from "@/hooks/usePlanMetrics";
 import { MetricCompensation, CommissionCompensation } from "@/hooks/useCurrentUserCompensation";
 import { PlanConfig, NRRSummaryData, SpiffSummaryData } from "@/hooks/useDashboardPayoutRunData";
 import { getMultiplierFromGrid, calculateMarginalPayout } from "@/lib/compensationEngine";
+import { NRR_DISPLAY_NAME } from "@/lib/payoutTypes";
 
 interface PayoutSimulatorProps {
   metrics: MetricCompensation[];
@@ -217,7 +218,7 @@ export function PayoutSimulator({ metrics, commissions, planMetrics, targetBonus
       const payout = nrrTarget > 0 ? nrrAllocatedOte * (nrrActuals / nrrTarget) : 0;
 
       results.push({
-        metricName: "NRR Additional Pay",
+        metricName: NRR_DISPLAY_NAME,
         targetValue: nrrTarget,
         simulatedActual: nrrActuals,
         achievementPct,
@@ -383,7 +384,7 @@ export function PayoutSimulator({ metrics, commissions, planMetrics, targetBonus
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">NRR Additional Pay</Label>
+                      <Label className="text-sm font-medium">{NRR_DISPLAY_NAME}</Label>
                       <Badge variant="secondary" className="text-xs">{nrrConfig.otePct}% of Variable OTE</Badge>
                     </div>
                     <div className="text-xs text-muted-foreground">

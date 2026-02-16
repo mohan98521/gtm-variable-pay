@@ -1,5 +1,5 @@
 /**
- * NRR (Non-Recurring Revenue) Additional Pay Calculation
+ * (CR/ER + Implementation) Pay Calculation
  * 
  * Calculates additional compensation based on CR/ER and Implementation deals
  * that meet gross profit margin thresholds.
