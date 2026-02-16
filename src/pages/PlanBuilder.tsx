@@ -525,6 +525,18 @@ export default function PlanBuilder() {
           </Card>
         )}
 
+        {/* Closing ARR Renewal Multipliers */}
+        <ClosingArrRenewalMultiplierEditor planId={planId!} />
+
+        {/* Commission Structure Section */}
+        <PlanCommissionEditor planId={planId!} />
+
+        {/* SPIFFs Section */}
+        <SpiffEditor
+          planId={planId!}
+          metricNames={metrics.map(m => m.metric_name)}
+        />
+
         {/* Payout Settings Section */}
         <PayoutSettingsCard
           planId={planId!}
@@ -532,9 +544,6 @@ export default function PlanBuilder() {
           clawbackPeriodDays={plan.clawback_period_days || 180}
           isClawbackExempt={plan.is_clawback_exempt || false}
         />
-
-        {/* Commission Structure Section */}
-        <PlanCommissionEditor planId={planId!} />
 
         {/* NRR Additional Pay Section */}
         <NrrSettingsCard
@@ -546,15 +555,6 @@ export default function PlanBuilder() {
           nrrPayoutOnCollectionPct={(plan as any).nrr_payout_on_collection_pct ?? 100}
           nrrPayoutOnYearEndPct={(plan as any).nrr_payout_on_year_end_pct ?? 0}
         />
-
-        {/* SPIFFs Section */}
-        <SpiffEditor
-          planId={planId!}
-          metricNames={metrics.map(m => m.metric_name)}
-        />
-
-        {/* Closing ARR Renewal Multipliers */}
-        <ClosingArrRenewalMultiplierEditor planId={planId!} />
 
         {/* Assigned Employees Section */}
         <AssignedEmployeesCard planId={planId!} planName={plan.name} />
