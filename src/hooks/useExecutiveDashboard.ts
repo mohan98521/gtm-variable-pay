@@ -35,8 +35,6 @@ export interface TopPerformer {
 
 export interface ExecutiveDashboardData {
   totalPayoutYtd: number;
-  totalPayoutPriorYear: number;
-  yoyChangePct: number;
   globalQuotaAttainment: number;
   payoutVsBudgetPct: number;
   totalBudget: number;
@@ -52,33 +50,37 @@ export function useExecutiveDashboard() {
 
   const fyStart = `${selectedYear}-01-01`;
   const fyEnd = `${selectedYear}-12-01`;
-  const priorFyStart = `${selectedYear - 1}-01-01`;
-  const priorFyEnd = `${selectedYear - 1}-12-01`;
 
-  const currentPayoutsQuery = useQuery({
-    queryKey: ["exec-payouts-current", selectedYear],
+  // Step 1: Fetch only finalized/paid payout run IDs for the FY
+  const payoutRunsQuery = useQuery({
+    queryKey: ["exec-payout-runs", selectedYear],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("monthly_payouts")
-        .select("employee_id, month_year, payout_type, calculated_amount_usd, calculated_amount_local, local_currency")
+        .from("payout_runs")
+        .select("id")
         .gte("month_year", fyStart)
-        .lte("month_year", fyEnd);
+        .lte("month_year", fyEnd)
+        .in("run_status", ["finalized", "paid"]);
       if (error) throw error;
       return data || [];
     },
   });
 
-  const priorPayoutsQuery = useQuery({
-    queryKey: ["exec-payouts-prior", selectedYear],
+  const eligibleRunIds = payoutRunsQuery.data?.map((r) => r.id) || [];
+
+  // Step 2: Fetch payouts only from eligible runs
+  const currentPayoutsQuery = useQuery({
+    queryKey: ["exec-payouts-current", selectedYear, eligibleRunIds],
     queryFn: async () => {
+      if (eligibleRunIds.length === 0) return [];
       const { data, error } = await supabase
         .from("monthly_payouts")
-        .select("calculated_amount_usd")
-        .gte("month_year", priorFyStart)
-        .lte("month_year", priorFyEnd);
+        .select("employee_id, month_year, payout_type, calculated_amount_usd")
+        .in("payout_run_id", eligibleRunIds);
       if (error) throw error;
       return data || [];
     },
+    enabled: !payoutRunsQuery.isLoading,
   });
 
   const employeesQuery = useQuery({
@@ -127,14 +129,13 @@ export function useExecutiveDashboard() {
         .gte("month_year", fyStart)
         .lte("month_year", `${selectedYear}-12-31`);
       if (error) throw error;
-      // Filter eligible: end_date > Dec 31 of FY
       return (data || []).filter(r => r.end_date && r.end_date > fyEndDate);
     },
   });
 
   const isLoading =
+    payoutRunsQuery.isLoading ||
     currentPayoutsQuery.isLoading ||
-    priorPayoutsQuery.isLoading ||
     employeesQuery.isLoading ||
     targetsQuery.isLoading ||
     dealsQuery.isLoading ||
@@ -144,7 +145,6 @@ export function useExecutiveDashboard() {
     if (isLoading) return null;
 
     const payouts = currentPayoutsQuery.data || [];
-    const priorPayouts = priorPayoutsQuery.data || [];
     const employees = employeesQuery.data || [];
     const targets = targetsQuery.data || [];
     const deals = dealsQuery.data || [];
@@ -153,26 +153,21 @@ export function useExecutiveDashboard() {
     // Maps: UUID <-> string employee_id
     const employeeMap = new Map(employees.map((e) => [e.id, e]));
     const uuidToStringId = new Map(employees.map((e) => [e.id, e.employee_id]));
-    const stringIdToUuid = new Map(employees.map((e) => [e.employee_id, e.id]));
 
-    // Total payout YTD
+    // Total payout YTD (only from finalized/paid runs)
     const totalPayoutYtd = payouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
-    const totalPayoutPriorYear = priorPayouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
-    const yoyChangePct = totalPayoutPriorYear > 0
-      ? ((totalPayoutYtd - totalPayoutPriorYear) / totalPayoutPriorYear) * 100
-      : 0;
 
     // Active payees
     const activePayeeSet = new Set(payouts.map((p) => p.employee_id));
     const activePayees = activePayeeSet.size;
 
-    // Budget
+    // Budget = sum of tvp_usd for active employees
     const totalBudget = employees
       .filter((e) => e.is_active)
       .reduce((s, e) => s + (e.tvp_usd || 0), 0);
     const payoutVsBudgetPct = totalBudget > 0 ? (totalPayoutYtd / totalBudget) * 100 : 0;
 
-    // --- Per-employee Software ARR actuals from deals (keyed by string employee_id) ---
+    // --- Per-employee Software ARR actuals from deals ---
     const empSoftwareActualMap = new Map<string, number>();
     for (const d of deals) {
       const repId = d.sales_rep_employee_id;
@@ -181,8 +176,7 @@ export function useExecutiveDashboard() {
       }
     }
 
-    // --- Per-employee Closing ARR actuals (latest month snapshot, keyed by string employee_id) ---
-    // Find the latest month_year in the eligible data
+    // --- Per-employee Closing ARR actuals (latest month snapshot) ---
     let latestClosingMonth = "";
     for (const r of closingArrActuals) {
       if (r.month_year > latestClosingMonth) latestClosingMonth = r.month_year;
@@ -192,7 +186,6 @@ export function useExecutiveDashboard() {
       for (const r of closingArrActuals) {
         if (r.month_year !== latestClosingMonth) continue;
         const arr = r.closing_arr || 0;
-        // Attribute to both sales rep and sales head
         if (r.sales_rep_employee_id) {
           empClosingArrActualMap.set(r.sales_rep_employee_id, (empClosingArrActualMap.get(r.sales_rep_employee_id) || 0) + arr);
         }
@@ -202,7 +195,7 @@ export function useExecutiveDashboard() {
       }
     }
 
-    // --- Per-employee targets split by metric type (keyed by string employee_id) ---
+    // --- Per-employee targets split by metric type ---
     const empSoftwareTargetMap = new Map<string, number>();
     const empClosingTargetMap = new Map<string, number>();
     const empTotalTargetMap = new Map<string, number>();
@@ -212,7 +205,6 @@ export function useExecutiveDashboard() {
       const eid = t.employee_id;
       const val = t.target_value_usd || 0;
       empTotalTargetMap.set(eid, (empTotalTargetMap.get(eid) || 0) + val);
-
       if (t.metric_type && t.metric_type.includes("New Software Booking ARR")) {
         empSoftwareTargetMap.set(eid, (empSoftwareTargetMap.get(eid) || 0) + val);
       } else if (t.metric_type === "Closing ARR") {
@@ -220,7 +212,7 @@ export function useExecutiveDashboard() {
       }
     }
 
-    // Build total actuals per employee (software + closing + other deal types)
+    // Build total actuals per employee
     for (const d of deals) {
       const repId = d.sales_rep_employee_id;
       if (repId) {
@@ -228,21 +220,16 @@ export function useExecutiveDashboard() {
         empTotalActualMap.set(repId, (empTotalActualMap.get(repId) || 0) + dealTotal);
       }
     }
-    // Add closing ARR actuals to total
     for (const [eid, val] of empClosingArrActualMap) {
       empTotalActualMap.set(eid, (empTotalActualMap.get(eid) || 0) + val);
     }
 
-    // Per-employee attainment (all use string employee_id)
+    // Per-employee attainment
     const attainments: { employeeId: string; pct: number; targetSize: number }[] = [];
     for (const [empId, totalTarget] of empTotalTargetMap) {
       if (totalTarget > 0) {
         const totalActual = empTotalActualMap.get(empId) || 0;
-        attainments.push({
-          employeeId: empId,
-          pct: (totalActual / totalTarget) * 100,
-          targetSize: totalTarget,
-        });
+        attainments.push({ employeeId: empId, pct: (totalActual / totalTarget) * 100, targetSize: totalTarget });
       }
     }
 
@@ -311,21 +298,17 @@ export function useExecutiveDashboard() {
       empPayoutMap.set(p.employee_id, (empPayoutMap.get(p.employee_id) || 0) + (p.calculated_amount_usd || 0));
     }
 
-    // Top performers: bridge UUID -> string ID for attainment lookup
+    // Top performers
     const topPerformers: TopPerformer[] = Array.from(empPayoutMap.entries())
       .map(([empUuid, total]) => {
         const emp = employeeMap.get(empUuid);
         const stringId = uuidToStringId.get(empUuid) || "";
-
-        // Overall attainment
         const att = attainments.find((a) => a.employeeId === stringId);
 
-        // Software ARR achievement
         const swTarget = empSoftwareTargetMap.get(stringId) || 0;
         const swActual = empSoftwareActualMap.get(stringId) || 0;
         const softwareArrAchPct = swTarget > 0 ? (swActual / swTarget) * 100 : 0;
 
-        // Closing ARR achievement
         const clTarget = empClosingTargetMap.get(stringId) || 0;
         const clActual = empClosingArrActualMap.get(stringId) || 0;
         const closingArrAchPct = clTarget > 0 ? (clActual / clTarget) * 100 : 0;
@@ -347,8 +330,6 @@ export function useExecutiveDashboard() {
 
     return {
       totalPayoutYtd,
-      totalPayoutPriorYear,
-      yoyChangePct,
       globalQuotaAttainment,
       payoutVsBudgetPct,
       totalBudget,
@@ -358,7 +339,7 @@ export function useExecutiveDashboard() {
       payoutByFunction,
       topPerformers,
     };
-  }, [isLoading, currentPayoutsQuery.data, priorPayoutsQuery.data, employeesQuery.data, targetsQuery.data, dealsQuery.data, closingArrQuery.data, selectedYear]);
+  }, [isLoading, currentPayoutsQuery.data, employeesQuery.data, targetsQuery.data, dealsQuery.data, closingArrQuery.data, selectedYear]);
 
   return { data, isLoading };
 }
