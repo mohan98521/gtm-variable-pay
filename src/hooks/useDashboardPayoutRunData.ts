@@ -737,19 +737,36 @@ export function useDashboardPayoutRunData() {
         monthData[name] = (monthData[name] || 0) + arr.closing_arr;
       }
 
-      // Add NRR / SPIFF from payout_metric_details (computed values, not raw deals)
-      for (const detail of allMetricDetails) {
-        if (detail.component_type === 'nrr' || detail.component_type === 'spiff') {
-          const runMonth = runMonthMap.get(detail.payout_run_id);
-          if (!runMonth) continue;
-          const monthKey = typeof runMonth === 'string' ? runMonth.substring(0, 7) : String(runMonth).substring(0, 7);
-          allMetricNames.add(detail.metric_name);
-          if (!monthlyDataMap.has(monthKey)) {
-            monthlyDataMap.set(monthKey, {});
-          }
-          const monthData = monthlyDataMap.get(monthKey)!;
-          monthData[detail.metric_name] = (monthData[detail.metric_name] || 0) + (detail.this_month_usd || 0);
+      // Add NRR / SPIFF from payout_metric_details — show deal values (incremental actuals), not payout amounts
+      // Sort by run month first so incremental calculation from cumulative actual_usd is accurate
+      const nrrSpiffDetails = allMetricDetails
+        .filter(d => d.component_type === 'nrr' || d.component_type === 'spiff')
+        .sort((a, b) => {
+          const mA = runMonthMap.get(a.payout_run_id) || '';
+          const mB = runMonthMap.get(b.payout_run_id) || '';
+          return String(mA).localeCompare(String(mB));
+        });
+
+      // Track prior month cumulative actual per metric to derive monthly incremental
+      const priorCumulativeMap = new Map<string, number>();
+
+      for (const detail of nrrSpiffDetails) {
+        const runMonth = runMonthMap.get(detail.payout_run_id);
+        if (!runMonth) continue;
+        const monthKey = typeof runMonth === 'string' ? runMonth.substring(0, 7) : String(runMonth).substring(0, 7);
+        allMetricNames.add(detail.metric_name);
+
+        // actual_usd is YTD cumulative; derive incremental for this month
+        const currentCumulative = detail.actual_usd || 0;
+        const priorCumulative = priorCumulativeMap.get(detail.metric_name) || 0;
+        const incrementalActual = currentCumulative - priorCumulative;
+        priorCumulativeMap.set(detail.metric_name, currentCumulative);
+
+        if (!monthlyDataMap.has(monthKey)) {
+          monthlyDataMap.set(monthKey, {});
         }
+        const monthData = monthlyDataMap.get(monthKey)!;
+        monthData[detail.metric_name] = (monthData[detail.metric_name] || 0) + Math.max(0, incrementalActual);
       }
 
       // Populate metricTargetMap from performance_targets (Issue 1)
@@ -781,7 +798,18 @@ export function useDashboardPayoutRunData() {
         }
       }
 
-      const metricNames = Array.from(allMetricNames).sort();
+      const METRIC_PRIORITY: Record<string, number> = {
+        "New Software Booking ARR": 1,
+        "Closing ARR": 2,
+        "NRR Additional Pay": 3,
+        "Large Deal SPIFF": 4,
+      };
+      const metricNames = Array.from(allMetricNames).sort((a, b) => {
+        const pa = METRIC_PRIORITY[a] ?? 999;
+        const pb = METRIC_PRIORITY[b] ?? 999;
+        if (pa !== pb) return pa - pb;
+        return a.localeCompare(b);
+      });
       
       // Only build months that have data (Issue 3: don't show all 12 months)
       const monthlyActuals: MonthlyActuals[] = [];
