@@ -5,14 +5,19 @@ import { CommissionTable } from "@/components/dashboard/CommissionTable";
 import { PayoutSimulator } from "@/components/dashboard/PayoutSimulator";
 import { StaffLandingPage } from "@/components/dashboard/StaffLandingPage";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import { Calendar, Loader2, Target, DollarSign, Briefcase, Info, Layers } from "lucide-react";
+import { NRRSummaryCard } from "@/components/dashboard/NRRSummaryCard";
+import { SpiffSummaryCard } from "@/components/dashboard/SpiffSummaryCard";
+import { CollectionStatusCard } from "@/components/dashboard/CollectionStatusCard";
+import { Calendar, Loader2, Target, DollarSign, Briefcase, Info, Layers, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCurrentUserCompensation } from "@/hooks/useCurrentUserCompensation";
 import { useDashboardPayoutSummary } from "@/hooks/useDashboardPayoutSummary";
 import { formatCurrencyValue } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format, parseISO } from "date-fns";
+import { Link } from "react-router-dom";
 
 export default function Dashboard() {
   const { data: compensation, isLoading, error } = useCurrentUserCompensation();
@@ -86,7 +91,13 @@ export default function Dashboard() {
               Welcome back, {compensation.employeeName}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link to="/reports">
+              <Button variant="outline" size="sm">
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                Payout Statement
+              </Button>
+            </Link>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
@@ -193,6 +204,21 @@ export default function Dashboard() {
           totalHoldback={compensation.totalCommissionHoldback}
           totalYearEndHoldback={compensation.totalCommissionYearEndHoldback}
         />
+
+        {/* Collection Status */}
+        {compensation.dealCollections.length > 0 && (
+          <CollectionStatusCard dealCollections={compensation.dealCollections} />
+        )}
+
+        {/* NRR Additional Pay */}
+        {compensation.nrrOtePct > 0 && compensation.nrrResult && (
+          <NRRSummaryCard nrrResult={compensation.nrrResult} nrrOtePct={compensation.nrrOtePct} />
+        )}
+
+        {/* SPIFF Summary */}
+        {compensation.spiffResult && compensation.spiffResult.totalSpiffUsd > 0 && (
+          <SpiffSummaryCard spiffResult={compensation.spiffResult} />
+        )}
 
         {/* Table 3: Monthly Performance */}
         <MonthlyPerformanceTable monthlyBreakdown={compensation.monthlyBreakdown} />

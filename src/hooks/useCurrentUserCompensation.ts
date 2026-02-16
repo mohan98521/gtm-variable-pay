@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { getMultiplierFromGrid, calculateAchievementPercent } from "@/lib/compensationEngine";
 import { PlanMetric, MultiplierGrid } from "./usePlanMetrics";
+import { calculateNRRPayout, NRRCalculationResult } from "@/lib/nrrCalculation";
+import { calculateAllSpiffs, SpiffAggregateResult, SpiffConfig, SpiffMetric } from "@/lib/spiffCalculation";
 
 // Map employee sales_function to plan name
 const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
@@ -79,6 +81,16 @@ export interface MonthlyMetricBreakdown {
   closingArr: number;
 }
 
+export interface DealCollectionStatus {
+  projectId: string;
+  customerName: string | null;
+  dealValueUsd: number;
+  isCollected: boolean;
+  collectionDate: string | null;
+  isClawbackTriggered: boolean;
+  bookingMonth: string;
+}
+
 export interface CurrentUserCompensation {
   employeeId: string;
   employeeName: string;
@@ -100,6 +112,13 @@ export interface CurrentUserCompensation {
   totalCommissionYearEndHoldback: number;
   // Raw data for simulator
   planMetrics: PlanMetric[];
+  // NRR
+  nrrResult: NRRCalculationResult | null;
+  nrrOtePct: number;
+  // SPIFF
+  spiffResult: SpiffAggregateResult | null;
+  // Deal collections
+  dealCollections: DealCollectionStatus[];
 }
 
 /**
@@ -130,7 +149,7 @@ export function useCurrentUserCompensation() {
       // 3. Get employee master data
       const { data: employee } = await supabase
         .from("employees")
-        .select("full_name, tvp_usd, sales_function, local_currency")
+        .select("id, full_name, tvp_usd, sales_function, local_currency")
         .eq("employee_id", employeeId)
         .maybeSingle();
 
@@ -142,7 +161,7 @@ export function useCurrentUserCompensation() {
 
       const { data: plan } = await supabase
         .from("comp_plans")
-        .select("id, name")
+        .select("id, name, nrr_ote_percent, cr_er_min_gp_margin_pct, impl_min_gp_margin_pct")
         .eq("effective_year", selectedYear)
         .eq("name", planName)
         .maybeSingle();
@@ -215,6 +234,9 @@ export function useCurrentUserCompensation() {
       const { data: deals } = await supabase
         .from("deals")
         .select(`
+          id,
+          project_id,
+          customer_name,
           month_year,
           new_software_booking_arr_usd,
           managed_services_usd,
@@ -222,6 +244,7 @@ export function useCurrentUserCompensation() {
           cr_usd,
           er_usd,
           implementation_usd,
+          gp_margin_percent,
           sales_rep_employee_id,
           sales_head_employee_id,
           sales_engineering_employee_id,
@@ -504,7 +527,109 @@ export function useCurrentUserCompensation() {
       const totalCommissionHoldback = commissions.reduce((sum, c) => sum + c.holdback, 0);
       const totalCommissionYearEndHoldback = commissions.reduce((sum, c) => sum + c.yearEndHoldback, 0);
       
-      const clawbackAmount = 0; // TODO: Calculate from monthly_payouts if needed
+      // 14. Clawback: query clawback_ledger for pending/partial entries
+      const employeeUuid = employee.id;
+      const { data: clawbackData } = await supabase
+        .from("clawback_ledger")
+        .select("remaining_amount_usd")
+        .eq("employee_id", employeeUuid)
+        .in("status", ["pending", "partial"])
+        .gte("triggered_month", fiscalYearStart);
+
+      const clawbackAmount = (clawbackData || []).reduce(
+        (sum, row) => sum + (row.remaining_amount_usd || 0), 0
+      );
+
+      // 15. NRR Additional Pay
+      const nrrOtePct = plan?.nrr_ote_percent ?? 0;
+      let nrrResult: NRRCalculationResult | null = null;
+
+      if (nrrOtePct > 0 && planId) {
+        const employeeDeals = (deals || []).filter((deal: any) =>
+          PARTICIPANT_ROLES.some(role => deal[role] === employeeId)
+        );
+        const nrrDeals = employeeDeals.map((d: any) => ({
+          id: d.id,
+          cr_usd: d.cr_usd,
+          er_usd: d.er_usd,
+          implementation_usd: d.implementation_usd,
+          gp_margin_percent: d.gp_margin_percent,
+        }));
+        const crErTarget = targetMap.get("CR/ER") || targetMap.get("CR ER") || 0;
+        const implTarget = targetMap.get("Implementation") || 0;
+        nrrResult = calculateNRRPayout(
+          nrrDeals,
+          crErTarget,
+          implTarget,
+          nrrOtePct,
+          targetBonusUsd,
+          plan?.cr_er_min_gp_margin_pct ?? 0,
+          plan?.impl_min_gp_margin_pct ?? 0
+        );
+      }
+
+      // 16. SPIFF calculation
+      let spiffResult: SpiffAggregateResult | null = null;
+
+      if (planId) {
+        const { data: planSpiffs } = await supabase
+          .from("plan_spiffs")
+          .select("id, spiff_name, linked_metric_name, spiff_rate_pct, min_deal_value_usd, is_active")
+          .eq("plan_id", planId);
+
+        const activeSpiffs = (planSpiffs || []).filter((s: any) => s.is_active);
+        if (activeSpiffs.length > 0) {
+          const employeeDeals = (deals || []).filter((deal: any) =>
+            PARTICIPANT_ROLES.some(role => deal[role] === employeeId)
+          );
+          const spiffDeals = employeeDeals.map((d: any) => ({
+            id: d.id,
+            new_software_booking_arr_usd: d.new_software_booking_arr_usd,
+            project_id: d.project_id,
+            customer_name: d.customer_name,
+          }));
+          const spiffMetrics: SpiffMetric[] = planMetrics.map(pm => ({
+            metric_name: pm.metric_name,
+            weightage_percent: pm.weightage_percent,
+          }));
+          const targetsByMetric: Record<string, number> = {};
+          targetMap.forEach((v, k) => { targetsByMetric[k] = v; });
+
+          spiffResult = calculateAllSpiffs(
+            activeSpiffs as SpiffConfig[],
+            spiffDeals,
+            spiffMetrics,
+            targetBonusUsd,
+            targetsByMetric
+          );
+        }
+      }
+
+      // 17. Deal collection status
+      const { data: collections } = await supabase
+        .from("deal_collections")
+        .select("project_id, customer_name, deal_value_usd, is_collected, collection_date, is_clawback_triggered, booking_month, deal_id")
+        .gte("booking_month", fiscalYearStart)
+        .lte("booking_month", fiscalYearEnd);
+
+      // Filter to only deals belonging to this employee
+      const employeeDealIds = new Set(
+        (deals || [])
+          .filter((deal: any) => PARTICIPANT_ROLES.some(role => deal[role] === employeeId))
+          .map((d: any) => d.id)
+      );
+
+      const dealCollections: DealCollectionStatus[] = (collections || [])
+        .filter((c: any) => employeeDealIds.has(c.deal_id))
+        .map((c: any) => ({
+          projectId: c.project_id,
+          customerName: c.customer_name,
+          dealValueUsd: c.deal_value_usd,
+          isCollected: c.is_collected ?? false,
+          collectionDate: c.collection_date,
+          isClawbackTriggered: c.is_clawback_triggered ?? false,
+          bookingMonth: c.booking_month,
+        }));
 
       return {
         employeeId,
@@ -526,6 +651,10 @@ export function useCurrentUserCompensation() {
         totalCommissionHoldback,
         totalCommissionYearEndHoldback,
         planMetrics,
+        nrrResult,
+        nrrOtePct,
+        spiffResult,
+        dealCollections,
       };
     },
   });
