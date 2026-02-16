@@ -42,15 +42,6 @@ interface PermCtx {
 // --- Section definitions ---
 const sections: NavSection[] = [
   {
-    id: "compensation",
-    label: "Compensation",
-    icon: Layers,
-    items: [
-      { id: "plans", label: "Compensation Plans", icon: Layers, permissionCheck: (c) => c.canAccessTab("tab:comp_plans") },
-      { id: "performance-targets", label: "Performance Targets", icon: Target, permissionCheck: (c) => c.canAccessTab("tab:performance_targets") },
-    ],
-  },
-  {
     id: "people",
     label: "People",
     icon: Users,
@@ -59,6 +50,15 @@ const sections: NavSection[] = [
       { id: "roles", label: "Role Management", icon: Shield, permissionCheck: (c) => c.canAccessTab("tab:role_management") },
       { id: "support-teams", label: "Support Teams", icon: UsersRound, permissionCheck: (c) => c.canAccessTab("tab:support_teams") },
       { id: "sales-functions", label: "Sales Functions", icon: Briefcase, permissionCheck: (c) => c.canAccessTab("tab:sales_functions") },
+    ],
+  },
+  {
+    id: "compensation",
+    label: "Compensation",
+    icon: Layers,
+    items: [
+      { id: "plans", label: "Compensation Plans", icon: Layers, permissionCheck: (c) => c.canAccessTab("tab:comp_plans") },
+      { id: "performance-targets", label: "Performance Targets", icon: Target, permissionCheck: (c) => c.canAccessTab("tab:performance_targets") },
     ],
   },
   {
