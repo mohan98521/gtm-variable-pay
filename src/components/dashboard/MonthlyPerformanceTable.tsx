@@ -76,7 +76,7 @@ export function MonthlyPerformanceTable({ monthlyActuals, metricNames, metricTar
                 </TableRow>
               )}
 
-              {/* Monthly Rows */}
+              {/* Monthly Rows - only show months with data */}
               {!hasAnyData ? (
                 <TableRow>
                   <TableCell colSpan={metricNames.length + 1} className="text-center text-muted-foreground py-8">
@@ -84,21 +84,9 @@ export function MonthlyPerformanceTable({ monthlyActuals, metricNames, metricTar
                   </TableCell>
                 </TableRow>
               ) : (
-                monthlyActuals.map((month) => {
-                  const hasData = metricNames.some(name => (month.metrics[name] || 0) > 0);
-                  if (!hasData) {
-                    return (
-                      <TableRow key={month.month} className="opacity-50">
-                        <TableCell className="font-medium">{month.monthLabel}</TableCell>
-                        {metricNames.map(name => (
-                          <TableCell key={name} className="text-right font-mono text-muted-foreground">
-                            —
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    );
-                  }
-                  return (
+                monthlyActuals
+                  .filter(month => metricNames.some(name => (month.metrics[name] || 0) > 0))
+                  .map((month) => (
                     <TableRow key={month.month}>
                       <TableCell className="font-medium">{month.monthLabel}</TableCell>
                       {metricNames.map(name => {
@@ -110,8 +98,7 @@ export function MonthlyPerformanceTable({ monthlyActuals, metricNames, metricTar
                         );
                       })}
                     </TableRow>
-                  );
-                })
+                  ))
               )}
             </TableBody>
             <TableFooter>
