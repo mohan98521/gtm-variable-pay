@@ -25,6 +25,12 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
+function achBadgeClass(pct: number): string {
+  if (pct >= 100) return "border-success text-success";
+  if (pct >= 80) return "border-warning text-warning";
+  return "border-destructive text-destructive";
+}
+
 const rankColors = ["bg-warning text-warning-foreground", "bg-muted text-muted-foreground", "bg-muted text-muted-foreground"];
 
 export function TopPerformers({ data, isLoading }: TopPerformersProps) {
@@ -53,6 +59,8 @@ export function TopPerformers({ data, isLoading }: TopPerformersProps) {
               <TableHead>Name</TableHead>
               <TableHead className="hidden md:table-cell">Role / Region</TableHead>
               <TableHead className="text-right">Payout</TableHead>
+              <TableHead className="text-right">Software %</TableHead>
+              <TableHead className="text-right">Closing ARR %</TableHead>
               <TableHead className="text-right">Att. %</TableHead>
             </TableRow>
           </TableHeader>
@@ -79,10 +87,17 @@ export function TopPerformers({ data, isLoading }: TopPerformersProps) {
                   {formatCompact(p.totalPayout)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Badge
-                    variant="outline"
-                    className={`text-xs ${p.attainmentPct >= 100 ? "border-success text-success" : p.attainmentPct >= 80 ? "border-warning text-warning" : "border-destructive text-destructive"}`}
-                  >
+                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.softwareArrAchPct)}`}>
+                    {p.softwareArrAchPct.toFixed(0)}%
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.closingArrAchPct)}`}>
+                    {p.closingArrAchPct.toFixed(0)}%
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Badge variant="outline" className={`text-xs ${achBadgeClass(p.attainmentPct)}`}>
                     {p.attainmentPct.toFixed(0)}%
                   </Badge>
                 </TableCell>
@@ -90,13 +105,16 @@ export function TopPerformers({ data, isLoading }: TopPerformersProps) {
             ))}
             {data.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                   No payout data available
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
+        <p className="text-xs text-muted-foreground px-4 py-3 border-t">
+          Payouts from finalized monthly payout runs. Achievement from deal actuals vs performance targets.
+        </p>
       </CardContent>
     </Card>
   );
