@@ -29,8 +29,10 @@ export default function ExecutiveDashboard() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <PayoutByFunction data={data?.payoutByFunction || []} isLoading={isLoading} />
-          <TopPerformers data={data?.topPerformers || []} isLoading={isLoading} />
+          <PayoutByFunction title="Budget by Sales Function" data={data?.budgetByFunction || []} isLoading={isLoading} />
         </div>
+
+        <TopPerformers data={data?.topPerformers || []} isLoading={isLoading} />
       </div>
     </AppLayout>
   );

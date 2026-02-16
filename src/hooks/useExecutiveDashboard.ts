@@ -45,6 +45,7 @@ export interface ExecutiveDashboardData {
   monthlyTrend: MonthlyTrend[];
   attainmentDistribution: AttainmentBucket[];
   payoutByFunction: FunctionBreakdown[];
+  budgetByFunction: FunctionBreakdown[];
   topPerformers: TopPerformer[];
 }
 
@@ -309,6 +310,16 @@ export function useExecutiveDashboard() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
 
+    // Budget by sales function
+    const budgetFnMap = new Map<string, number>();
+    for (const e of employees) {
+      if (!e.is_active || !e.sales_function) continue;
+      budgetFnMap.set(e.sales_function, (budgetFnMap.get(e.sales_function) || 0) + (e.tvp_usd || 0));
+    }
+    const budgetByFunction: FunctionBreakdown[] = Array.from(budgetFnMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
     // Per-employee total payouts (keyed by UUID)
     const empPayoutMap = new Map<string, number>();
     for (const p of eligiblePayouts) {
@@ -354,6 +365,7 @@ export function useExecutiveDashboard() {
       monthlyTrend,
       attainmentDistribution,
       payoutByFunction,
+      budgetByFunction,
       topPerformers,
       repsWithTargets,
       totalActiveEmployees,

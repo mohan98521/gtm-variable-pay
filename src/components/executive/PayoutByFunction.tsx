@@ -6,6 +6,7 @@ import type { FunctionBreakdown } from "@/hooks/useExecutiveDashboard";
 interface PayoutByFunctionProps {
   data: FunctionBreakdown[];
   isLoading: boolean;
+  title?: string;
 }
 
 const COLORS = [
@@ -23,11 +24,13 @@ function formatCompact(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
-export function PayoutByFunction({ data, isLoading }: PayoutByFunctionProps) {
+export function PayoutByFunction({ data, isLoading, title = "Payout by Sales Function" }: PayoutByFunctionProps) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+
   if (isLoading) {
     return (
       <Card>
-        <CardHeader><CardTitle className="text-base">Payout by Sales Function</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
         <CardContent><Skeleton className="h-[300px] w-full" /></CardContent>
       </Card>
     );
@@ -36,7 +39,7 @@ export function PayoutByFunction({ data, isLoading }: PayoutByFunctionProps) {
   return (
     <Card className="border shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold text-foreground">Payout by Sales Function</CardTitle>
+        <CardTitle className="text-base font-semibold text-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -56,7 +59,10 @@ export function PayoutByFunction({ data, isLoading }: PayoutByFunctionProps) {
               ))}
             </Pie>
             <Tooltip
-              formatter={(value: number) => formatCompact(value)}
+              formatter={(value: number) => {
+                const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
+                return `${formatCompact(value)} (${pct}%)`;
+              }}
               contentStyle={{
                 backgroundColor: "hsl(var(--card))",
                 border: "1px solid hsl(var(--border))",
