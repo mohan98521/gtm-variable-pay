@@ -735,7 +735,8 @@ function calculateEmployeeVariablePay(
         .filter((m: any) => m.plan_id === ctx.planId);
 
       const findMultiplier = (years: number): number => {
-        for (const m of multiplierTiers) {
+        const sorted = [...multiplierTiers].sort((a: any, b: any) => b.min_years - a.min_years);
+        for (const m of sorted) {
           if (years >= m.min_years && (m.max_years === null || years <= m.max_years)) {
             return m.multiplier_value;
           }
