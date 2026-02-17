@@ -1,46 +1,40 @@
 
 
-## Fix: "require is not defined" Error in Payout Engine
+## Fix: Multiplier Boundary Bug in payoutEngine.ts
 
 ### Problem
-The payout calculation fails because `src/lib/payoutEngine.ts` uses a CommonJS `require()` call at line 761 to dynamically import `calculateAggregateVariablePay`. This does not work in a browser/Vite (ESM) environment.
+The `findMultiplier` function (line 737-744) iterates through multiplier tiers in their default (ascending) order. When a renewal period sits on a boundary (e.g., 2 years matching both a "1-2 years" tier at 1.0x and a "2-3 years" tier at 1.1x), the first match wins -- which is the lower, less specific tier.
 
 ### Solution
-Two small changes in `src/lib/payoutEngine.ts`:
-
-1. **Add `calculateAggregateVariablePay` to the existing static import** on lines 23-28 (it is already exported from `dealVariablePayAttribution.ts` but missing from the import list).
-
-2. **Remove the `require()` call** on line 761 and use the statically imported function directly.
+Sort `multiplierTiers` in descending order by `min_years` before iterating, so the highest (most specific) tier is checked first. This matches the pattern already used by `findRenewalMultiplier` in `useClosingArrRenewalMultipliers.ts`.
 
 ### Technical Details
 
-**File: `src/lib/payoutEngine.ts`**
+**File: `src/lib/payoutEngine.ts` (lines 737-744)**
 
-Change the import (lines 23-28) from:
+Replace:
 ```typescript
-import { 
-  calculateDealVariablePayAttributions, 
-  DealForAttribution,
-  DealVariablePayAttribution,
-  AggregateVariablePayContext 
-} from "./dealVariablePayAttribution";
-```
-to:
-```typescript
-import { 
-  calculateDealVariablePayAttributions,
-  calculateAggregateVariablePay,
-  DealForAttribution,
-  DealVariablePayAttribution,
-  AggregateVariablePayContext 
-} from "./dealVariablePayAttribution";
+const findMultiplier = (years: number): number => {
+  for (const m of multiplierTiers) {
+    if (years >= m.min_years && (m.max_years === null || years <= m.max_years)) {
+      return m.multiplier_value;
+    }
+  }
+  return 1.0;
+};
 ```
 
-Then replace line 761:
+With:
 ```typescript
-const { calculateAggregateVariablePay } = require('./dealVariablePayAttribution');
+const findMultiplier = (years: number): number => {
+  const sorted = [...multiplierTiers].sort((a: any, b: any) => b.min_years - a.min_years);
+  for (const m of sorted) {
+    if (years >= m.min_years && (m.max_years === null || years <= m.max_years)) {
+      return m.multiplier_value;
+    }
+  }
+  return 1.0;
+};
 ```
-with just removing that line (the function is now available from the top-level import).
 
-No other files need changes.
-
+One line added, no other files affected. After this fix, a 2-year renewal will correctly match the 2-3 tier (1.1x) instead of the 1-2 tier (1.0x).
