@@ -21,7 +21,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PlanMetric } from "@/hooks/usePlanMetrics";
 import { PlanCommission } from "./commissions";
 import { 
-  calculateDealVariablePayAttributions, 
+  calculateDealVariablePayAttributions,
+  calculateAggregateVariablePay,
   DealForAttribution,
   DealVariablePayAttribution,
   AggregateVariablePayContext 
@@ -758,7 +759,6 @@ function calculateEmployeeVariablePay(
 
       if (totalActualUsd === 0) continue;
 
-      const { calculateAggregateVariablePay } = require('./dealVariablePayAttribution');
       const vpCalc = calculateAggregateVariablePay(totalActualUsd, targetUsd, bonusAllocationUsd, metric);
 
       ytdVpUsd += vpCalc.totalVariablePay;
