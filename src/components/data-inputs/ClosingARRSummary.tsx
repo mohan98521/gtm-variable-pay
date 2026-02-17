@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   TrendingUp,
   TrendingDown,
-  FileSpreadsheet,
+  
   CheckCircle,
   DollarSign,
   BarChart3,
@@ -58,22 +58,7 @@ export function ClosingARRSummary({ records, fiscalYear, multipliers = [] }: Clo
   const hasMultiplierImpact = adjustedEligibleClosingARR !== summary.eligibleClosingARR;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-7">
-      {/* Total Projects */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <FileSpreadsheet className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Total Projects</p>
-              <p className="text-2xl font-semibold text-foreground">{summary.totalProjects}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
       {/* Opening ARR */}
       <Card>
         <CardContent className="pt-6">
