@@ -396,6 +396,29 @@ export interface EmployeePayoutResult {
   
   // Metric-level detailed workings
   metricDetails: MetricPayoutDetail[];
+  
+  // Closing ARR project-level details
+  closingArrDetails: ClosingArrPayoutDetail[];
+}
+
+export interface ClosingArrPayoutDetail {
+  closingArrActualId: string;
+  employeeId: string;
+  pid: string;
+  customerName: string | null;
+  customerCode: string;
+  bu: string;
+  product: string;
+  monthYear: string;
+  endDate: string | null;
+  isMultiYear: boolean;
+  renewalYears: number;
+  closingArrUsd: number;
+  multiplier: number;
+  adjustedArrUsd: number;
+  isEligible: boolean;
+  exclusionReason: string | null;
+  orderCategory2: string | null;
 }
 
 export interface PayoutRunResult {
@@ -652,9 +675,10 @@ function calculateEmployeeVariablePay(
     collectionPct: number;
     yearEndPct: number;
   }>;
+  closingArrDetails: ClosingArrPayoutDetail[];
 } {
   if (ctx.metrics.length === 0) {
-    return { totalVpUsd: 0, ytdVpUsd: 0, priorVpUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, attributions: [], vpContext: null, vpMetricDetails: [] };
+    return { totalVpUsd: 0, ytdVpUsd: 0, priorVpUsd: 0, bookingUsd: 0, collectionUsd: 0, yearEndUsd: 0, attributions: [], vpContext: null, vpMetricDetails: [], closingArrDetails: [] };
   }
 
   const empId = ctx.employee.employee_id;
@@ -665,6 +689,7 @@ function calculateEmployeeVariablePay(
   let ytdYearEndUsd = 0;
   let allAttributions: DealVariablePayAttribution[] = [];
   let lastContext: AggregateVariablePayContext | null = null;
+  const closingArrDetailRecords: ClosingArrPayoutDetail[] = [];
   
   const vpMetricDetails: Array<{
     metricName: string;
@@ -730,6 +755,26 @@ function calculateEmployeeVariablePay(
 
       const closingArr = ctx.prefetched.allClosingArr.filter(closingArrFilter);
 
+      // Also get ALL closing ARR records for this employee (including ineligible) for audit
+      const isTeamLead2 = (ctx.employee.sales_function || "").startsWith("Team Lead");
+      let allEmployeeClosingArr: any[];
+      if (isTeamLead2 && ctx.metrics.some(m => m.metric_name.startsWith("Team "))) {
+        let tlReportIds2 = teamReportIds;
+        if (tlReportIds2.length === 0) {
+          tlReportIds2 = ctx.prefetched.allEmployees
+            .filter(e => e.manager_employee_id === empId && e.is_active)
+            .map(e => e.employee_id);
+        }
+        const allIds2 = new Set([empId, ...tlReportIds2]);
+        allEmployeeClosingArr = ctx.prefetched.allClosingArr.filter((arr: any) =>
+          allIds2.has(arr.sales_rep_employee_id) || allIds2.has(arr.sales_head_employee_id)
+        );
+      } else {
+        allEmployeeClosingArr = ctx.prefetched.allClosingArr.filter((arr: any) =>
+          arr.sales_rep_employee_id === empId || arr.sales_head_employee_id === empId
+        );
+      }
+
       // Get renewal multipliers for plan from prefetched data
       const multiplierTiers = ctx.prefetched.allRenewalMultipliers
         .filter((m: any) => m.plan_id === ctx.planId);
@@ -743,6 +788,34 @@ function calculateEmployeeVariablePay(
         }
         return 1.0;
       };
+
+      // Build closing ARR project-level audit details (ALL records, eligible and ineligible)
+      const fiscalYearEnd = `${ctx.fiscalYear}-12-31`;
+      for (const arr of allEmployeeClosingArr) {
+        const rawArr = arr.closing_arr || 0;
+        const mult = (arr.is_multi_year && arr.renewal_years > 0) ? findMultiplier(arr.renewal_years) : 1.0;
+        const adjustedArr = rawArr * mult;
+        const eligible = arr.end_date > fiscalYearEnd;
+        closingArrDetailRecords.push({
+          closingArrActualId: arr.id,
+          employeeId: ctx.employee.employee_id,
+          pid: arr.pid,
+          customerName: arr.customer_name,
+          customerCode: arr.customer_code,
+          bu: arr.bu,
+          product: arr.product,
+          monthYear: arr.month_year,
+          endDate: arr.end_date,
+          isMultiYear: arr.is_multi_year,
+          renewalYears: arr.renewal_years,
+          closingArrUsd: rawArr,
+          multiplier: mult,
+          adjustedArrUsd: adjustedArr,
+          isEligible: eligible,
+          exclusionReason: eligible ? null : 'Contract end_date <= fiscal year end',
+          orderCategory2: arr.order_category_2 || null,
+        });
+      }
 
       const closingByMonth = new Map<string, number>();
       closingArr.forEach((arr: any) => {
@@ -880,6 +953,7 @@ function calculateEmployeeVariablePay(
     attributions: allAttributions,
     vpContext: lastContext,
     vpMetricDetails,
+    closingArrDetails: closingArrDetailRecords,
   };
 }
 
@@ -1614,6 +1688,8 @@ export function calculateMonthlyPayoutFromPrefetch(
       
       return details;
     })(),
+    
+    closingArrDetails: vpResult.closingArrDetails,
   };
 }
 
@@ -2430,6 +2506,46 @@ async function persistPayoutResults(
     for (let i = 0; i < dealDetailRecords.length; i += 100) {
       const batch = dealDetailRecords.slice(i, i + 100);
       await supabase.from('payout_deal_details' as any).insert(batch);
+    }
+  }
+
+
+  // ===== Persist Closing ARR Project-Level Details =====
+  await supabase
+    .from('closing_arr_payout_details' as any)
+    .delete()
+    .eq('payout_run_id', payoutRunId);
+
+  const closingArrRecords: any[] = [];
+  for (const emp of employeePayouts) {
+    for (const d of emp.closingArrDetails) {
+      closingArrRecords.push({
+        payout_run_id: payoutRunId,
+        employee_id: d.employeeId,
+        closing_arr_actual_id: d.closingArrActualId,
+        pid: d.pid,
+        customer_name: d.customerName,
+        customer_code: d.customerCode,
+        bu: d.bu,
+        product: d.product,
+        month_year: d.monthYear,
+        end_date: d.endDate,
+        is_multi_year: d.isMultiYear,
+        renewal_years: d.renewalYears,
+        closing_arr_usd: d.closingArrUsd,
+        multiplier: d.multiplier,
+        adjusted_arr_usd: d.adjustedArrUsd,
+        is_eligible: d.isEligible,
+        exclusion_reason: d.exclusionReason,
+        order_category_2: d.orderCategory2,
+      });
+    }
+  }
+
+  if (closingArrRecords.length > 0) {
+    for (let i = 0; i < closingArrRecords.length; i += 100) {
+      const batch = closingArrRecords.slice(i, i + 100);
+      await supabase.from('closing_arr_payout_details' as any).insert(batch);
     }
   }
 }

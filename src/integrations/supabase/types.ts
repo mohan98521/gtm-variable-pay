@@ -186,6 +186,75 @@ export type Database = {
         }
         Relationships: []
       }
+      closing_arr_payout_details: {
+        Row: {
+          adjusted_arr_usd: number
+          bu: string | null
+          closing_arr_actual_id: string
+          closing_arr_usd: number
+          created_at: string
+          customer_code: string | null
+          customer_name: string | null
+          employee_id: string
+          end_date: string | null
+          exclusion_reason: string | null
+          id: string
+          is_eligible: boolean
+          is_multi_year: boolean
+          month_year: string | null
+          multiplier: number
+          order_category_2: string | null
+          payout_run_id: string
+          pid: string
+          product: string | null
+          renewal_years: number
+        }
+        Insert: {
+          adjusted_arr_usd?: number
+          bu?: string | null
+          closing_arr_actual_id: string
+          closing_arr_usd?: number
+          created_at?: string
+          customer_code?: string | null
+          customer_name?: string | null
+          employee_id: string
+          end_date?: string | null
+          exclusion_reason?: string | null
+          id?: string
+          is_eligible?: boolean
+          is_multi_year?: boolean
+          month_year?: string | null
+          multiplier?: number
+          order_category_2?: string | null
+          payout_run_id: string
+          pid: string
+          product?: string | null
+          renewal_years?: number
+        }
+        Update: {
+          adjusted_arr_usd?: number
+          bu?: string | null
+          closing_arr_actual_id?: string
+          closing_arr_usd?: number
+          created_at?: string
+          customer_code?: string | null
+          customer_name?: string | null
+          employee_id?: string
+          end_date?: string | null
+          exclusion_reason?: string | null
+          id?: string
+          is_eligible?: boolean
+          is_multi_year?: boolean
+          month_year?: string | null
+          multiplier?: number
+          order_category_2?: string | null
+          payout_run_id?: string
+          pid?: string
+          product?: string | null
+          renewal_years?: number
+        }
+        Relationships: []
+      }
       closing_arr_renewal_multipliers: {
         Row: {
           created_at: string

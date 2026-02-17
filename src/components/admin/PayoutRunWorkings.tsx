@@ -20,6 +20,7 @@ import { Loader2, Search } from "lucide-react";
 import { usePayoutMetricDetails, EmployeeWorkings, PayoutMetricDetailRow } from "@/hooks/usePayoutMetricDetails";
 import { PayoutRunWorkingsSummary } from "./PayoutRunWorkingsSummary";
 import { PayoutRunDealWorkings } from "./PayoutRunDealWorkings";
+import { PayoutRunClosingArrWorkings } from "./PayoutRunClosingArrWorkings";
 
 interface PayoutRunWorkingsProps {
   payoutRunId: string;
@@ -341,7 +342,7 @@ function getGroupLayout(group: { key: string; rows: PayoutMetricDetailRow[] }): 
 export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
   const { data: employeeWorkings, isLoading } = usePayoutMetricDetails(payoutRunId);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"summary" | "detail" | "deals">("summary");
+  const [view, setView] = useState<"summary" | "detail" | "deals" | "closing_arr">("summary");
   
   const filtered = employeeWorkings?.filter(emp =>
     !search || 
@@ -368,11 +369,12 @@ export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <Tabs value={view} onValueChange={(v) => setView(v as "summary" | "detail" | "deals")}>
+        <Tabs value={view} onValueChange={(v) => setView(v as "summary" | "detail" | "deals" | "closing_arr")}>
           <TabsList>
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="detail">Detail</TabsTrigger>
             <TabsTrigger value="deals">Deals</TabsTrigger>
+            <TabsTrigger value="closing_arr">Closing ARR</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="relative max-w-sm">
@@ -390,6 +392,8 @@ export function PayoutRunWorkings({ payoutRunId }: PayoutRunWorkingsProps) {
         <PayoutRunWorkingsSummary employees={filtered} />
       ) : view === "deals" ? (
         <PayoutRunDealWorkings payoutRunId={payoutRunId} />
+      ) : view === "closing_arr" ? (
+        <PayoutRunClosingArrWorkings payoutRunId={payoutRunId} />
       ) : (
         <Accordion type="multiple" className="space-y-2">
           {filtered.map((emp) => (
