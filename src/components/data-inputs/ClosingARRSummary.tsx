@@ -7,16 +7,28 @@ import {
   CheckCircle,
   DollarSign,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 import { ClosingARRActual, calculateClosingARRSummary } from "@/hooks/useClosingARR";
+import { findRenewalMultiplier, ClosingArrRenewalMultiplier } from "@/hooks/useClosingArrRenewalMultipliers";
 
 interface ClosingARRSummaryProps {
   records: ClosingARRActual[];
   fiscalYear: number;
+  multipliers?: ClosingArrRenewalMultiplier[];
 }
 
-export function ClosingARRSummary({ records, fiscalYear }: ClosingARRSummaryProps) {
+export function ClosingARRSummary({ records, fiscalYear, multipliers = [] }: ClosingARRSummaryProps) {
   const summary = calculateClosingARRSummary(records, fiscalYear);
+
+  // Calculate adjusted eligible ARR
+  const fiscalYearEnd = new Date(fiscalYear, 11, 31);
+  const adjustedEligibleClosingARR = records
+    .filter((r) => r.end_date && new Date(r.end_date) > fiscalYearEnd)
+    .reduce((sum, r) => {
+      const mult = r.is_multi_year ? findRenewalMultiplier(multipliers, r.renewal_years) : 1.0;
+      return sum + (r.closing_arr || 0) * mult;
+    }, 0);
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -43,8 +55,10 @@ export function ClosingARRSummary({ records, fiscalYear }: ClosingARRSummaryProp
 
   const isPositiveChange = summary.totalChanges >= 0;
 
+  const hasMultiplierImpact = adjustedEligibleClosingARR !== summary.eligibleClosingARR;
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-7">
       {/* Total Projects */}
       <Card>
         <CardContent className="pt-6">
@@ -154,6 +168,28 @@ export function ClosingARRSummary({ records, fiscalYear }: ClosingARRSummaryProp
               <p className="text-xs text-muted-foreground mt-0.5">
                 End date &gt; Dec 31, {fiscalYear}
               </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Adjusted Eligible ARR */}
+      <Card className="border-amber-500/30 bg-amber-500/5">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-amber-500/20 text-amber-600">
+              <Sparkles className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Adjusted Eligible ARR</p>
+              <p className="text-2xl font-semibold text-amber-600" title={formatFullCurrency(adjustedEligibleClosingARR)}>
+                {formatCurrency(adjustedEligibleClosingARR)}
+              </p>
+              {hasMultiplierImpact && (
+                <p className="text-xs text-amber-600/70 mt-0.5">
+                  Includes multi-year uplift
+                </p>
+              )}
             </div>
           </div>
         </CardContent>

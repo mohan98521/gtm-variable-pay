@@ -97,6 +97,8 @@ export interface ClosingARRRecord {
   sales_rep_name: string | null;
   sales_head_employee_id: string | null;
   sales_head_name: string | null;
+  is_multi_year: boolean;
+  renewal_years: number;
   // Calculated fields
   eligible_closing_arr: number;
   is_eligible: boolean;

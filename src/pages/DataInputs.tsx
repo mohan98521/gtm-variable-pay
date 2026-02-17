@@ -31,6 +31,9 @@ import { PendingCollectionsTable } from "@/components/data-inputs/PendingCollect
 import { CollectedDealsTable } from "@/components/data-inputs/CollectedDealsTable";
 import { useDeals, DealWithParticipants, PROPOSAL_TYPES } from "@/hooks/useDeals";
 import { useClosingARRData, ClosingARRActual } from "@/hooks/useClosingARR";
+import { ClosingArrRenewalMultiplier } from "@/hooks/useClosingArrRenewalMultipliers";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { usePendingCollections, useCollectedDeals } from "@/hooks/useCollections";
 import { useMonthLockStatus } from "@/hooks/useMonthLockStatus";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
@@ -67,6 +70,19 @@ export default function DataInputs() {
 
   // Fetch Closing ARR data
   const { data: closingARRRecords = [], isLoading: isLoadingARR } = useClosingARRData(selectedMonth);
+
+  // Fetch renewal multiplier tiers for summary
+  const { data: multiplierTiers = [] } = useQuery({
+    queryKey: ["closing_arr_renewal_multipliers_all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("closing_arr_renewal_multipliers" as any)
+        .select("*")
+        .order("min_years");
+      if (error) throw error;
+      return (data || []) as unknown as ClosingArrRenewalMultiplier[];
+    },
+  });
 
   // Fetch Collections data
   const { data: pendingCollections = [], isLoading: isLoadingPending } = usePendingCollections();
@@ -373,7 +389,7 @@ export default function DataInputs() {
             </TooltipProvider>
 
             {/* Closing ARR Summary */}
-            <ClosingARRSummary records={closingARRRecords} fiscalYear={selectedYear} />
+            <ClosingARRSummary records={closingARRRecords} fiscalYear={selectedYear} multipliers={multiplierTiers} />
 
             {/* Closing ARR Table */}
             <Card>

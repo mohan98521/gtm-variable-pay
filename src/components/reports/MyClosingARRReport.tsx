@@ -13,6 +13,9 @@ import { generateCSV, downloadCSV } from "@/lib/csvExport";
 import { generateXLSX, downloadXLSX } from "@/lib/xlsxExport";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { findRenewalMultiplier, ClosingArrRenewalMultiplier } from "@/hooks/useClosingArrRenewalMultipliers";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 // All Closing ARR columns for export
 const CLOSING_ARR_COLUMNS: { key: keyof ClosingARRRecord | string; header: string; getValue?: (row: ClosingARRRecord) => string | number | null }[] = [
@@ -70,6 +73,24 @@ export function MyClosingARRReport() {
   
   const monthParam = selectedMonth === "all" ? null : selectedMonth;
   const { data: records = [], isLoading } = useMyClosingARR(monthParam);
+
+  // Fetch renewal multiplier tiers
+  const { data: multiplierTiers = [] } = useQuery({
+    queryKey: ["closing_arr_renewal_multipliers_all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("closing_arr_renewal_multipliers" as any)
+        .select("*")
+        .order("min_years");
+      if (error) throw error;
+      return (data || []) as unknown as ClosingArrRenewalMultiplier[];
+    },
+  });
+
+  const getMultiplier = (record: ClosingARRRecord) => {
+    if (!record.is_multi_year) return 1.0;
+    return findRenewalMultiplier(multiplierTiers, record.renewal_years || 1);
+  };
   
   const monthOptions = useMemo(() => getMonthOptions(selectedYear), [selectedYear]);
   
@@ -106,13 +127,26 @@ export function MyClosingARRReport() {
     };
   }, [records, selectedMonth]);
 
+  const exportColumns = useMemo(() => {
+    const cols = [...CLOSING_ARR_COLUMNS];
+    // Insert multiplier and adjusted ARR after closing_arr
+    const closingArrIdx = cols.findIndex(c => c.key === "closing_arr");
+    if (closingArrIdx >= 0) {
+      cols.splice(closingArrIdx + 1, 0,
+        { key: "multiplier", header: "Multiplier", getValue: (row: ClosingARRRecord) => `${getMultiplier(row).toFixed(1)}x` },
+        { key: "adjusted_closing_arr", header: "Adjusted Closing ARR", getValue: (row: ClosingARRRecord) => (row.closing_arr || 0) * getMultiplier(row) },
+      );
+    }
+    return cols;
+  }, [multiplierTiers]);
+
   const handleExportCSV = () => {
-    const csv = generateCSV(records, CLOSING_ARR_COLUMNS);
+    const csv = generateCSV(records, exportColumns);
     downloadCSV(csv, `my_closing_arr_${selectedYear}_${format(new Date(), "yyyy-MM-dd")}.csv`);
   };
 
   const handleExportXLSX = () => {
-    const blob = generateXLSX(records, CLOSING_ARR_COLUMNS, "My Closing ARR");
+    const blob = generateXLSX(records, exportColumns, "My Closing ARR");
     downloadXLSX(blob, `my_closing_arr_${selectedYear}_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
@@ -224,6 +258,8 @@ export function MyClosingARRReport() {
                     <TableHead className="text-right">Churn</TableHead>
                     <TableHead className="text-right">Adjustment</TableHead>
                     <TableHead className="text-right">Closing ARR</TableHead>
+                    <TableHead className="text-center">Multiplier</TableHead>
+                    <TableHead className="text-right">Adjusted ARR</TableHead>
                     <TableHead>Country</TableHead>
                     <TableHead>Region</TableHead>
                     <TableHead>Start Date</TableHead>
@@ -256,6 +292,19 @@ export function MyClosingARRReport() {
                       <TableCell className="text-right">{formatCurrency(record.churn)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(record.adjustment)}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(record.closing_arr)}</TableCell>
+                      <TableCell className="text-center">
+                        {(() => {
+                          const mult = getMultiplier(record);
+                          return (
+                            <Badge variant={mult > 1 ? "default" : "secondary"} className={mult > 1 ? "bg-amber-500/20 text-amber-700 border-amber-500/30" : ""}>
+                              {mult.toFixed(1)}x
+                            </Badge>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className={`text-right font-mono font-semibold ${getMultiplier(record) > 1 ? "text-amber-600" : ""}`}>
+                        {formatCurrency((record.closing_arr || 0) * getMultiplier(record))}
+                      </TableCell>
                       <TableCell>{record.country || "-"}</TableCell>
                       <TableCell>{record.revised_region || "-"}</TableCell>
                       <TableCell>{record.start_date || "-"}</TableCell>
