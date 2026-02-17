@@ -1,26 +1,46 @@
 
 
-## Clean Up All Payout Run Data
+## Fix: "require is not defined" Error in Payout Engine
 
-### What Will Be Deleted
+### Problem
+The payout calculation fails because `src/lib/payoutEngine.ts` uses a CommonJS `require()` call at line 761 to dynamically import `calculateAggregateVariablePay`. This does not work in a browser/Vite (ESM) environment.
 
-1. **Payout Deal Details** -- 83 records linked to the payout run
-2. **Payout Audit Log** -- All 491 entries (run lifecycle, calculation, rate usage logs)
-3. **Payout Run** -- 1 record (Jan 2026, draft status, ID: `b162977c-...`)
-4. **Deal Variable Pay Attribution** -- Already empty (0 records)
-5. **Monthly Payouts** -- Already empty (0 records)
+### Solution
+Two small changes in `src/lib/payoutEngine.ts`:
 
-### Execution Order
+1. **Add `calculateAggregateVariablePay` to the existing static import** on lines 23-28 (it is already exported from `dealVariablePayAttribution.ts` but missing from the import list).
 
-Data will be deleted in dependency order to avoid foreign key conflicts:
+2. **Remove the `require()` call** on line 761 and use the statically imported function directly.
 
-1. Delete `payout_deal_details` (references payout_run_id)
-2. Delete `deal_variable_pay_attribution` (references payout_run_id) -- already empty but included for safety
-3. Delete `monthly_payouts` (references payout_run_id) -- already empty but included for safety
-4. Delete `payout_audit_log` -- all 491 entries
-5. Delete `payout_runs` -- the single Jan 2026 draft run
+### Technical Details
 
-### No Code Changes Needed
+**File: `src/lib/payoutEngine.ts`**
 
-This is a data-only cleanup. No files will be modified.
+Change the import (lines 23-28) from:
+```typescript
+import { 
+  calculateDealVariablePayAttributions, 
+  DealForAttribution,
+  DealVariablePayAttribution,
+  AggregateVariablePayContext 
+} from "./dealVariablePayAttribution";
+```
+to:
+```typescript
+import { 
+  calculateDealVariablePayAttributions,
+  calculateAggregateVariablePay,
+  DealForAttribution,
+  DealVariablePayAttribution,
+  AggregateVariablePayContext 
+} from "./dealVariablePayAttribution";
+```
+
+Then replace line 761:
+```typescript
+const { calculateAggregateVariablePay } = require('./dealVariablePayAttribution');
+```
+with just removing that line (the function is now available from the top-level import).
+
+No other files need changes.
 
