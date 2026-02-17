@@ -272,6 +272,7 @@ export function useDeletePayoutRun() {
       // Delete associated records first
       await supabase.from("monthly_payouts").delete().eq("payout_run_id", runId);
       await supabase.from("deal_variable_pay_attribution").delete().eq("payout_run_id", runId);
+      await supabase.from("closing_arr_payout_details" as any).delete().eq("payout_run_id", runId);
       
       // Delete the run
       const { error } = await supabase
