@@ -1,35 +1,33 @@
 
 
-## Fix: Closing ARR Payout Details Not Persisting
+## Add Closing ARR Sheet to XLSX Export
 
-### Root Cause
+### What's Missing
+The multi-sheet XLSX export in the Payout Run Detail page currently includes: Summary, All Employees, currency sheets, Detailed Workings, and Deal Workings. There is no sheet for Closing ARR project-level data.
 
-The prefetch query for `closing_arr_actuals` (line 134 in `payoutEngine.ts`) only selects a limited set of columns:
+### Changes
 
-```
-id, month_year, closing_arr, end_date, is_multi_year, renewal_years, 
-sales_rep_employee_id, sales_head_employee_id
-```
+**File: `src/components/admin/PayoutRunDetail.tsx`**
 
-But the audit capture code (lines 800-817) tries to read `pid`, `customer_name`, `customer_code`, `bu`, `product`, and `order_category_2` from these same records. Since those fields are not fetched, they are all `undefined`.
+1. Import the `useClosingArrPayoutDetails` hook at the top of the file.
+2. Call the hook inside the `PayoutRunDetail` component to fetch Closing ARR data for the current payout run.
+3. In the `handleExportXLSX` function, after the "Deal Workings" sheet block (around line 418), add a new "Closing ARR Workings" sheet with the following columns:
+   - Employee Code
+   - Employee Name
+   - PID
+   - Customer Name
+   - Customer Code
+   - BU
+   - Product
+   - Category (order_category_2)
+   - Month/Year
+   - End Date
+   - Multi-Year (Yes/No)
+   - Renewal Years
+   - Closing ARR (USD)
+   - Multiplier
+   - Adjusted ARR (USD)
+   - Eligible (Yes/No)
+   - Exclusion Reason
 
-The `pid` column in `closing_arr_payout_details` is defined as `NOT NULL`, so inserting a record with `pid = undefined` (which becomes `null`) causes the batch insert to fail. The error is logged to console but the UI just shows an empty tab.
-
-### Fix (single change)
-
-Update the prefetch SELECT for `closing_arr_actuals` in `payoutEngine.ts` (line 134) to include the missing columns:
-
-**Before:**
-```
-.select('id, month_year, closing_arr, end_date, is_multi_year, renewal_years, sales_rep_employee_id, sales_head_employee_id')
-```
-
-**After:**
-```
-.select('id, month_year, closing_arr, end_date, is_multi_year, renewal_years, sales_rep_employee_id, sales_head_employee_id, pid, customer_name, customer_code, bu, product, order_category_2')
-```
-
-### Files to modify
-- `src/lib/payoutEngine.ts` -- line 134, expand the SELECT columns
-
-After this fix, re-running the payout calculation will correctly persist the project-level details and the "Closing ARR" tab will display data.
+This is a straightforward addition -- one new import, one new hook call, and one new sheet block in the export function.
