@@ -30,6 +30,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { MoreHorizontal, Pencil, Trash2, CheckCircle, XCircle, Download, X, Lock } from "lucide-react";
 import { ClosingARRActual, useDeleteClosingARR } from "@/hooks/useClosingARR";
+import { findRenewalMultiplier, ClosingArrRenewalMultiplier } from "@/hooks/useClosingArrRenewalMultipliers";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvExport";
 
@@ -51,6 +54,23 @@ export function ClosingARRTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<ClosingARRActual | null>(null);
   const deleteMutation = useDeleteClosingARR();
+
+  // Fetch multiplier tiers (fetch all tiers since they're identical across farming plans)
+  const { data: multiplierTiers = [] } = useQuery({
+    queryKey: ["closing_arr_renewal_multipliers_all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("closing_arr_renewal_multipliers" as any)
+        .select("*")
+        .order("min_years");
+      if (error) throw error;
+      return (data || []) as unknown as ClosingArrRenewalMultiplier[];
+    },
+  });
+  const getMultiplier = (record: ClosingARRActual) => {
+    if (!record.is_multi_year) return 1.0;
+    return findRenewalMultiplier(multiplierTiers, record.renewal_years);
+  };
 
   // Filter state
   const [filterPID, setFilterPID] = useState<string>("_all");
@@ -199,6 +219,22 @@ export function ClosingARRTable({
       { key: "churn", header: "Churn" },
       { key: "adjustment", header: "Adjustment" },
       { key: "closing_arr", header: "Closing ARR" },
+      {
+        key: "multiplier",
+        header: "Multiplier",
+        getValue: (row: ClosingARRActual) => {
+          const mult = getMultiplier(row);
+          return `${mult.toFixed(1)}x`;
+        },
+      },
+      {
+        key: "adjusted_closing_arr",
+        header: "Adjusted Closing ARR",
+        getValue: (row: ClosingARRActual) => {
+          const mult = getMultiplier(row);
+          return ((row.closing_arr || 0) * mult);
+        },
+      },
       { key: "country", header: "Country" },
       { key: "revised_region", header: "Revised Region" },
       { key: "start_date", header: "Start Date" },
@@ -328,6 +364,8 @@ export function ClosingARRTable({
               <TableHead className="text-right">Closing ARR</TableHead>
               <TableHead className="text-center">Multi-Year</TableHead>
               <TableHead className="text-center">Renewal Yrs</TableHead>
+              <TableHead className="text-center">Multiplier</TableHead>
+              <TableHead className="text-right">Adjusted ARR</TableHead>
               <TableHead>End Date</TableHead>
               <TableHead className="text-center">Eligible</TableHead>
               <TableHead>Sales Rep</TableHead>
@@ -371,6 +409,19 @@ export function ClosingARRTable({
                   </TableCell>
                   <TableCell className="text-center">
                     {(record as any).is_multi_year ? (record as any).renewal_years : "-"}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const mult = getMultiplier(record);
+                      return (
+                        <Badge variant={mult > 1 ? "default" : "secondary"} className={mult > 1 ? "bg-amber-500/20 text-amber-700 border-amber-500/30" : ""}>
+                          {mult.toFixed(1)}x
+                        </Badge>
+                      );
+                    })()}
+                  </TableCell>
+                  <TableCell className={`text-right font-mono font-semibold ${getMultiplier(record) > 1 ? "text-amber-600" : ""}`}>
+                    {formatCurrency((record.closing_arr || 0) * getMultiplier(record))}
                   </TableCell>
                   <TableCell>{formatDate(record.end_date)}</TableCell>
                   <TableCell className="text-center">
