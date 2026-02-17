@@ -16,6 +16,7 @@ import { PayoutRun } from "@/hooks/usePayoutRuns";
 import { useEmployeePayoutBreakdown, usePayoutSummary, EmployeePayoutSummary } from "@/hooks/useMonthlyPayouts";
 import { usePayoutMetricDetails } from "@/hooks/usePayoutMetricDetails";
 import { usePayoutDealDetails } from "@/hooks/usePayoutDealDetails";
+import { useClosingArrPayoutDetails } from "@/hooks/useClosingArrPayoutDetails";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +78,7 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
   const { data: currencySummary, isLoading: loadingSummary } = usePayoutSummary(run.id);
   const { data: metricDetails } = usePayoutMetricDetails(run.id);
   const { data: dealDetails } = usePayoutDealDetails(run.id);
+  const { data: closingArrDetails } = useClosingArrPayoutDetails(run.id);
   
   const [currencyFilter, setCurrencyFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<string>("summary");
@@ -413,6 +415,33 @@ export function PayoutRunDetail({ run, onBack }: PayoutRunDetailProps) {
           { key: 'booking_usd', header: 'Upon Booking (USD)' },
           { key: 'collection_usd', header: 'Upon Collection (USD)' },
           { key: 'year_end_usd', header: 'At Year End (USD)' },
+        ] as any,
+      });
+    }
+
+    // Closing ARR Workings sheet
+    if (closingArrDetails && closingArrDetails.length > 0) {
+      sheets.push({
+        sheetName: 'Closing ARR Workings',
+        data: closingArrDetails,
+        columns: [
+          { key: 'employee_code', header: 'Employee Code' },
+          { key: 'employee_name', header: 'Employee Name' },
+          { key: 'pid', header: 'PID' },
+          { key: 'customer_name', header: 'Customer Name' },
+          { key: 'customer_code', header: 'Customer Code' },
+          { key: 'bu', header: 'BU' },
+          { key: 'product', header: 'Product' },
+          { key: 'order_category_2', header: 'Category' },
+          { key: 'month_year', header: 'Month/Year' },
+          { key: 'end_date', header: 'End Date' },
+          { key: 'is_multi_year', header: 'Multi-Year', getValue: (r: any) => r.is_multi_year ? 'Yes' : 'No' },
+          { key: 'renewal_years', header: 'Renewal Years' },
+          { key: 'closing_arr_usd', header: 'Closing ARR (USD)' },
+          { key: 'multiplier', header: 'Multiplier' },
+          { key: 'adjusted_arr_usd', header: 'Adjusted ARR (USD)' },
+          { key: 'is_eligible', header: 'Eligible', getValue: (r: any) => r.is_eligible ? 'Yes' : 'No' },
+          { key: 'exclusion_reason', header: 'Exclusion Reason' },
         ] as any,
       });
     }
