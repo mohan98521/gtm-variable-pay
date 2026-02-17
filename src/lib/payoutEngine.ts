@@ -131,7 +131,7 @@ async function prefetchPayoutData(
     // All closing ARR actuals for fiscal year
     supabase
       .from('closing_arr_actuals')
-      .select('id, month_year, closing_arr, end_date, is_multi_year, renewal_years, sales_rep_employee_id, sales_head_employee_id')
+      .select('id, month_year, closing_arr, end_date, is_multi_year, renewal_years, sales_rep_employee_id, sales_head_employee_id, pid, customer_name, customer_code, bu, product, order_category_2')
       .gte('month_year', fiscalYearStart)
       .lte('month_year', fullMonthYear),
 
