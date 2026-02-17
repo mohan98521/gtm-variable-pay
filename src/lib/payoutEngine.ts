@@ -2545,7 +2545,10 @@ async function persistPayoutResults(
   if (closingArrRecords.length > 0) {
     for (let i = 0; i < closingArrRecords.length; i += 100) {
       const batch = closingArrRecords.slice(i, i + 100);
-      await supabase.from('closing_arr_payout_details' as any).insert(batch);
+      const { error: capdError } = await supabase.from('closing_arr_payout_details' as any).insert(batch);
+      if (capdError) {
+        console.error('Error persisting closing_arr_payout_details batch:', capdError);
+      }
     }
   }
 }
