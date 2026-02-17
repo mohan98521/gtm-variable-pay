@@ -1,14 +1,26 @@
 
 
-## Remove "Total Projects" Card from Closing ARR Summary
+## Clean Up All Payout Run Data
 
-### Change
+### What Will Be Deleted
 
-Remove the first summary card ("Total Projects") from the Closing ARR section on the Data Inputs page. The "Eligible Projects" card already shows the total as a denominator (e.g., "14 / 20"), so the standalone total is redundant.
+1. **Payout Deal Details** -- 83 records linked to the payout run
+2. **Payout Audit Log** -- All 491 entries (run lifecycle, calculation, rate usage logs)
+3. **Payout Run** -- 1 record (Jan 2026, draft status, ID: `b162977c-...`)
+4. **Deal Variable Pay Attribution** -- Already empty (0 records)
+5. **Monthly Payouts** -- Already empty (0 records)
 
-### File: `src/components/data-inputs/ClosingARRSummary.tsx`
+### Execution Order
 
-- Delete lines 62-75 (the "Total Projects" Card block)
-- Update the grid from `lg:grid-cols-7` to `lg:grid-cols-6` since there will be one fewer card
-- Remove the unused `FileSpreadsheet` import if no longer referenced
+Data will be deleted in dependency order to avoid foreign key conflicts:
+
+1. Delete `payout_deal_details` (references payout_run_id)
+2. Delete `deal_variable_pay_attribution` (references payout_run_id) -- already empty but included for safety
+3. Delete `monthly_payouts` (references payout_run_id) -- already empty but included for safety
+4. Delete `payout_audit_log` -- all 491 entries
+5. Delete `payout_runs` -- the single Jan 2026 draft run
+
+### No Code Changes Needed
+
+This is a data-only cleanup. No files will be modified.
 
