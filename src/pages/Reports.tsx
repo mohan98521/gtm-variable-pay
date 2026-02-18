@@ -237,7 +237,7 @@ export default function Reports() {
 
   // Filtered employees
   const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
+    return employees.filter((emp) => !!emp.sales_function).filter((emp) => {
       const matchesSearch =
         emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.employee_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
