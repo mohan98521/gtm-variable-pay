@@ -39,6 +39,7 @@ export interface UnifiedAuditFilters {
   endDate?: string;
   domains?: string[];
   actions?: string[];
+  tables?: string[];
   employeeId?: string;
   changedBy?: string;
   retroactiveOnly?: boolean;
@@ -132,6 +133,10 @@ export const AUDIT_DOMAINS = [
   { value: "Data Input", label: "Data Input" },
   { value: "Access Control", label: "Access Control" },
 ];
+
+export const AUDIT_TABLES = Object.entries(TABLE_LABELS)
+  .map(([value, label]) => ({ value, label }))
+  .sort((a, b) => a.label.localeCompare(b.label));
 
 export const AUDIT_ACTION_TYPES = [
   { value: "INSERT", label: "Created (System)" },
@@ -290,6 +295,9 @@ export function useUnifiedAuditLog(filters: UnifiedAuditFilters) {
       }
       if (filters.actions && filters.actions.length > 0) {
         filtered = filtered.filter((e) => filters.actions!.includes(e.action));
+      }
+      if (filters.tables && filters.tables.length > 0) {
+        filtered = filtered.filter((e) => filters.tables!.includes(e.table_name));
       }
       if (filters.searchTerm) {
         const term = filters.searchTerm.toLowerCase();
