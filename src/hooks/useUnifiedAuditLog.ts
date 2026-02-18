@@ -56,6 +56,22 @@ const DOMAIN_MAP: Record<string, string> = {
   closing_arr_actuals: "Data Input",
   user_targets: "Configuration",
   user_roles: "Configuration",
+  support_teams: "Configuration",
+  support_team_members: "Configuration",
+  sales_functions: "Configuration",
+  roles: "Access Control",
+  role_permissions: "Access Control",
+  plan_commissions: "Configuration",
+  commission_structures: "Configuration",
+  closing_arr_renewal_multipliers: "Configuration",
+  deal_team_spiff_config: "Payouts",
+  deal_team_spiff_allocations: "Payouts",
+  fnf_settlements: "Payouts",
+  fnf_settlement_lines: "Payouts",
+  deal_participants: "Deals",
+  closing_arr_targets: "Configuration",
+  quarterly_targets: "Configuration",
+  currencies: "Configuration",
 };
 
 const TABLE_LABELS: Record<string, string> = {
@@ -68,6 +84,22 @@ const TABLE_LABELS: Record<string, string> = {
   closing_arr_actuals: "Closing ARR",
   user_targets: "Plan Assignments",
   user_roles: "User Roles",
+  support_teams: "Support Teams",
+  support_team_members: "Support Team Members",
+  sales_functions: "Sales Functions",
+  roles: "Roles",
+  role_permissions: "Role Permissions",
+  plan_commissions: "Plan Commissions",
+  commission_structures: "Commission Structures",
+  closing_arr_renewal_multipliers: "Renewal Multipliers",
+  deal_team_spiff_config: "SPIFF Config",
+  deal_team_spiff_allocations: "SPIFF Allocations",
+  fnf_settlements: "F&F Settlements",
+  fnf_settlement_lines: "F&F Settlement Lines",
+  deal_participants: "Deal Participants",
+  closing_arr_targets: "Closing ARR Targets",
+  quarterly_targets: "Quarterly Targets",
+  currencies: "Currencies",
 };
 
 export function getTableLabel(tableName: string): string {
@@ -83,6 +115,7 @@ export function getDomainColor(domain: string): string {
     case "Data Input": return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200";
     case "Adjustments": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
     case "Collections": return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200";
+    case "Access Control": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
     default: return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
   }
 }
@@ -95,6 +128,7 @@ export const AUDIT_DOMAINS = [
   { value: "Master Data", label: "Master Data" },
   { value: "Configuration", label: "Configuration" },
   { value: "Data Input", label: "Data Input" },
+  { value: "Access Control", label: "Access Control" },
 ];
 
 export const AUDIT_ACTION_TYPES = [
