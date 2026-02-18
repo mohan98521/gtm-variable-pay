@@ -72,6 +72,7 @@ const DOMAIN_MAP: Record<string, string> = {
   closing_arr_targets: "Configuration",
   quarterly_targets: "Configuration",
   currencies: "Configuration",
+  plan_spiffs: "Configuration",
 };
 
 const TABLE_LABELS: Record<string, string> = {
@@ -100,6 +101,7 @@ const TABLE_LABELS: Record<string, string> = {
   closing_arr_targets: "Closing ARR Targets",
   quarterly_targets: "Quarterly Targets",
   currencies: "Currencies",
+  plan_spiffs: "Plan SPIFFs",
 };
 
 export function getTableLabel(tableName: string): string {
@@ -132,20 +134,14 @@ export const AUDIT_DOMAINS = [
 ];
 
 export const AUDIT_ACTION_TYPES = [
-  { value: "INSERT", label: "Created" },
-  { value: "UPDATE", label: "Updated" },
-  { value: "DELETE", label: "Deleted" },
+  { value: "INSERT", label: "Created (System)" },
+  { value: "UPDATE", label: "Updated (System)" },
+  { value: "DELETE", label: "Deleted (System)" },
+  { value: "CREATE", label: "Created (Deal)" },
   { value: "created", label: "Created (Payout)" },
   { value: "updated", label: "Updated (Payout)" },
   { value: "deleted", label: "Deleted (Payout)" },
-  { value: "finalized", label: "Finalized" },
-  { value: "paid", label: "Paid" },
   { value: "status_changed", label: "Status Changed" },
-  { value: "rate_mismatch", label: "Rate Mismatch" },
-  { value: "CREATE", label: "Deal Created" },
-  { value: "adjustment_created", label: "Adjustment Created" },
-  { value: "adjustment_approved", label: "Adjustment Approved" },
-  { value: "adjustment_rejected", label: "Adjustment Rejected" },
 ];
 
 export function useUnifiedAuditLog(filters: UnifiedAuditFilters) {
