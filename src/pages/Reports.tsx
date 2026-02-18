@@ -7,7 +7,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Columns, Loader2, Receipt, BarChart3, Globe, Wallet, FileText, ClipboardList, History } from "lucide-react";
+import { Download, Search, Users, DollarSign, Columns, Loader2, Receipt, BarChart3, Wallet, FileText, ClipboardList, History } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -16,7 +16,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { PayoutStatement } from "@/components/reports/PayoutStatement";
 import { ManagementSummary } from "@/components/reports/ManagementSummary";
-import { CurrencyBreakdown } from "@/components/reports/CurrencyBreakdown";
+
 import { YearEndHoldbackTracker } from "@/components/reports/YearEndHoldbackTracker";
 import { AuditDashboard } from "@/components/audit/AuditDashboard";
 import { PayoutWorkingsReport } from "@/components/reports/PayoutWorkingsReport";
@@ -434,10 +434,6 @@ export default function Reports() {
                   <BarChart3 className="mr-2 h-4 w-4" />
                   Mgmt Summary
                 </TabsTrigger>
-                <TabsTrigger value="currency" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
-                  <Globe className="mr-2 h-4 w-4" />
-                  Currency
-                </TabsTrigger>
                 <TabsTrigger value="holdbacks" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                   <Wallet className="mr-2 h-4 w-4" />
                   Holdbacks
@@ -622,10 +618,6 @@ export default function Reports() {
             <ManagementSummary />
           </TabsContent>
 
-          {/* Tab 8: Currency Breakdown (Admin only) */}
-          <TabsContent value="currency">
-            <CurrencyBreakdown />
-          </TabsContent>
 
           {/* Tab 9: Year-End Holdback Tracker (Admin only) */}
           <TabsContent value="holdbacks">
