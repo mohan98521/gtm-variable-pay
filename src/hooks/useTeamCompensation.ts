@@ -4,6 +4,8 @@ import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { getMultiplierFromGrid, calculateAchievementPercent } from "@/lib/compensationEngine";
 import { PlanMetric } from "./usePlanMetrics";
 import { MetricCompensation, CommissionCompensation } from "./useCurrentUserCompensation";
+import { calculateNRRPayout, NRRCalculationResult } from "@/lib/nrrCalculation";
+import { calculateAllSpiffs, SpiffAggregateResult } from "@/lib/spiffCalculation";
 
 // Map employee sales_function to plan name (shared with useCurrentUserCompensation)
 const SALES_FUNCTION_TO_PLAN: Record<string, string> = {
@@ -57,6 +59,10 @@ export interface TeamMemberCompensation {
   totalCommissionYearEndHoldback: number;
   overallAchievementPct: number;
   status: "on-track" | "at-risk" | "behind";
+  nrrResult: NRRCalculationResult | null;
+  nrrOtePct: number;
+  spiffResult: SpiffAggregateResult | null;
+  clawbackAmount: number;
 }
 
 export interface TeamCompensationResult {
@@ -101,7 +107,7 @@ export function useTeamCompensation() {
       // 2. Get all active direct reports
       const { data: directReports } = await supabase
         .from("employees")
-        .select("employee_id, full_name, designation, sales_function, tvp_usd, local_currency")
+        .select("id, employee_id, full_name, designation, sales_function, tvp_usd, local_currency")
         .eq("manager_employee_id", managerEmployeeId)
         .eq("is_active", true)
         .order("full_name");
@@ -130,14 +136,14 @@ export function useTeamCompensation() {
         .in("employee_id", employeeIds)
         .eq("effective_year", selectedYear);
 
-      // Fetch all comp plans for the year
+      // Fetch all comp plans for the year (include NRR and GP margin fields)
       const { data: allPlans } = await supabase
         .from("comp_plans")
-        .select("id, name")
+        .select("id, name, nrr_ote_percent, cr_er_min_gp_margin_pct, impl_min_gp_margin_pct, nrr_payout_on_booking_pct, nrr_payout_on_collection_pct, nrr_payout_on_year_end_pct")
         .eq("effective_year", selectedYear);
 
       // Build plan lookup
-      const planByName = new Map<string, { id: string; name: string }>();
+      const planByName = new Map<string, typeof allPlans extends (infer T)[] | null ? T : never>();
       (allPlans || []).forEach(p => planByName.set(p.name, p));
 
       // Collect all plan IDs we'll need
@@ -173,12 +179,13 @@ export function useTeamCompensation() {
         }
       }
 
-      // Fetch all plan commissions for needed plans
+      // Fetch all plan commissions for needed plans (include GP margin threshold)
       let allPlanCommissions: Array<{
         plan_id: string;
         commission_type: string;
         commission_rate_pct: number;
         min_threshold_usd: number | null;
+        min_gp_margin_pct: number | null;
         payout_on_booking_pct: number | null;
         payout_on_collection_pct: number | null;
         payout_on_year_end_pct: number | null;
@@ -187,16 +194,37 @@ export function useTeamCompensation() {
       if (neededPlanIds.size > 0) {
         const { data: commissions } = await supabase
           .from("plan_commissions")
-          .select("plan_id, commission_type, commission_rate_pct, min_threshold_usd, payout_on_booking_pct, payout_on_collection_pct, payout_on_year_end_pct")
+          .select("plan_id, commission_type, commission_rate_pct, min_threshold_usd, min_gp_margin_pct, payout_on_booking_pct, payout_on_collection_pct, payout_on_year_end_pct")
           .in("plan_id", Array.from(neededPlanIds))
           .eq("is_active", true);
         allPlanCommissions = commissions || [];
       }
 
-      // Fetch all deals for the fiscal year
+      // Fetch plan spiffs for needed plans
+      let allPlanSpiffs: Array<{
+        id: string;
+        plan_id: string;
+        spiff_name: string;
+        linked_metric_name: string;
+        spiff_rate_pct: number;
+        min_deal_value_usd: number | null;
+        is_active: boolean;
+      }> = [];
+
+      if (neededPlanIds.size > 0) {
+        const { data: spiffs } = await supabase
+          .from("plan_spiffs")
+          .select("id, plan_id, spiff_name, linked_metric_name, spiff_rate_pct, min_deal_value_usd, is_active")
+          .in("plan_id", Array.from(neededPlanIds))
+          .eq("is_active", true);
+        allPlanSpiffs = spiffs || [];
+      }
+
+      // Fetch all deals for the fiscal year (include id, gp_margin, project_id, customer_name for NRR/SPIFF/GP gating)
       const { data: deals } = await supabase
         .from("deals")
         .select(`
+          id,
           month_year,
           new_software_booking_arr_usd,
           managed_services_usd,
@@ -204,6 +232,9 @@ export function useTeamCompensation() {
           cr_usd,
           er_usd,
           implementation_usd,
+          gp_margin_percent,
+          project_id,
+          customer_name,
           sales_rep_employee_id,
           sales_head_employee_id,
           sales_engineering_employee_id,
@@ -216,6 +247,25 @@ export function useTeamCompensation() {
         `)
         .gte("month_year", fiscalYearStart)
         .lte("month_year", fiscalYearEnd);
+
+      // Fetch clawback ledger for all team members
+      // clawback_ledger.employee_id references employees.id (UUID)
+      const employeeUuids = directReports.map(e => e.id).filter(Boolean);
+      const uuidToEmployeeId = new Map<string, string>();
+      directReports.forEach(e => uuidToEmployeeId.set(e.id, e.employee_id));
+
+      let allClawbacks: Array<{ employee_id: string; remaining_amount_usd: number | null }> = [];
+      if (employeeUuids.length > 0) {
+        const { data: clawbacks } = await supabase
+          .from("clawback_ledger")
+          .select("employee_id, remaining_amount_usd, status")
+          .in("employee_id", employeeUuids)
+          .in("status", ["pending", "partial"]);
+        allClawbacks = (clawbacks || []).map(c => ({
+          employee_id: uuidToEmployeeId.get(c.employee_id) || c.employee_id,
+          remaining_amount_usd: c.remaining_amount_usd,
+        }));
+      }
 
       // Fetch closing ARR actuals
       // Build OR filter for all employee IDs
@@ -271,7 +321,7 @@ export function useTeamCompensation() {
           subReportIds = (subReports || []).map(e => e.employee_id);
         }
 
-        // Aggregate deal actuals
+        // Aggregate deal actuals and collect employee-specific deals for NRR/SPIFF
         let newBookingYtd = 0;
         let managedServicesYtd = 0;
         let perpetualLicenseYtd = 0;
@@ -279,6 +329,7 @@ export function useTeamCompensation() {
         let implementationYtd = 0;
         let teamNewBookingYtd = 0;
         let orgNewBookingYtd = 0;
+        const employeeDeals: typeof deals = [];
 
         (deals || []).forEach((deal: any) => {
           const isParticipant = PARTICIPANT_ROLES.some(role => deal[role] === employeeId);
@@ -288,6 +339,7 @@ export function useTeamCompensation() {
             perpetualLicenseYtd += deal.perpetual_license_usd || 0;
             crErYtd += (deal.cr_usd || 0) + (deal.er_usd || 0);
             implementationYtd += deal.implementation_usd || 0;
+            employeeDeals.push(deal);
           }
           // Team metrics: aggregate subordinate deals
           if (hasTeamMetrics && subReportIds.length > 0) {
@@ -371,25 +423,51 @@ export function useTeamCompensation() {
         }
 
         // Commission calculations
-        const commissionActualsMap: Record<string, number> = {
-          "Managed Services": managedServicesYtd,
-          "Perpetual License": perpetualLicenseYtd,
-          "CR/ER": crErYtd,
-          "Implementation": implementationYtd,
-        };
-
+        // Commission calculations with GP margin gating
         const commissions: CommissionCompensation[] = planCommissions.map(pc => {
-          const dealValue = commissionActualsMap[pc.commission_type] || 0;
+          // For commissions with GP margin requirement, filter deals by margin
+          let eligibleDealValue = 0;
+          const commissionTypeToField: Record<string, string> = {
+            "Managed Services": "managed_services_usd",
+            "CR/ER": "_cr_er",
+            "Implementation": "implementation_usd",
+            "Perpetual License": "perpetual_license_usd",
+          };
+          const field = commissionTypeToField[pc.commission_type];
+
+          if (pc.min_gp_margin_pct && pc.min_gp_margin_pct > 0) {
+            // Filter by GP margin
+            (employeeDeals || []).forEach((deal: any) => {
+              const gpMargin = deal.gp_margin_percent;
+              if (gpMargin != null && gpMargin >= (pc.min_gp_margin_pct || 0)) {
+                if (field === "_cr_er") {
+                  eligibleDealValue += (deal.cr_usd || 0) + (deal.er_usd || 0);
+                } else if (field) {
+                  eligibleDealValue += deal[field] || 0;
+                }
+              }
+            });
+          } else {
+            // No GP margin gating, use aggregate
+            const commissionActualsMap: Record<string, number> = {
+              "Managed Services": managedServicesYtd,
+              "Perpetual License": perpetualLicenseYtd,
+              "CR/ER": crErYtd,
+              "Implementation": implementationYtd,
+            };
+            eligibleDealValue = commissionActualsMap[pc.commission_type] || 0;
+          }
+
           const rate = pc.commission_rate_pct / 100;
-          const meetsThreshold = !pc.min_threshold_usd || dealValue >= pc.min_threshold_usd;
-          const grossPayout = meetsThreshold ? dealValue * rate : 0;
+          const meetsThreshold = !pc.min_threshold_usd || eligibleDealValue >= pc.min_threshold_usd;
+          const grossPayout = meetsThreshold ? eligibleDealValue * rate : 0;
           const payoutOnBookingPct = pc.payout_on_booking_pct ?? 70;
           const payoutOnCollectionPct = pc.payout_on_collection_pct ?? 25;
           const payoutOnYearEndPct = pc.payout_on_year_end_pct ?? 5;
 
           return {
             commissionType: pc.commission_type,
-            dealValue,
+            dealValue: eligibleDealValue,
             rate: pc.commission_rate_pct,
             minThreshold: pc.min_threshold_usd,
             grossPayout,
@@ -401,6 +479,54 @@ export function useTeamCompensation() {
             payoutOnYearEndPct,
           };
         });
+
+        // NRR calculation
+        let nrrResult: NRRCalculationResult | null = null;
+        const nrrOtePct = plan?.nrr_ote_percent || 0;
+        if (plan && nrrOtePct > 0) {
+          const crErTarget = targetMap.get("CR/ER") || 0;
+          const implTarget = targetMap.get("Implementation") || 0;
+          const nrrDeals = (employeeDeals || []).map((d: any) => ({
+            id: d.id,
+            cr_usd: d.cr_usd,
+            er_usd: d.er_usd,
+            implementation_usd: d.implementation_usd,
+            gp_margin_percent: d.gp_margin_percent,
+          }));
+          nrrResult = calculateNRRPayout(
+            nrrDeals,
+            crErTarget,
+            implTarget,
+            nrrOtePct,
+            targetBonusUsd,
+            plan.cr_er_min_gp_margin_pct || 0,
+            plan.impl_min_gp_margin_pct || 0
+          );
+        }
+
+        // SPIFF calculation
+        let spiffResult: SpiffAggregateResult | null = null;
+        const empPlanSpiffs = planId ? allPlanSpiffs.filter(s => s.plan_id === planId) : [];
+        if (empPlanSpiffs.length > 0) {
+          const spiffDeals = (employeeDeals || []).map((d: any) => ({
+            id: d.id,
+            new_software_booking_arr_usd: d.new_software_booking_arr_usd,
+            project_id: d.project_id,
+            customer_name: d.customer_name,
+          }));
+          const spiffMetrics = planMetrics.map(pm => ({
+            metric_name: pm.metric_name,
+            weightage_percent: pm.weightage_percent,
+          }));
+          const targetsByMetric: Record<string, number> = {};
+          targetMap.forEach((v, k) => { targetsByMetric[k] = v; });
+          spiffResult = calculateAllSpiffs(empPlanSpiffs, spiffDeals, spiffMetrics, targetBonusUsd, targetsByMetric);
+        }
+
+        // Clawback amount
+        const clawbackAmount = allClawbacks
+          .filter(c => c.employee_id === employeeId)
+          .reduce((sum, c) => sum + (c.remaining_amount_usd || 0), 0);
 
         // Totals
         const totalEligiblePayout = metrics.reduce((s, m) => s + m.eligiblePayout, 0);
@@ -440,13 +566,19 @@ export function useTeamCompensation() {
           totalCommissionYearEndHoldback,
           overallAchievementPct,
           status: getStatus(overallAchievementPct),
+          nrrResult,
+          nrrOtePct,
+          spiffResult,
+          clawbackAmount,
         };
       }));
 
       // 5. Team aggregates
       const teamTotalTvp = members.reduce((s, m) => s + m.targetBonusUsd, 0);
-      const teamTotalEligible = members.reduce((s, m) => s + m.totalEligiblePayout + m.totalCommissionPayout, 0);
-      const teamTotalPaid = members.reduce((s, m) => s + m.totalPaid + m.totalCommissionPaid, 0);
+      const teamTotalEligible = members.reduce((s, m) => 
+        s + m.totalEligiblePayout + m.totalCommissionPayout + (m.nrrResult?.payoutUsd || 0) + (m.spiffResult?.totalSpiffUsd || 0), 0);
+      const teamTotalPaid = members.reduce((s, m) => 
+        s + m.totalPaid + m.totalCommissionPaid + (m.nrrResult?.payoutUsd || 0) + (m.spiffResult?.totalSpiffUsd || 0) - m.clawbackAmount, 0);
 
       // Weighted average achievement
       let teamWeightedAchievement = 0;
