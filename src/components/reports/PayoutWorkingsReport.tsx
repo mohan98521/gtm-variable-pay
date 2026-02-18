@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -8,13 +9,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, DollarSign, Users, TrendingUp, Calculator, Wallet } from "lucide-react";
+import { Loader2, DollarSign, Users, TrendingUp, Calculator, Wallet, Download } from "lucide-react";
 import { usePayoutRuns, PayoutRun } from "@/hooks/usePayoutRuns";
+import { usePayoutMetricDetails } from "@/hooks/usePayoutMetricDetails";
+import { usePayoutDealDetails } from "@/hooks/usePayoutDealDetails";
+import { useClosingArrPayoutDetails } from "@/hooks/useClosingArrPayoutDetails";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { PayoutRunWorkings } from "@/components/admin/PayoutRunWorkings";
+import { generateMultiSheetXLSX, downloadXLSX, SheetData } from "@/lib/xlsxExport";
 import { format } from "date-fns";
 
 const STATUS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -47,6 +52,11 @@ export function PayoutWorkingsReport() {
   const { canViewAllData, isSalesHead, roles } = useUserRole();
   const { data: payoutRuns, isLoading: runsLoading } = usePayoutRuns(selectedYear);
   const [selectedRunId, setSelectedRunId] = useState<string>("");
+
+  // Fetch detail data for export
+  const { data: metricDetails } = usePayoutMetricDetails(selectedRunId || null);
+  const { data: dealDetails } = usePayoutDealDetails(selectedRunId || null);
+  const { data: closingArrDetails } = useClosingArrPayoutDetails(selectedRunId || null);
 
   // Get current user's employee_id for filtering
   const { data: currentProfile } = useQuery({
@@ -156,6 +166,173 @@ export function PayoutWorkingsReport() {
     };
   }, [filteredPayouts, selectedRun]);
 
+  const handleExport = useCallback(() => {
+    if (!selectedRun) return;
+    const monthLabel = format(new Date(selectedRun.month_year), "MMM-yyyy");
+
+    // Sheet 1: Summary (one row per employee from metricDetails)
+    const summarySheet: SheetData = {
+      sheetName: "Summary",
+      data: (metricDetails || []).map(emp => ({
+        emp_code: emp.employeeCode,
+        emp_name: emp.employeeName,
+        doj: emp.dateOfHire || "",
+        lwd: emp.departureDate || "",
+        status: emp.isActive ? "Active" : "Inactive",
+        bu: emp.businessUnit || "",
+        plan: emp.planName || "",
+        total_variable_ote: emp.targetBonusUsd,
+        incr_eligible: emp.allDetails.reduce((s, d) => s + (d.this_month_usd || 0), 0),
+        upon_booking: emp.allDetails.reduce((s, d) => s + (d.booking_usd || 0), 0),
+        upon_collection: emp.allDetails.reduce((s, d) => s + (d.collection_usd || 0), 0),
+        at_year_end: emp.allDetails.reduce((s, d) => s + (d.year_end_usd || 0), 0),
+      })),
+      columns: [
+        { key: "emp_code", header: "Emp Code" },
+        { key: "emp_name", header: "Employee Name" },
+        { key: "doj", header: "DOJ" },
+        { key: "lwd", header: "LWD" },
+        { key: "status", header: "Status" },
+        { key: "bu", header: "BU" },
+        { key: "plan", header: "Plan" },
+        { key: "total_variable_ote", header: "Total Variable OTE" },
+        { key: "incr_eligible", header: "Incr Eligible" },
+        { key: "upon_booking", header: "Upon Booking" },
+        { key: "upon_collection", header: "Upon Collection (Held)" },
+        { key: "at_year_end", header: "At Year End (Held)" },
+      ],
+    };
+
+    // Sheet 2: Detailed Workings
+    const detailRows = (metricDetails || []).flatMap(emp =>
+      emp.allDetails.map(d => ({
+        emp_name: emp.employeeName,
+        emp_code: emp.employeeCode,
+        component_type: d.component_type,
+        metric: d.metric_name,
+        target: d.target_usd,
+        actuals: d.actual_usd,
+        achievement_pct: d.achievement_pct,
+        ote_pct: d.target_bonus_usd > 0 ? ((d.allocated_ote_usd / d.target_bonus_usd) * 100) : 0,
+        allocated_ote: d.allocated_ote_usd,
+        multiplier: d.multiplier,
+        commission_pct: d.commission_rate_pct ?? "",
+        ytd_eligible: d.ytd_eligible_usd,
+        elig_last_month: d.prior_paid_usd,
+        incr_eligible: d.this_month_usd,
+        upon_booking: d.booking_usd,
+        upon_collection: d.collection_usd,
+        at_year_end: d.year_end_usd,
+      }))
+    );
+    const detailSheet: SheetData = {
+      sheetName: "Detailed Workings",
+      data: detailRows,
+      columns: [
+        { key: "emp_name", header: "Employee" },
+        { key: "emp_code", header: "Emp Code" },
+        { key: "component_type", header: "Component Type" },
+        { key: "metric", header: "Metric" },
+        { key: "target", header: "Target" },
+        { key: "actuals", header: "Actuals" },
+        { key: "achievement_pct", header: "Ach %" },
+        { key: "ote_pct", header: "OTE %" },
+        { key: "allocated_ote", header: "Allocated OTE" },
+        { key: "multiplier", header: "Multiplier" },
+        { key: "commission_pct", header: "Commission %" },
+        { key: "ytd_eligible", header: "YTD Eligible" },
+        { key: "elig_last_month", header: "Elig Last Month" },
+        { key: "incr_eligible", header: "Incr Eligible" },
+        { key: "upon_booking", header: "Upon Booking" },
+        { key: "upon_collection", header: "Upon Collection" },
+        { key: "at_year_end", header: "At Year End" },
+      ],
+    };
+
+    // Sheet 3: Deal Workings
+    const dealSheet: SheetData = {
+      sheetName: "Deal Workings",
+      data: (dealDetails || []).map(d => ({
+        emp_name: d.employee_name,
+        emp_code: d.employee_code,
+        component: d.component_type,
+        project_id: d.project_id || "",
+        customer: d.customer_name || "",
+        commission_type: d.commission_type,
+        deal_value: d.deal_value_usd,
+        gp_margin_pct: d.gp_margin_pct ?? "",
+        min_gp_pct: d.min_gp_margin_pct ?? "",
+        eligible: d.is_eligible ? "Yes" : "No",
+        exclusion_reason: d.exclusion_reason || "",
+        rate_pct: d.commission_rate_pct,
+        gross_commission: d.gross_commission_usd,
+        upon_booking: d.booking_usd,
+        upon_collection: d.collection_usd,
+        at_year_end: d.year_end_usd,
+      })),
+      columns: [
+        { key: "emp_name", header: "Employee" },
+        { key: "emp_code", header: "Emp Code" },
+        { key: "component", header: "Component" },
+        { key: "project_id", header: "Project ID" },
+        { key: "customer", header: "Customer" },
+        { key: "commission_type", header: "Commission Type" },
+        { key: "deal_value", header: "Deal Value" },
+        { key: "gp_margin_pct", header: "GP Margin %" },
+        { key: "min_gp_pct", header: "Min GP %" },
+        { key: "eligible", header: "Eligible?" },
+        { key: "exclusion_reason", header: "Exclusion Reason" },
+        { key: "rate_pct", header: "Rate %" },
+        { key: "gross_commission", header: "Gross Commission" },
+        { key: "upon_booking", header: "Upon Booking" },
+        { key: "upon_collection", header: "Upon Collection" },
+        { key: "at_year_end", header: "At Year End" },
+      ],
+    };
+
+    // Sheet 4: Closing ARR
+    const arrSheet: SheetData = {
+      sheetName: "Closing ARR",
+      data: (closingArrDetails || []).map(d => ({
+        emp_name: d.employee_name,
+        emp_code: d.employee_code,
+        pid: d.pid,
+        customer: d.customer_name || "",
+        bu: d.bu || "",
+        product: d.product || "",
+        category: d.order_category_2 || "",
+        end_date: d.end_date || "",
+        multi_year: d.is_multi_year ? "Yes" : "No",
+        renewal_years: d.renewal_years,
+        closing_arr: d.closing_arr_usd,
+        multiplier: d.multiplier,
+        adjusted_arr: d.adjusted_arr_usd,
+        eligible: d.is_eligible ? "Yes" : "No",
+        exclusion_reason: d.exclusion_reason || "",
+      })),
+      columns: [
+        { key: "emp_name", header: "Employee" },
+        { key: "emp_code", header: "Emp Code" },
+        { key: "pid", header: "PID" },
+        { key: "customer", header: "Customer" },
+        { key: "bu", header: "BU" },
+        { key: "product", header: "Product" },
+        { key: "category", header: "Category" },
+        { key: "end_date", header: "End Date" },
+        { key: "multi_year", header: "Multi-Year?" },
+        { key: "renewal_years", header: "Renewal Years" },
+        { key: "closing_arr", header: "Closing ARR" },
+        { key: "multiplier", header: "Multiplier" },
+        { key: "adjusted_arr", header: "Adjusted ARR" },
+        { key: "eligible", header: "Eligible?" },
+        { key: "exclusion_reason", header: "Exclusion Reason" },
+      ],
+    };
+
+    const blob = generateMultiSheetXLSX([summarySheet, detailSheet, dealSheet, arrSheet]);
+    downloadXLSX(blob, `Payout-Workings-${monthLabel}-FY${selectedYear}.xlsx`);
+  }, [selectedRun, metricDetails, dealDetails, closingArrDetails, selectedYear]);
+
   // Auto-select first run
   useEffect(() => {
     if (payoutRuns && payoutRuns.length > 0 && !selectedRunId) {
@@ -210,9 +387,15 @@ export function PayoutWorkingsReport() {
               </Select>
             </div>
             {selectedRun && (
-              <Badge variant={STATUS_BADGE_VARIANT[selectedRun.run_status] || "outline"}>
-                {STATUS_LABELS[selectedRun.run_status] || selectedRun.run_status}
-              </Badge>
+              <>
+                <Badge variant={STATUS_BADGE_VARIANT[selectedRun.run_status] || "outline"}>
+                  {STATUS_LABELS[selectedRun.run_status] || selectedRun.run_status}
+                </Badge>
+                <Button variant="outline" size="sm" onClick={handleExport} className="ml-auto">
+                  <Download className="h-4 w-4 mr-1" />
+                  Export XLSX
+                </Button>
+              </>
             )}
           </div>
         </CardContent>
