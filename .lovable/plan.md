@@ -1,28 +1,18 @@
 
 
-## Add XLSX Export to Payout Workings Report
+## Hide Reports: Incentive Audit, My Deals, My Closing ARR
 
 ### What Changes
-Add an "Export" button next to the month selector and status badge in the Payout Workings Report. Clicking it will download a multi-sheet XLSX file containing all four sub-views of the selected payout run.
+Comment out (hide) three report tabs and their content panels from the Reports page so they are not visible to users. The code remains in place for future review.
 
-### Export File Structure
-The XLSX will contain 4 sheets:
+### File: `src/pages/Reports.tsx`
+1. **Remove 3 tab triggers** (lines 472-483): Hide the "Incentive Audit", "My Deals", and "My Closing ARR" TabsTrigger elements
+2. **Remove 3 tab content panels**:
+   - Incentive Audit TabsContent (lines 672-883)
+   - My Deals TabsContent (lines 885-888)
+   - My Closing ARR TabsContent (lines 890-893)
+3. **Remove filter condition**: Update the filter bar visibility check (line 521) to only show for `employees` tab (remove the `activeTab === "audit"` condition since that tab is hidden)
+4. **Clean up unused imports**: Remove `useIncentiveAuditData`, `MyDealsReport`, `MyClosingARRReport`, `Calculator`, `Briefcase`, `Database` imports and the `incentiveAuditData`/`filteredAuditData`/`exportIncentiveAudit` code that is no longer rendered
 
-1. **Summary** -- One row per employee (pivoted view): Emp Code, Emp Name, DOJ, LWD, Status, BU, Plan, Total Variable OTE, Incr Eligible, Current Month Payable, Upon Collection (Held), At Year End (Held)
-2. **Detailed Workings** -- One row per employee per metric: Employee, Emp Code, Component Type, Metric, Target, Actuals, Ach %, OTE %, Allocated OTE, Multiplier, Commission %, YTD Eligible, Elig Last Month, Incr Eligible, Upon Booking, Upon Collection, At Year End
-3. **Deal Workings** -- One row per deal per employee: Employee, Emp Code, Component, Project ID, Customer, Commission Type, Deal Value, GP Margin %, Min GP %, Eligible?, Exclusion Reason, Rate %, Gross Commission, Upon Booking, Upon Collection, At Year End
-4. **Closing ARR** -- One row per project per employee: Employee, Emp Code, PID, Customer, BU, Product, Category, End Date, Multi-Year?, Renewal Years, Closing ARR, Multiplier, Adjusted ARR, Eligible?, Exclusion Reason
+No database changes needed. Single file modified.
 
-Filename: `Payout-Workings-{MonthYear}-FY{Year}.xlsx`
-
-### Technical Changes
-
-#### `src/components/reports/PayoutWorkingsReport.tsx`
-- Import `Button`, `Download` icon, `generateMultiSheetXLSX`, `downloadXLSX` from existing utilities
-- Import hooks: `usePayoutMetricDetails`, `usePayoutDealDetails`, `useClosingArrPayoutDetails`
-- Call all three hooks with the `selectedRunId` so data is pre-fetched
-- Add a `handleExport` function that builds 4 `SheetData` objects using the fetched data and calls `generateMultiSheetXLSX` + `downloadXLSX`
-- Add an Export button in the header bar next to the status badge
-- The export respects the same role-based filtering already applied (RLS on detail tables, client-side on summary)
-
-No new files or database changes needed. Uses existing `generateMultiSheetXLSX` and `downloadXLSX` from `src/lib/xlsxExport.ts`.
