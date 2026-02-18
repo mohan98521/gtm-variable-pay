@@ -1,35 +1,29 @@
 
 
-## Fix: Management Summary "By Sales Function" showing all as "Unknown"
+## Remove Staff Users from Employee Master Data Report
 
-### Root Cause
-The `useManagementSummary` hook fetches employees and builds a lookup map keyed by `employees.employee_id` (a text field like "IN0001", "SA0002"). However, the `monthly_payouts.employee_id` column stores **UUIDs** (the `employees.id` column). Since the keys never match, every payout maps to "Unknown".
+### What Changes
+Filter out staff users (employees without a `sales_function`) from the Employee Master Data table and its Excel export.
 
-### Fix
-In `src/hooks/useManagementSummary.ts`, change the employee query to select the UUID `id` field instead of the text `employee_id` field, and use that as the map key.
+### Why
+Staff users are not part of the compensation program and should not appear in the Employee Master Data report, consistent with the staff-exclusion policy applied across other areas (payout engine, management summary, performance targets, etc.).
 
 ### Technical Details
 
-**File: `src/hooks/useManagementSummary.ts`**
+**File: `src/pages/Reports.tsx`**
 
-1. Change the employee query from:
-   ```typescript
-   .select("employee_id, sales_function")
-   ```
-   to:
-   ```typescript
-   .select("id, sales_function")
-   ```
+1. **Update the `filteredEmployees` memo** (around line 239-249): Add a filter to exclude employees where `sales_function` is null or empty, before applying search and function filters:
 
-2. Change the map population from:
-   ```typescript
-   employeeFunctionMap.set(e.employee_id, e.sales_function || "Unknown");
-   ```
-   to:
-   ```typescript
-   employeeFunctionMap.set(e.id, e.sales_function || "Unknown");
-   ```
+```typescript
+const filteredEmployees = useMemo(() => {
+  return employees
+    .filter((emp) => !!emp.sales_function) // Exclude staff users
+    .filter((emp) => {
+      const matchesSearch = ...;
+      const matchesFunction = ...;
+      return matchesSearch && matchesFunction;
+    });
+}, [employees, searchTerm, salesFunctionFilter]);
+```
 
-Additionally, the query filters by `is_active = true`, which means employees who were deactivated mid-year would also show as "Unknown". We should remove the `is_active` filter so historical payouts for former employees are correctly attributed too.
-
-No database changes needed. Single file fix.
+Single line addition. No database changes needed.
