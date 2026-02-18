@@ -64,15 +64,14 @@ export function useManagementSummary(year: number) {
       
       const { data: employees, error: empError } = await supabase
         .from("employees")
-        .select("employee_id, sales_function")
-        .eq("is_active", true)
+        .select("id, sales_function")
         .not("sales_function", "is", null);
       
       if (empError) throw empError;
       
       const employeeFunctionMap = new Map<string, string>();
       employees?.forEach(e => {
-        employeeFunctionMap.set(e.employee_id, e.sales_function || "Unknown");
+        employeeFunctionMap.set(e.id, e.sales_function || "Unknown");
       });
       
       let totalVp = 0;
