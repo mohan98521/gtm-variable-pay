@@ -4,7 +4,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Search, X } from "lucide-react";
-import { AUDIT_DOMAINS, AUDIT_ACTION_TYPES, type UnifiedAuditFilters } from "@/hooks/useUnifiedAuditLog";
+import { AUDIT_DOMAINS, AUDIT_ACTION_TYPES, AUDIT_TABLES, type UnifiedAuditFilters } from "@/hooks/useUnifiedAuditLog";
 
 interface AuditFiltersProps {
   filters: UnifiedAuditFilters;
@@ -18,6 +18,7 @@ export function AuditFilters({ filters, onFiltersChange }: AuditFiltersProps) {
   const hasActiveFilters = !!(
     filters.domains?.length ||
     filters.actions?.length ||
+    filters.tables?.length ||
     filters.searchTerm ||
     filters.retroactiveOnly ||
     filters.rateMismatchOnly
@@ -83,6 +84,17 @@ export function AuditFilters({ filters, onFiltersChange }: AuditFiltersProps) {
           ]}
           placeholder="Action"
           searchPlaceholder="Search actions..."
+          className="w-[180px]"
+        />
+        <SearchableSelect
+          value={filters.tables?.[0] || "all"}
+          onValueChange={(v) => update({ tables: v === "all" ? undefined : [v] })}
+          options={[
+            { value: "all", label: "All Tables" },
+            ...AUDIT_TABLES.map((t) => ({ value: t.value, label: t.label })),
+          ]}
+          placeholder="Table"
+          searchPlaceholder="Search tables..."
           className="w-[180px]"
         />
 
