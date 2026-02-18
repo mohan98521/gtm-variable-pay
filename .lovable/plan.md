@@ -1,70 +1,55 @@
 
 
-## Team View Dashboard -- Gap Analysis and Fix Plan
+## Add Payout Workings Report to Reports Section
 
-### Gaps Found
+### Overview
+Replicate the Payout Run validation reports (Summary, Detailed Workings, Deal Workings, Closing ARR) into the Reports section, with payout run status display and role-based data visibility.
 
-The personal Dashboard hook (`useCurrentUserCompensation`) has five capabilities that the Team View hook (`useTeamCompensation`) is completely missing:
+### How It Works
 
-| Feature | Personal Dashboard | Team View | Impact |
-|---|---|---|---|
-| NRR (Net Revenue Retention) payout | Calculated via `calculateNRRPayout()` | Missing entirely | NRR-eligible employees show $0 NRR in team view |
-| SPIFF bonuses | Calculated via `calculateAllSpiffs()` | Missing entirely | SPIFF earnings invisible to managers |
-| GP Margin gating on commissions | Uses `cr_er_min_gp_margin_pct` and `impl_min_gp_margin_pct` from comp plan + `gp_margin_percent` from deals | Not implemented | Commission payouts may be overstated (no margin check) |
-| Clawback amounts | Queries `clawback_ledger` for pending/partial entries | Missing | Managers can't see net payout after clawbacks |
-| Deal collection status | Queries `deal_collections` table | Missing | No collection visibility per team member |
+**Data Visibility by Role:**
+- **Admin / GTM Ops / Finance / Executive**: See all employees' data across all payout runs
+- **Sales Head**: See their own data plus direct reports
+- **Sales Rep**: See only their own data
+
+**Payout Run Visibility:**
+- Admin/Finance/GTM Ops roles can see runs in all statuses (Draft, Calculating, Review, Approved, Finalized, Paid)
+- Other roles can only see Finalized and Paid runs (enforced by existing database security)
+
+**Status Display:**
+- Each selected month will show a status badge (Draft, Review, Approved, Finalized, Paid) matching the current payout run status
 
 ### Changes
 
-#### 1. `src/hooks/useTeamCompensation.ts` -- Add missing calculations
+#### 1. New File: `src/components/reports/PayoutWorkingsReport.tsx`
+A self-contained report component that:
+- Fetches payout runs for the selected fiscal year
+- Provides a month selector dropdown populated from available payout runs
+- Displays a status badge for the selected run
+- Shows summary cards (Total Eligible, Variable Pay, Commissions, Payable This Month, Employee Count)
+- Embeds the existing `PayoutRunWorkings` component (Summary, Detail, Deals, Closing ARR sub-tabs)
+- Applies **client-side role filtering** on the employee summary table:
+  - Fetches the current user's profile to get their employee_id
+  - For sales reps: filters breakdown to only their own employee UUID
+  - For sales heads: fetches direct reports from employees table and filters to self + team
+  - Admin/Finance/GTM Ops/Executive: no filtering (show all)
+- The Detailed Workings, Deal Workings, and Closing ARR sub-views are automatically filtered by database security policies (each table has "own view" policies for non-admin roles)
 
-**a) Add NRR calculation:**
-- Import `calculateNRRPayout` and `NRRCalculationResult` from `@/lib/nrrCalculation`
-- Fetch `nrr_ote_percent`, `cr_er_min_gp_margin_pct`, `impl_min_gp_margin_pct` from `comp_plans` (currently only fetching `id, name`)
-- For each employee, if their plan has `nrr_ote_percent > 0`, run `calculateNRRPayout()` with their deals
-- Add `nrrResult` and `nrrOtePct` to `TeamMemberCompensation` interface
+#### 2. Modified File: `src/pages/Reports.tsx`
+- Import `PayoutWorkingsReport` component
+- Add a new "Payout Workings" tab in the **Personal Reports** section (since all roles including reps can access it with filtered data)
+- Add corresponding `TabsContent` rendering the `PayoutWorkingsReport` component
 
-**b) Add SPIFF calculation:**
-- Import `calculateAllSpiffs`, `SpiffAggregateResult`, `SpiffConfig`, `SpiffMetric` from `@/lib/spiffCalculation`
-- Batch-fetch `plan_spiffs` for all needed plan IDs
-- For each employee, run `calculateAllSpiffs()` with their deals
-- Add `spiffResult` to `TeamMemberCompensation` interface
+### Technical Details
 
-**c) Add GP margin gating for commissions:**
-- Fetch `gp_margin_percent` from deals (currently not selected)
-- Fetch `min_gp_margin_pct` from `plan_commissions` (currently not selected)
-- Apply margin check: if deal GP margin is below plan minimum, exclude from commission calculation
+**Database security already in place:**
+- `payout_metric_details` table: `pmd_own_view` policy restricts SELECT to `employee_id = auth.uid()` for non-admin roles
+- `payout_deal_details` table: `pdd_own_view` policy restricts SELECT to `employee_id = auth.uid()`
+- `closing_arr_payout_details` table: `capd_own_view` policy restricts SELECT to matching employee_id via profiles
+- `payout_runs` table: `pr_view_finalized` policy only shows finalized/paid runs to non-admin roles
+- `monthly_payouts` table: Has open SELECT (`mp_view: true`), so client-side filtering is needed for the summary breakdown
 
-**d) Add clawback amounts:**
-- Batch-fetch `clawback_ledger` entries for all team member employee UUIDs
-- Add `clawbackAmount` to `TeamMemberCompensation` interface
+**No database migrations required** -- all existing RLS policies already enforce proper data isolation. Only client-side filtering is needed for the `monthly_payouts`-based employee summary.
 
-**e) Update team aggregates:**
-- Include NRR and SPIFF amounts in `teamTotalEligible` and `teamTotalPaid`
+**Files changed: 2** (1 new, 1 modified)
 
-#### 2. `src/components/team/TeamMemberDetail.tsx` -- Show NRR and SPIFF sections
-
-- Add a third section "NRR Additional Pay" (only shown if `nrrResult` exists and has non-zero values)
-  - Display CR/ER and Implementation achievement, GP margin filter results, and NRR payout
-- Add a fourth section "SPIFF Bonuses" (only shown if `spiffResult` exists with qualifying deals)
-  - Show qualifying deal count, total SPIFF earned
-- Add clawback row to the totals if `clawbackAmount > 0`
-
-#### 3. `src/components/team/TeamPerformanceTable.tsx` -- Include NRR/SPIFF in totals
-
-- Update `totalEligible` and `totalPaid` calculations to include NRR and SPIFF amounts
-- Pass `nrrResult`, `spiffResult`, and `clawbackAmount` to `TeamMemberDetail`
-
-#### 4. `src/components/team/TeamSummaryCards.tsx` -- No structural changes needed
-
-The existing cards already show aggregated totals which will automatically reflect the corrected values from the hook.
-
-#### 5. `src/pages/TeamView.tsx` -- Add NRR/SPIFF columns to CSV export
-
-- Add columns for NRR Payout, SPIFF Earned, and Clawback to the export
-
-### Summary
-
-- 4 files modified: `useTeamCompensation.ts`, `TeamMemberDetail.tsx`, `TeamPerformanceTable.tsx`, `TeamView.tsx`
-- No database changes needed
-- Brings Team View to full parity with the Personal Dashboard calculation engine
