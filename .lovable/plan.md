@@ -1,14 +1,35 @@
 
 
-## Hide Currency Breakdown Report
+## Fix: Management Summary "By Sales Function" showing all as "Unknown"
 
-### What Changes
-Remove the Currency Breakdown tab and its content from the Reports page. The component file remains untouched for future use.
+### Root Cause
+The `useManagementSummary` hook fetches employees and builds a lookup map keyed by `employees.employee_id` (a text field like "IN0001", "SA0002"). However, the `monthly_payouts.employee_id` column stores **UUIDs** (the `employees.id` column). Since the keys never match, every payout maps to "Unknown".
 
-### File: `src/pages/Reports.tsx`
+### Fix
+In `src/hooks/useManagementSummary.ts`, change the employee query to select the UUID `id` field instead of the text `employee_id` field, and use that as the map key.
 
-1. **Remove the TabsTrigger** (around line 437-440): Delete the "Currency" tab trigger with the Globe icon
-2. **Remove the TabsContent** (lines 625-628): Delete the `<TabsContent value="currency">` block containing `<CurrencyBreakdown />`
-3. **Clean up unused imports**: Remove `CurrencyBreakdown` import (line 19) and `Globe` icon import if not used elsewhere
+### Technical Details
 
-Single file change. No database modifications needed.
+**File: `src/hooks/useManagementSummary.ts`**
+
+1. Change the employee query from:
+   ```typescript
+   .select("employee_id, sales_function")
+   ```
+   to:
+   ```typescript
+   .select("id, sales_function")
+   ```
+
+2. Change the map population from:
+   ```typescript
+   employeeFunctionMap.set(e.employee_id, e.sales_function || "Unknown");
+   ```
+   to:
+   ```typescript
+   employeeFunctionMap.set(e.id, e.sales_function || "Unknown");
+   ```
+
+Additionally, the query filters by `is_active = true`, which means employees who were deactivated mid-year would also show as "Unknown". We should remove the `is_active` filter so historical payouts for former employees are correctly attributed too.
+
+No database changes needed. Single file fix.
