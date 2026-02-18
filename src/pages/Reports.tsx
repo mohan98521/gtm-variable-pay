@@ -7,7 +7,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Columns, Loader2, Receipt, BarChart3, Globe, Wallet, FileText, ClipboardList } from "lucide-react";
+import { Download, Search, Users, DollarSign, Columns, Loader2, Receipt, BarChart3, Globe, Wallet, FileText, ClipboardList, History } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -20,6 +20,7 @@ import { CurrencyBreakdown } from "@/components/reports/CurrencyBreakdown";
 import { YearEndHoldbackTracker } from "@/components/reports/YearEndHoldbackTracker";
 import { AuditDashboard } from "@/components/audit/AuditDashboard";
 import { PayoutWorkingsReport } from "@/components/reports/PayoutWorkingsReport";
+import { PayoutHistoryReport } from "@/components/reports/PayoutHistoryReport";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useSalesFunctions } from "@/hooks/useSalesFunctions";
 
@@ -417,6 +418,10 @@ export default function Reports() {
                 <ClipboardList className="mr-2 h-4 w-4" />
                 Payout Workings
               </TabsTrigger>
+              <TabsTrigger value="payout-history" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
+                <History className="mr-2 h-4 w-4" />
+                Payout History
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -605,6 +610,11 @@ export default function Reports() {
           {/* Tab 7: Payout Workings */}
           <TabsContent value="payout-workings">
             <PayoutWorkingsReport />
+          </TabsContent>
+
+          {/* Tab 8: Payout History */}
+          <TabsContent value="payout-history">
+            <PayoutHistoryReport />
           </TabsContent>
 
           {/* Tab 7: Management Summary (Admin only) */}
