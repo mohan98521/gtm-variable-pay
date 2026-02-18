@@ -1,33 +1,24 @@
 
-## Update Audit Trail Filters to Cover All Options
+
+## Add Table Filter to Audit Trail
 
 ### Problem
-The Audit Trail filters have two issues:
-1. **Actions dropdown** contains 13 entries, but only 8 actually exist in the database. Many listed actions (like "Finalized", "Paid", "Adjustment Created/Approved/Rejected") never appear in real data, cluttering the filter.
-2. **Missing table mapping**: `plan_spiffs` appears in `system_audit_log` data but is not mapped in `DOMAIN_MAP` or `TABLE_LABELS`, so it would show as "System" domain with a raw table name.
-
-### Actual actions in the database
-- `INSERT`, `UPDATE`, `DELETE` (system_audit_log)
-- `CREATE` (deal_audit_log)
-- `created`, `updated`, `deleted`, `status_changed` (payout_audit_log)
+The Audit Trail filters currently have Domain and Action dropdowns but no way to filter by specific table (e.g., "Employees", "Comp Plans", "Deals").
 
 ### Changes
 
-**File: `src/hooks/useUnifiedAuditLog.ts`**
+#### 1. `src/hooks/useUnifiedAuditLog.ts`
+- Add `tables?: string[]` to the `UnifiedAuditFilters` interface
+- Export a new `AUDIT_TABLES` constant built from the existing `TABLE_LABELS` map, sorted alphabetically by label (e.g., `{ value: "comp_plans", label: "Comp Plans" }`)
+- Add client-side filtering for the `tables` filter (same pattern as domains/actions filtering)
 
-1. **Clean up `AUDIT_ACTION_TYPES`** -- remove entries that don't exist in the database (`finalized`, `paid`, `rate_mismatch`, `adjustment_created`, `adjustment_approved`, `adjustment_rejected`) and consolidate labels for clarity:
-   - `INSERT` -> "Created (System)"
-   - `UPDATE` -> "Updated (System)"
-   - `DELETE` -> "Deleted (System)"
-   - `CREATE` -> "Created (Deal)"
-   - `created` -> "Created (Payout)"
-   - `updated` -> "Updated (Payout)"
-   - `deleted` -> "Deleted (Payout)"
-   - `status_changed` -> "Status Changed"
+#### 2. `src/components/audit/AuditFilters.tsx`
+- Add a third `SearchableSelect` dropdown between the Action filter and the toggle switches
+- Options: "All Tables" + entries from the new `AUDIT_TABLES` constant
+- Bound to `filters.tables` using the same pattern as the domain/action filters
+- Width: ~180px to match the other dropdowns
+- Include `tables` in the `hasActiveFilters` check and `clearFilters` reset
 
-2. **Add `plan_spiffs`** to `DOMAIN_MAP` (mapped to "Configuration") and `TABLE_LABELS` (labeled "Plan SPIFFs").
+### Summary
+Two files edited. No database changes needed. The new Table filter will let users drill down to specific tables like "Employees", "Deals", "F&F Settlements", etc.
 
-### Technical Details
-- Only `src/hooks/useUnifiedAuditLog.ts` needs editing
-- Two constants updated: `AUDIT_ACTION_TYPES` (trimmed from 13 to 8 real entries) and `DOMAIN_MAP`/`TABLE_LABELS` (add `plan_spiffs`)
-- No database changes required
