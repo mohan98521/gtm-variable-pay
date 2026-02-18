@@ -9,7 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, DollarSign, Users, TrendingUp, Calculator, Wallet, Download } from "lucide-react";
+import { Loader2, DollarSign, Users, TrendingUp, Calculator, Wallet, Download, Award, BarChart3 } from "lucide-react";
+import { isVpType, isCommissionType } from "@/lib/payoutTypes";
 import { usePayoutRuns, PayoutRun } from "@/hooks/usePayoutRuns";
 import { usePayoutMetricDetails } from "@/hooks/usePayoutMetricDetails";
 import { usePayoutDealDetails } from "@/hooks/usePayoutDealDetails";
@@ -142,8 +143,10 @@ export function PayoutWorkingsReport() {
     if (!filteredPayouts.length) {
       return {
         totalEligible: selectedRun?.total_payout_usd || 0,
-        totalVariablePay: selectedRun?.total_variable_pay_usd || 0,
-        totalCommissions: selectedRun?.total_commissions_usd || 0,
+        totalVariablePay: 0,
+        totalCommissions: 0,
+        totalNrr: 0,
+        totalSpiffs: 0,
         totalClawbacks: selectedRun?.total_clawbacks_usd || 0,
         employeeCount: 0,
       };
@@ -151,16 +154,26 @@ export function PayoutWorkingsReport() {
 
     const uniqueEmployees = new Set(filteredPayouts.map(p => p.employee_id));
     const totalEligible = filteredPayouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
-    const vpPayouts = filteredPayouts.filter(p => p.payout_type === "variable_pay");
-    const commPayouts = filteredPayouts.filter(p => p.payout_type === "commission");
-    const totalVariablePay = vpPayouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
-    const totalCommissions = commPayouts.reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
+    const totalVariablePay = filteredPayouts
+      .filter(p => isVpType(p.payout_type))
+      .reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
+    const totalCommissions = filteredPayouts
+      .filter(p => isCommissionType(p.payout_type))
+      .reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
+    const totalNrr = filteredPayouts
+      .filter(p => p.payout_type === 'NRR Additional Pay')
+      .reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
+    const totalSpiffs = filteredPayouts
+      .filter(p => p.payout_type === 'SPIFF' || p.payout_type === 'Deal Team SPIFF')
+      .reduce((s, p) => s + (p.calculated_amount_usd || 0), 0);
     const totalClawbacks = filteredPayouts.reduce((s, p) => s + Math.abs(p.clawback_amount_usd || 0), 0);
 
     return {
       totalEligible,
       totalVariablePay,
       totalCommissions,
+      totalNrr,
+      totalSpiffs,
       totalClawbacks,
       employeeCount: uniqueEmployees.size,
     };
@@ -403,7 +416,7 @@ export function PayoutWorkingsReport() {
 
       {/* Summary cards */}
       {selectedRunId && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <Card>
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center gap-2 mb-1">
@@ -429,6 +442,24 @@ export function PayoutWorkingsReport() {
                 <span className="text-xs text-muted-foreground">Commissions</span>
               </div>
               <p className="text-lg font-bold">{formatCurrency(summaryStats.totalCommissions)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">NRR</span>
+              </div>
+              <p className="text-lg font-bold">{formatCurrency(summaryStats.totalNrr)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Award className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">SPIFFs</span>
+              </div>
+              <p className="text-lg font-bold">{formatCurrency(summaryStats.totalSpiffs)}</p>
             </CardContent>
           </Card>
           <Card>
