@@ -7,16 +7,13 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database, Receipt, BarChart3, Globe, Wallet, FileText, ClipboardList } from "lucide-react";
+import { Download, Search, Users, DollarSign, Columns, Loader2, Receipt, BarChart3, Globe, Wallet, FileText, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { calculateProRation, getEffectiveDates } from "@/lib/compensation";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { useIncentiveAuditData } from "@/hooks/useIncentiveAuditData";
 import { useFiscalYear } from "@/contexts/FiscalYearContext";
-import { MyDealsReport } from "@/components/reports/MyDealsReport";
-import { MyClosingARRReport } from "@/components/reports/MyClosingARRReport";
 import { PayoutStatement } from "@/components/reports/PayoutStatement";
 import { ManagementSummary } from "@/components/reports/ManagementSummary";
 import { CurrencyBreakdown } from "@/components/reports/CurrencyBreakdown";
@@ -227,8 +224,6 @@ export default function Reports() {
     },
   });
 
-  // Use the database-driven incentive audit hook
-  const { data: incentiveAuditData = [], isLoading: auditLoading } = useIncentiveAuditData(selectedYear);
 
   // Create manager lookup map
   const managerNameMap = useMemo(() => {
@@ -285,15 +280,6 @@ export default function Reports() {
     }).filter(Boolean);
   }, [userTargets, selectedYear]);
 
-  // Filter incentive audit data (now using the database-driven hook)
-  const filteredAuditData = useMemo(() => {
-    return incentiveAuditData.filter((item) => {
-      const matchesSearch = item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFunction = salesFunctionFilter === "All" || item.salesFunction === salesFunctionFilter;
-      return matchesSearch && matchesFunction;
-    });
-  }, [incentiveAuditData, searchTerm, salesFunctionFilter]);
 
   // Toggle column visibility
   const toggleColumn = (key: string) => {
@@ -401,52 +387,6 @@ export default function Reports() {
     exportToCSV(data, "compensation_snapshot", ["name", "sales_function", "ote_usd", "ote_local", "target_bonus_usd", "pro_ration_factor"]);
   };
 
-  const exportIncentiveAudit = () => {
-    const exportData: any[] = [];
-    filteredAuditData.forEach((row) => {
-      // Export variable pay metrics
-      row.metrics.forEach((metric) => {
-        exportData.push({
-          employee_name: row.employeeName,
-          plan_name: row.planName,
-          sales_function: row.salesFunction || "",
-          type: "Variable Pay",
-          metric_name: metric.metricName,
-          target: metric.target,
-          actual: metric.actual,
-          achievement_pct: metric.achievementPct.toFixed(1) + "%",
-          logic_type: metric.logicType,
-          multiplier: metric.multiplier.toFixed(2),
-          allocation: metric.allocation.toFixed(2),
-          payout: metric.payout.toFixed(2),
-          holdback: "-",
-        });
-      });
-      // Export commissions (with three-way split: booking, collection, year-end)
-      (row.commissions || []).forEach((comm) => {
-        exportData.push({
-          employee_name: row.employeeName,
-          plan_name: row.planName,
-          sales_function: row.salesFunction || "",
-          type: "Commission",
-          metric_name: comm.commissionType,
-          target: "-",
-          actual: comm.dealValue.toFixed(2),
-          achievement_pct: "-",
-          logic_type: "-",
-          multiplier: (comm.rate / 100).toFixed(4),
-          allocation: "-",
-          payout: comm.immediatePayout.toFixed(2),
-          holdback: comm.holdback.toFixed(2),
-          year_end_holdback: comm.yearEndHoldback.toFixed(2),
-        });
-      });
-    });
-    exportToCSV(exportData, "incentive_audit", [
-      "employee_name", "plan_name", "sales_function", "type", "metric_name", "target", 
-      "actual", "achievement_pct", "logic_type", "multiplier", "allocation", "payout", "holdback", "year_end_holdback"
-    ]);
-  };
 
   return (
     <AppLayout>
@@ -468,18 +408,6 @@ export default function Reports() {
               <TabsTrigger value="compensation" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <DollarSign className="mr-2 h-4 w-4" />
                 Compensation
-              </TabsTrigger>
-              <TabsTrigger value="audit" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
-                <Calculator className="mr-2 h-4 w-4" />
-                Incentive Audit
-              </TabsTrigger>
-              <TabsTrigger value="my-deals" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
-                <Briefcase className="mr-2 h-4 w-4" />
-                My Deals
-              </TabsTrigger>
-              <TabsTrigger value="my-closing-arr" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
-                <Database className="mr-2 h-4 w-4" />
-                My Closing ARR
               </TabsTrigger>
               <TabsTrigger value="payout-statement" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
                 <Receipt className="mr-2 h-4 w-4" />
@@ -518,7 +446,7 @@ export default function Reports() {
           )}
 
           {/* Filters - Only show for Employee Master and Incentive Audit tabs */}
-          {(activeTab === "employees" || activeTab === "audit") && (
+          {activeTab === "employees" && (
           <Card>
             <CardContent className="pt-4">
               <div className="flex flex-wrap gap-4">
@@ -668,229 +596,6 @@ export default function Reports() {
             </Card>
           </TabsContent>
 
-          {/* Tab 3: Incentive Audit - Now Database-Driven with Commission */}
-          <TabsContent value="audit">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Incentive Audit</CardTitle>
-                  <CardDescription>
-                    Variable Pay: (Actual / Target) × Multiplier × Allocation = Payout | Commission: Deal Value × Rate (Paid / Holdback)
-                  </CardDescription>
-                </div>
-                <Button onClick={exportIncentiveAudit} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                  <Download className="mr-2 h-4 w-4" />
-                  Export CSV
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {auditLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  </div>
-                ) : (
-                  <>
-                    {/* Variable Pay Section */}
-                    <div>
-                      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                        <Calculator className="h-5 w-5 text-accent" />
-                        Variable Pay
-                      </h3>
-                      <ScrollArea className="w-full whitespace-nowrap">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/50">
-                              <TableHead className="font-semibold">Name</TableHead>
-                              <TableHead className="font-semibold">Plan</TableHead>
-                              <TableHead className="font-semibold">Metric</TableHead>
-                              <TableHead className="font-semibold text-right">Target</TableHead>
-                              <TableHead className="font-semibold text-right">Actual</TableHead>
-                              <TableHead className="font-semibold text-right">Achievement</TableHead>
-                              <TableHead className="font-semibold text-right">Multiplier</TableHead>
-                              <TableHead className="font-semibold text-right">Allocation</TableHead>
-                              <TableHead className="font-semibold text-right">Payout</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredAuditData.flatMap((row) => 
-                              row.metrics.map((metric, idx) => (
-                                <TableRow key={`${row.employeeId}-${metric.metricName}`} className="data-row">
-                                  {idx === 0 ? (
-                                    <TableCell className="font-medium" rowSpan={row.metrics.length}>
-                                      {row.employeeName}
-                                    </TableCell>
-                                  ) : null}
-                                  {idx === 0 ? (
-                                    <TableCell rowSpan={row.metrics.length}>{row.planName}</TableCell>
-                                  ) : null}
-                                  <TableCell>
-                                    {metric.metricName}
-                                    {metric.isGated && (
-                                      <span className="ml-1 text-xs text-warning">(Gate: {metric.gateThreshold}%)</span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-right">${metric.target.toLocaleString()}</TableCell>
-                                  <TableCell className="text-right">${metric.actual.toLocaleString()}</TableCell>
-                                  <TableCell className="text-right">
-                                    <span className={
-                                      metric.achievementPct >= 100 ? "text-success" : 
-                                      metric.achievementPct >= 85 ? "text-warning" : "text-destructive"
-                                    }>
-                                      {metric.achievementPct.toFixed(1)}%
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="text-right">{metric.multiplier.toFixed(2)}x</TableCell>
-                                  <TableCell className="text-right">${metric.allocation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                  <TableCell className="text-right font-semibold text-accent">
-                                    ${metric.payout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                            {/* Total row per employee */}
-                            {filteredAuditData.map((row) => (
-                              <TableRow key={`${row.employeeId}-vp-total`} className="bg-muted/50 font-semibold">
-                                <TableCell colSpan={8} className="text-right">
-                                  Variable Pay Total for {row.employeeName}:
-                                </TableCell>
-                                <TableCell className="text-right text-accent">
-                                  ${row.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        <ScrollBar orientation="horizontal" />
-                      </ScrollArea>
-                    </div>
-
-                    {/* Commission Section */}
-                    <div>
-                      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                        <Percent className="h-5 w-5 text-accent" />
-                        Commission Payouts
-                      </h3>
-                      <ScrollArea className="w-full whitespace-nowrap">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/50">
-                              <TableHead className="font-semibold">Name</TableHead>
-                              <TableHead className="font-semibold">Plan</TableHead>
-                              <TableHead className="font-semibold">Commission Type</TableHead>
-                              <TableHead className="font-semibold text-right">Deal Value</TableHead>
-                              <TableHead className="font-semibold text-right">Rate</TableHead>
-                              <TableHead className="font-semibold text-right">Gross</TableHead>
-                              <TableHead className="font-semibold text-right">Paid</TableHead>
-                              <TableHead className="font-semibold text-right">Holdback</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredAuditData.filter(row => (row.commissions || []).length > 0).flatMap((row) => 
-                              (row.commissions || []).map((comm, idx) => (
-                                <TableRow key={`${row.employeeId}-comm-${comm.commissionType}`} className="data-row">
-                                  {idx === 0 ? (
-                                    <TableCell className="font-medium" rowSpan={row.commissions.length}>
-                                      {row.employeeName}
-                                    </TableCell>
-                                  ) : null}
-                                  {idx === 0 ? (
-                                    <TableCell rowSpan={row.commissions.length}>{row.planName}</TableCell>
-                                  ) : null}
-                                  <TableCell>{comm.commissionType}</TableCell>
-                                  <TableCell className="text-right">${comm.dealValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                  <TableCell className="text-right">{comm.rate}%</TableCell>
-                                  <TableCell className="text-right">${comm.grossCommission.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                                  <TableCell className="text-right font-semibold text-accent">
-                                    ${comm.immediatePayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                  </TableCell>
-                                  <TableCell className="text-right text-warning">
-                                    ${comm.holdback.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                            {/* Commission totals per employee */}
-                            {filteredAuditData.filter(row => (row.commissions || []).length > 0).map((row) => (
-                              <TableRow key={`${row.employeeId}-comm-total`} className="bg-muted/50 font-semibold">
-                                <TableCell colSpan={5} className="text-right">
-                                  Commission Total for {row.employeeName}:
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  ${(row.totalCommissionGross || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </TableCell>
-                                <TableCell className="text-right text-accent">
-                                  ${(row.totalCommissionPaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </TableCell>
-                                <TableCell className="text-right text-warning">
-                                  ${(row.totalCommissionHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        <ScrollBar orientation="horizontal" />
-                      </ScrollArea>
-                      {filteredAuditData.filter(row => (row.commissions || []).length > 0).length === 0 && (
-                        <p className="text-center text-muted-foreground py-4">No commission data found</p>
-                      )}
-                    </div>
-
-                    {/* Grand Total Section */}
-                    <div className="border-t pt-4">
-                      <h3 className="text-lg font-semibold mb-3">Grand Total by Employee</h3>
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="font-semibold">Name</TableHead>
-                            <TableHead className="font-semibold text-right">Variable Pay</TableHead>
-                            <TableHead className="font-semibold text-right">Commission (Paid)</TableHead>
-                            <TableHead className="font-semibold text-right">Commission (Holdback)</TableHead>
-                            <TableHead className="font-semibold text-right">Year-End Holdback</TableHead>
-                            <TableHead className="font-semibold text-right">Total Payout</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredAuditData.map((row) => (
-                            <TableRow key={`${row.employeeId}-grand`} className="data-row">
-                              <TableCell className="font-medium">{row.employeeName}</TableCell>
-                              <TableCell className="text-right">
-                                ${row.totalPayout.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                ${(row.totalCommissionPaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </TableCell>
-                              <TableCell className="text-right text-warning">
-                                ${(row.totalCommissionHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">
-                                ${(row.totalCommissionYearEndHoldback || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </TableCell>
-                              <TableCell className="text-right font-bold text-accent">
-                                ${(row.totalPayout + (row.totalCommissionPaid || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </>
-                )}
-                {!auditLoading && filteredAuditData.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">No incentive data found</p>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab 4: My Deals */}
-          <TabsContent value="my-deals">
-            <MyDealsReport />
-          </TabsContent>
-
-          {/* Tab 5: My Closing ARR */}
-          <TabsContent value="my-closing-arr">
-            <MyClosingARRReport />
-          </TabsContent>
 
           {/* Tab 6: Payout Statement */}
           <TabsContent value="payout-statement">
