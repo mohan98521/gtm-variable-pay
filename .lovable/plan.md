@@ -1,18 +1,38 @@
 
 
-## Hide Reports: Incentive Audit, My Deals, My Closing ARR
+## Fix Summary Cards: Split by Correct Payout Categories
 
-### What Changes
-Comment out (hide) three report tabs and their content panels from the Reports page so they are not visible to users. The code remains in place for future review.
+### Problem
+The summary cards show $236,147 for "Total Eligible" but $0 for Variable Pay, Commissions, and Clawbacks. This happens because the code filters `payout_type === "variable_pay"` and `payout_type === "commission"`, but the actual database values are `"Variable Pay"`, `"Perpetual License"`, `"Managed Services"`, `"NRR Additional Pay"`, `"SPIFF"`, and `"Collection Release"`.
 
-### File: `src/pages/Reports.tsx`
-1. **Remove 3 tab triggers** (lines 472-483): Hide the "Incentive Audit", "My Deals", and "My Closing ARR" TabsTrigger elements
-2. **Remove 3 tab content panels**:
-   - Incentive Audit TabsContent (lines 672-883)
-   - My Deals TabsContent (lines 885-888)
-   - My Closing ARR TabsContent (lines 890-893)
-3. **Remove filter condition**: Update the filter bar visibility check (line 521) to only show for `employees` tab (remove the `activeTab === "audit"` condition since that tab is hidden)
-4. **Clean up unused imports**: Remove `useIncentiveAuditData`, `MyDealsReport`, `MyClosingARRReport`, `Calculator`, `Briefcase`, `Database` imports and the `incentiveAuditData`/`filteredAuditData`/`exportIncentiveAudit` code that is no longer rendered
+### Solution
+Fix the summary calculation logic and add two new cards (NRR and SPIFFs) for a total of 7 summary cards.
 
-No database changes needed. Single file modified.
+### Changes to `src/components/reports/PayoutWorkingsReport.tsx`
+
+**1. Fix the `summaryStats` calculation (lines 141-167)**
+
+Categorize payout types correctly using actual database values:
+- **Variable Pay**: `payout_type === "Variable Pay"`
+- **Commissions**: `payout_type` in `["Perpetual License", "Managed Services"]` (and any other commission-type values)
+- **NRR**: `payout_type === "NRR Additional Pay"`
+- **SPIFFs**: `payout_type === "SPIFF"`
+- **Clawbacks**: Sum of `clawback_amount_usd` across all rows
+- **Total Eligible**: Sum of all `calculated_amount_usd`
+
+**2. Add NRR and SPIFFs cards to the grid (lines 406-452)**
+
+Update from 5 cards to 7 cards:
+1. Total Eligible (all payout types summed)
+2. Variable Pay
+3. Commissions
+4. NRR
+5. SPIFFs
+6. Clawbacks
+7. Employees
+
+Update grid from `md:grid-cols-5` to `md:grid-cols-7` (or use a responsive wrap layout).
+
+### No database changes needed
+The fix is purely in the frontend calculation logic -- the data is already correct in the database, it just wasn't being categorized properly.
 
