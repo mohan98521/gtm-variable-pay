@@ -27,6 +27,9 @@ export default function TeamView() {
       { key: "totalYearEndHoldback", header: "VP Year-End", getValue: (r) => r.totalYearEndHoldback.toFixed(2) },
       { key: "totalCommissionPayout", header: "Commission Gross", getValue: (r) => r.totalCommissionPayout.toFixed(2) },
       { key: "totalCommissionPaid", header: "Commission Paid", getValue: (r) => r.totalCommissionPaid.toFixed(2) },
+      { key: "nrrPayout", header: "NRR Payout", getValue: (r) => (r.nrrResult?.payoutUsd || 0).toFixed(2) },
+      { key: "spiffEarned", header: "SPIFF Earned", getValue: (r) => (r.spiffResult?.totalSpiffUsd || 0).toFixed(2) },
+      { key: "clawback", header: "Clawback", getValue: (r) => r.clawbackAmount.toFixed(2) },
       { key: "status", header: "Status" },
     ]);
 

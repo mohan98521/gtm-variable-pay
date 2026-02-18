@@ -82,8 +82,8 @@ export function TeamPerformanceTable({ members }: TeamPerformanceTableProps) {
               ) : (
                 members.map((member) => {
                   const isExpanded = expandedRows.has(member.employeeId);
-                  const totalEligible = member.totalEligiblePayout + member.totalCommissionPayout;
-                  const totalPaid = member.totalPaid + member.totalCommissionPaid;
+                  const totalEligible = member.totalEligiblePayout + member.totalCommissionPayout + (member.nrrResult?.payoutUsd || 0) + (member.spiffResult?.totalSpiffUsd || 0);
+                  const totalPaid = member.totalPaid + member.totalCommissionPaid + (member.nrrResult?.payoutUsd || 0) + (member.spiffResult?.totalSpiffUsd || 0) - member.clawbackAmount;
                   const totalHoldback = member.totalHoldback + member.totalCommissionHoldback +
                     member.totalYearEndHoldback + member.totalCommissionYearEndHoldback;
 
@@ -162,6 +162,10 @@ export function TeamPerformanceTable({ members }: TeamPerformanceTableProps) {
                                   totalCommissionPaid={member.totalCommissionPaid}
                                   totalCommissionHoldback={member.totalCommissionHoldback}
                                   totalCommissionYearEndHoldback={member.totalCommissionYearEndHoldback}
+                                  nrrResult={member.nrrResult}
+                                  nrrOtePct={member.nrrOtePct}
+                                  spiffResult={member.spiffResult}
+                                  clawbackAmount={member.clawbackAmount}
                                 />
                               </div>
                             </td>
