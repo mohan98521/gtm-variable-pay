@@ -7,7 +7,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database, Receipt, BarChart3, Globe, Wallet, FileText } from "lucide-react";
+import { Download, Search, Users, DollarSign, Calculator, Columns, Loader2, Percent, Briefcase, Database, Receipt, BarChart3, Globe, Wallet, FileText, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -22,6 +22,7 @@ import { ManagementSummary } from "@/components/reports/ManagementSummary";
 import { CurrencyBreakdown } from "@/components/reports/CurrencyBreakdown";
 import { YearEndHoldbackTracker } from "@/components/reports/YearEndHoldbackTracker";
 import { AuditDashboard } from "@/components/audit/AuditDashboard";
+import { PayoutWorkingsReport } from "@/components/reports/PayoutWorkingsReport";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useSalesFunctions } from "@/hooks/useSalesFunctions";
 
@@ -484,6 +485,10 @@ export default function Reports() {
                 <Receipt className="mr-2 h-4 w-4" />
                 Payout Statement
               </TabsTrigger>
+              <TabsTrigger value="payout-workings" className="data-[state=active]:bg-[hsl(var(--qota-teal))] data-[state=active]:text-white">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Payout Workings
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -890,6 +895,11 @@ export default function Reports() {
           {/* Tab 6: Payout Statement */}
           <TabsContent value="payout-statement">
             <PayoutStatement />
+          </TabsContent>
+
+          {/* Tab 7: Payout Workings */}
+          <TabsContent value="payout-workings">
+            <PayoutWorkingsReport />
           </TabsContent>
 
           {/* Tab 7: Management Summary (Admin only) */}
