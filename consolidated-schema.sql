@@ -18,7 +18,7 @@ END $$;
 -- ============================================================
 
 -- profiles
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   full_name TEXT NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE public.profiles (
 );
 
 -- employees
-CREATE TABLE public.employees (
+CREATE TABLE IF NOT EXISTS public.employees (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id TEXT UNIQUE NOT NULL,
   email TEXT UNIQUE NOT NULL,
@@ -76,7 +76,7 @@ CREATE TABLE public.employees (
 );
 
 -- roles
-CREATE TABLE public.roles (
+CREATE TABLE IF NOT EXISTS public.roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   label TEXT NOT NULL,
@@ -87,7 +87,7 @@ CREATE TABLE public.roles (
 );
 
 -- user_roles
-CREATE TABLE public.user_roles (
+CREATE TABLE IF NOT EXISTS public.user_roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   role TEXT NOT NULL,
@@ -96,7 +96,7 @@ CREATE TABLE public.user_roles (
 );
 
 -- role_permissions
-CREATE TABLE public.role_permissions (
+CREATE TABLE IF NOT EXISTS public.role_permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   role TEXT NOT NULL,
   permission_key TEXT NOT NULL,
@@ -107,7 +107,7 @@ CREATE TABLE public.role_permissions (
 );
 
 -- comp_plans
-CREATE TABLE public.comp_plans (
+CREATE TABLE IF NOT EXISTS public.comp_plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
@@ -128,7 +128,7 @@ CREATE TABLE public.comp_plans (
 );
 
 -- plan_metrics
-CREATE TABLE public.plan_metrics (
+CREATE TABLE IF NOT EXISTS public.plan_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   plan_id UUID NOT NULL REFERENCES public.comp_plans(id) ON DELETE CASCADE,
   metric_name TEXT NOT NULL,
@@ -142,7 +142,7 @@ CREATE TABLE public.plan_metrics (
 );
 
 -- multiplier_grids
-CREATE TABLE public.multiplier_grids (
+CREATE TABLE IF NOT EXISTS public.multiplier_grids (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   plan_metric_id UUID NOT NULL REFERENCES public.plan_metrics(id) ON DELETE CASCADE,
   min_pct NUMERIC NOT NULL,
@@ -152,7 +152,7 @@ CREATE TABLE public.multiplier_grids (
 );
 
 -- plan_commissions
-CREATE TABLE public.plan_commissions (
+CREATE TABLE IF NOT EXISTS public.plan_commissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   plan_id UUID NOT NULL REFERENCES public.comp_plans(id) ON DELETE CASCADE,
   commission_type TEXT NOT NULL,
@@ -168,7 +168,7 @@ CREATE TABLE public.plan_commissions (
 );
 
 -- plan_spiffs
-CREATE TABLE public.plan_spiffs (
+CREATE TABLE IF NOT EXISTS public.plan_spiffs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   plan_id UUID NOT NULL REFERENCES public.comp_plans(id) ON DELETE CASCADE,
   spiff_name TEXT NOT NULL,
@@ -184,7 +184,7 @@ CREATE TABLE public.plan_spiffs (
 );
 
 -- user_targets
-CREATE TABLE public.user_targets (
+CREATE TABLE IF NOT EXISTS public.user_targets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
   plan_id UUID NOT NULL REFERENCES public.comp_plans(id) ON DELETE CASCADE,
@@ -202,7 +202,7 @@ CREATE TABLE public.user_targets (
 );
 
 -- monthly_actuals
-CREATE TABLE public.monthly_actuals (
+CREATE TABLE IF NOT EXISTS public.monthly_actuals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
   month_year DATE NOT NULL,
@@ -213,7 +213,7 @@ CREATE TABLE public.monthly_actuals (
 );
 
 -- exchange_rates
-CREATE TABLE public.exchange_rates (
+CREATE TABLE IF NOT EXISTS public.exchange_rates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   currency_code TEXT NOT NULL,
   month_year DATE NOT NULL,
@@ -223,7 +223,7 @@ CREATE TABLE public.exchange_rates (
 );
 
 -- currencies
-CREATE TABLE public.currencies (
+CREATE TABLE IF NOT EXISTS public.currencies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -233,7 +233,7 @@ CREATE TABLE public.currencies (
 );
 
 -- performance_targets
-CREATE TABLE public.performance_targets (
+CREATE TABLE IF NOT EXISTS public.performance_targets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id TEXT NOT NULL,
   metric_type TEXT NOT NULL,
@@ -243,7 +243,7 @@ CREATE TABLE public.performance_targets (
 );
 
 -- quarterly_targets
-CREATE TABLE public.quarterly_targets (
+CREATE TABLE IF NOT EXISTS public.quarterly_targets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id TEXT NOT NULL,
   metric_type TEXT NOT NULL,
@@ -254,7 +254,7 @@ CREATE TABLE public.quarterly_targets (
 );
 
 -- closing_arr_targets
-CREATE TABLE public.closing_arr_targets (
+CREATE TABLE IF NOT EXISTS public.closing_arr_targets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id TEXT NOT NULL,
   effective_year INTEGER NOT NULL DEFAULT 2025,
@@ -269,7 +269,7 @@ CREATE TABLE public.closing_arr_targets (
 );
 
 -- commission_structures
-CREATE TABLE public.commission_structures (
+CREATE TABLE IF NOT EXISTS public.commission_structures (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sales_function TEXT NOT NULL,
   commission_type TEXT NOT NULL,
@@ -282,7 +282,7 @@ CREATE TABLE public.commission_structures (
 );
 
 -- monthly_bookings
-CREATE TABLE public.monthly_bookings (
+CREATE TABLE IF NOT EXISTS public.monthly_bookings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id TEXT NOT NULL,
   month_year DATE NOT NULL,
@@ -302,7 +302,7 @@ CREATE TABLE public.monthly_bookings (
 );
 
 -- support_teams
-CREATE TABLE public.support_teams (
+CREATE TABLE IF NOT EXISTS public.support_teams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   team_name TEXT NOT NULL,
   team_role TEXT NOT NULL,
@@ -313,7 +313,7 @@ CREATE TABLE public.support_teams (
 );
 
 -- support_team_members
-CREATE TABLE public.support_team_members (
+CREATE TABLE IF NOT EXISTS public.support_team_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   team_id UUID NOT NULL REFERENCES public.support_teams(id) ON DELETE CASCADE,
   employee_id TEXT NOT NULL,
@@ -324,7 +324,7 @@ CREATE TABLE public.support_team_members (
 );
 
 -- sales_functions
-CREATE TABLE public.sales_functions (
+CREATE TABLE IF NOT EXISTS public.sales_functions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   display_order INTEGER NOT NULL DEFAULT 0,
@@ -333,7 +333,7 @@ CREATE TABLE public.sales_functions (
 );
 
 -- closing_arr_actuals
-CREATE TABLE public.closing_arr_actuals (
+CREATE TABLE IF NOT EXISTS public.closing_arr_actuals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   month_year DATE NOT NULL,
   bu TEXT NOT NULL,
@@ -369,7 +369,7 @@ CREATE TABLE public.closing_arr_actuals (
 );
 
 -- closing_arr_renewal_multipliers
-CREATE TABLE public.closing_arr_renewal_multipliers (
+CREATE TABLE IF NOT EXISTS public.closing_arr_renewal_multipliers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   plan_id UUID NOT NULL REFERENCES public.comp_plans(id) ON DELETE CASCADE,
   min_years INTEGER NOT NULL,
@@ -383,7 +383,7 @@ CREATE TABLE public.closing_arr_renewal_multipliers (
 -- ============================================================
 
 -- deals
-CREATE TABLE public.deals (
+CREATE TABLE IF NOT EXISTS public.deals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id TEXT NOT NULL,
   customer_code TEXT NOT NULL,
@@ -435,7 +435,7 @@ CREATE TABLE public.deals (
 );
 
 -- deal_participants
-CREATE TABLE public.deal_participants (
+CREATE TABLE IF NOT EXISTS public.deal_participants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deal_id UUID NOT NULL REFERENCES public.deals(id) ON DELETE CASCADE,
   employee_id TEXT NOT NULL,
@@ -445,7 +445,7 @@ CREATE TABLE public.deal_participants (
 );
 
 -- deal_audit_log
-CREATE TABLE public.deal_audit_log (
+CREATE TABLE IF NOT EXISTS public.deal_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deal_id UUID REFERENCES public.deals(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
@@ -459,7 +459,7 @@ CREATE TABLE public.deal_audit_log (
 );
 
 -- deal_collections
-CREATE TABLE public.deal_collections (
+CREATE TABLE IF NOT EXISTS public.deal_collections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deal_id UUID NOT NULL REFERENCES public.deals(id) ON DELETE CASCADE UNIQUE,
   booking_month DATE NOT NULL,
@@ -485,7 +485,7 @@ CREATE TABLE public.deal_collections (
 -- ============================================================
 
 -- payout_runs
-CREATE TABLE public.payout_runs (
+CREATE TABLE IF NOT EXISTS public.payout_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   month_year DATE NOT NULL UNIQUE,
   run_status TEXT NOT NULL DEFAULT 'draft',
@@ -510,7 +510,7 @@ CREATE TABLE public.payout_runs (
 );
 
 -- monthly_payouts
-CREATE TABLE public.monthly_payouts (
+CREATE TABLE IF NOT EXISTS public.monthly_payouts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id TEXT NOT NULL,
   month_year DATE NOT NULL,
@@ -548,7 +548,7 @@ CREATE TABLE public.monthly_payouts (
 );
 
 -- payout_audit_log
-CREATE TABLE public.payout_audit_log (
+CREATE TABLE IF NOT EXISTS public.payout_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payout_id UUID REFERENCES public.monthly_payouts(id) ON DELETE SET NULL,
   deal_collection_id UUID REFERENCES public.deal_collections(id) ON DELETE SET NULL,
@@ -577,7 +577,7 @@ CREATE TABLE public.payout_audit_log (
 );
 
 -- payout_adjustments
-CREATE TABLE public.payout_adjustments (
+CREATE TABLE IF NOT EXISTS public.payout_adjustments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payout_run_id UUID NOT NULL REFERENCES public.payout_runs(id),
   employee_id TEXT NOT NULL,
@@ -599,7 +599,7 @@ CREATE TABLE public.payout_adjustments (
 );
 
 -- deal_variable_pay_attribution
-CREATE TABLE public.deal_variable_pay_attribution (
+CREATE TABLE IF NOT EXISTS public.deal_variable_pay_attribution (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deal_id UUID NOT NULL REFERENCES public.deals(id) ON DELETE CASCADE,
   employee_id TEXT NOT NULL,
@@ -635,7 +635,7 @@ CREATE TABLE public.deal_variable_pay_attribution (
 );
 
 -- payout_metric_details
-CREATE TABLE public.payout_metric_details (
+CREATE TABLE IF NOT EXISTS public.payout_metric_details (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payout_run_id UUID NOT NULL REFERENCES public.payout_runs(id) ON DELETE CASCADE,
   employee_id UUID NOT NULL REFERENCES public.employees(id),
@@ -661,7 +661,7 @@ CREATE TABLE public.payout_metric_details (
 );
 
 -- payout_deal_details
-CREATE TABLE public.payout_deal_details (
+CREATE TABLE IF NOT EXISTS public.payout_deal_details (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payout_run_id UUID NOT NULL REFERENCES public.payout_runs(id) ON DELETE CASCADE,
   employee_id UUID NOT NULL,
@@ -684,7 +684,7 @@ CREATE TABLE public.payout_deal_details (
 );
 
 -- closing_arr_payout_details
-CREATE TABLE public.closing_arr_payout_details (
+CREATE TABLE IF NOT EXISTS public.closing_arr_payout_details (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payout_run_id UUID NOT NULL,
   employee_id TEXT NOT NULL,
@@ -712,7 +712,7 @@ CREATE TABLE public.closing_arr_payout_details (
 -- ============================================================
 
 -- clawback_ledger
-CREATE TABLE public.clawback_ledger (
+CREATE TABLE IF NOT EXISTS public.clawback_ledger (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id UUID NOT NULL REFERENCES public.employees(id),
   deal_id UUID NOT NULL REFERENCES public.deals(id),
@@ -728,7 +728,7 @@ CREATE TABLE public.clawback_ledger (
 );
 
 -- deal_team_spiff_allocations
-CREATE TABLE public.deal_team_spiff_allocations (
+CREATE TABLE IF NOT EXISTS public.deal_team_spiff_allocations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deal_id UUID NOT NULL REFERENCES public.deals(id),
   employee_id TEXT NOT NULL,
@@ -746,7 +746,7 @@ CREATE TABLE public.deal_team_spiff_allocations (
 );
 
 -- deal_team_spiff_config
-CREATE TABLE public.deal_team_spiff_config (
+CREATE TABLE IF NOT EXISTS public.deal_team_spiff_config (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   spiff_pool_amount_usd NUMERIC NOT NULL DEFAULT 10000,
   min_deal_arr_usd NUMERIC NOT NULL DEFAULT 400000,
@@ -756,7 +756,7 @@ CREATE TABLE public.deal_team_spiff_config (
 );
 
 -- fnf_settlements
-CREATE TABLE public.fnf_settlements (
+CREATE TABLE IF NOT EXISTS public.fnf_settlements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id TEXT NOT NULL,
   departure_date DATE NOT NULL,
@@ -779,7 +779,7 @@ CREATE TABLE public.fnf_settlements (
 );
 
 -- fnf_settlement_lines
-CREATE TABLE public.fnf_settlement_lines (
+CREATE TABLE IF NOT EXISTS public.fnf_settlement_lines (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   settlement_id UUID NOT NULL REFERENCES public.fnf_settlements(id) ON DELETE CASCADE,
   tranche INTEGER NOT NULL,
@@ -800,7 +800,7 @@ CREATE TABLE public.fnf_settlement_lines (
 -- ============================================================
 
 -- system_audit_log
-CREATE TABLE public.system_audit_log (
+CREATE TABLE IF NOT EXISTS public.system_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   table_name TEXT NOT NULL,
   record_id TEXT NOT NULL,
@@ -814,7 +814,7 @@ CREATE TABLE public.system_audit_log (
 );
 
 -- employee_change_log
-CREATE TABLE public.employee_change_log (
+CREATE TABLE IF NOT EXISTS public.employee_change_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
   changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -829,11 +829,17 @@ CREATE TABLE public.employee_change_log (
 -- PART 7: FK CONSTRAINTS (added after table creation)
 -- ============================================================
 
-ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_role_fkey
-  FOREIGN KEY (role) REFERENCES public.roles(name) ON DELETE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_role_fkey
+    FOREIGN KEY (role) REFERENCES public.roles(name) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-ALTER TABLE public.role_permissions ADD CONSTRAINT role_permissions_role_fkey
-  FOREIGN KEY (role) REFERENCES public.roles(name) ON DELETE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE public.role_permissions ADD CONSTRAINT role_permissions_role_fkey
+    FOREIGN KEY (role) REFERENCES public.roles(name) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- PART 8: ENABLE RLS ON ALL TABLES
@@ -1124,79 +1130,133 @@ END; $$;
 -- ============================================================
 
 -- Auth trigger
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- updated_at triggers
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_comp_plans_updated_at ON public.comp_plans;
 CREATE TRIGGER update_comp_plans_updated_at BEFORE UPDATE ON public.comp_plans FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_monthly_actuals_updated_at ON public.monthly_actuals;
 CREATE TRIGGER update_monthly_actuals_updated_at BEFORE UPDATE ON public.monthly_actuals FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_employees_updated_at ON public.employees;
 CREATE TRIGGER update_employees_updated_at BEFORE UPDATE ON public.employees FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_closing_arr_actuals_updated_at ON public.closing_arr_actuals;
 CREATE TRIGGER update_closing_arr_actuals_updated_at BEFORE UPDATE ON public.closing_arr_actuals FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_deals_updated_at ON public.deals;
 CREATE TRIGGER update_deals_updated_at BEFORE UPDATE ON public.deals FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_monthly_payouts_updated_at ON public.monthly_payouts;
 CREATE TRIGGER update_monthly_payouts_updated_at BEFORE UPDATE ON public.monthly_payouts FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_monthly_bookings_updated_at ON public.monthly_bookings;
 CREATE TRIGGER update_monthly_bookings_updated_at BEFORE UPDATE ON public.monthly_bookings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_payout_runs_updated_at ON public.payout_runs;
 CREATE TRIGGER update_payout_runs_updated_at BEFORE UPDATE ON public.payout_runs FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_payout_adjustments_updated_at ON public.payout_adjustments;
 CREATE TRIGGER update_payout_adjustments_updated_at BEFORE UPDATE ON public.payout_adjustments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_deal_vp_attribution_updated_at ON public.deal_variable_pay_attribution;
 CREATE TRIGGER update_deal_vp_attribution_updated_at BEFORE UPDATE ON public.deal_variable_pay_attribution FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_clawback_ledger_updated_at ON public.clawback_ledger;
 CREATE TRIGGER update_clawback_ledger_updated_at BEFORE UPDATE ON public.clawback_ledger FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_fnf_settlements_updated_at ON public.fnf_settlements;
 CREATE TRIGGER update_fnf_settlements_updated_at BEFORE UPDATE ON public.fnf_settlements FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_role_permissions_updated_at ON public.role_permissions;
 CREATE TRIGGER update_role_permissions_updated_at BEFORE UPDATE ON public.role_permissions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS trigger_update_deal_collections_updated_at ON public.deal_collections;
 CREATE TRIGGER trigger_update_deal_collections_updated_at BEFORE UPDATE ON public.deal_collections FOR EACH ROW EXECUTE FUNCTION public.update_deal_collections_updated_at();
 
 -- Compensation exchange rate
+DROP TRIGGER IF EXISTS set_compensation_exchange_rate ON public.employees;
 CREATE TRIGGER set_compensation_exchange_rate BEFORE INSERT OR UPDATE OF ote_usd, ote_local_currency ON public.employees FOR EACH ROW EXECUTE FUNCTION public.calculate_compensation_exchange_rate();
 
 -- Deal auto-collection creation
+DROP TRIGGER IF EXISTS trigger_auto_create_deal_collection ON public.deals;
 CREATE TRIGGER trigger_auto_create_deal_collection AFTER INSERT OR UPDATE ON public.deals FOR EACH ROW EXECUTE FUNCTION public.auto_create_deal_collection();
 
 -- Deal audit logging
+DROP TRIGGER IF EXISTS log_deal_changes_trigger ON public.deals;
 CREATE TRIGGER log_deal_changes_trigger AFTER INSERT OR UPDATE OR DELETE ON public.deals FOR EACH ROW EXECUTE FUNCTION public.log_deal_changes();
 
 -- Month lock triggers
+DROP TRIGGER IF EXISTS check_deals_month_lock ON public.deals;
 CREATE TRIGGER check_deals_month_lock BEFORE INSERT OR UPDATE OR DELETE ON public.deals FOR EACH ROW EXECUTE FUNCTION public.check_month_lock();
+DROP TRIGGER IF EXISTS check_closing_arr_month_lock ON public.closing_arr_actuals;
 CREATE TRIGGER check_closing_arr_month_lock BEFORE INSERT OR UPDATE OR DELETE ON public.closing_arr_actuals FOR EACH ROW EXECUTE FUNCTION public.check_month_lock();
+DROP TRIGGER IF EXISTS check_collections_month_lock ON public.deal_collections;
 CREATE TRIGGER check_collections_month_lock BEFORE UPDATE ON public.deal_collections FOR EACH ROW EXECUTE FUNCTION public.check_collection_month_lock();
 
 -- Collection month auto-set
+DROP TRIGGER IF EXISTS set_collection_month_trigger ON public.deal_collections;
 CREATE TRIGGER set_collection_month_trigger BEFORE UPDATE ON public.deal_collections FOR EACH ROW EXECUTE FUNCTION public.set_collection_month();
 
 -- Payout audit triggers
+DROP TRIGGER IF EXISTS trigger_log_payout_change ON public.monthly_payouts;
 CREATE TRIGGER trigger_log_payout_change AFTER INSERT OR UPDATE OR DELETE ON public.monthly_payouts FOR EACH ROW EXECUTE FUNCTION public.log_payout_change();
+DROP TRIGGER IF EXISTS trigger_log_collection_change ON public.deal_collections;
 CREATE TRIGGER trigger_log_collection_change AFTER INSERT OR UPDATE ON public.deal_collections FOR EACH ROW EXECUTE FUNCTION public.log_collection_change();
+DROP TRIGGER IF EXISTS log_payout_run_changes ON public.payout_runs;
 CREATE TRIGGER log_payout_run_changes AFTER INSERT OR UPDATE ON public.payout_runs FOR EACH ROW EXECUTE FUNCTION public.log_payout_run_change();
+DROP TRIGGER IF EXISTS log_adjustment_changes ON public.payout_adjustments;
 CREATE TRIGGER log_adjustment_changes AFTER INSERT OR UPDATE ON public.payout_adjustments FOR EACH ROW EXECUTE FUNCTION public.log_adjustment_change();
 
 -- System audit triggers
+DROP TRIGGER IF EXISTS audit_employees ON public.employees;
 CREATE TRIGGER audit_employees AFTER INSERT OR UPDATE OR DELETE ON public.employees FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_comp_plans ON public.comp_plans;
 CREATE TRIGGER audit_comp_plans AFTER INSERT OR UPDATE OR DELETE ON public.comp_plans FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_plan_metrics ON public.plan_metrics;
 CREATE TRIGGER audit_plan_metrics AFTER INSERT OR UPDATE OR DELETE ON public.plan_metrics FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_multiplier_grids ON public.multiplier_grids;
 CREATE TRIGGER audit_multiplier_grids AFTER INSERT OR UPDATE OR DELETE ON public.multiplier_grids FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_performance_targets ON public.performance_targets;
 CREATE TRIGGER audit_performance_targets AFTER INSERT OR UPDATE OR DELETE ON public.performance_targets FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_exchange_rates ON public.exchange_rates;
 CREATE TRIGGER audit_exchange_rates AFTER INSERT OR UPDATE OR DELETE ON public.exchange_rates FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_closing_arr_actuals ON public.closing_arr_actuals;
 CREATE TRIGGER audit_closing_arr_actuals AFTER INSERT OR UPDATE OR DELETE ON public.closing_arr_actuals FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_user_targets ON public.user_targets;
 CREATE TRIGGER audit_user_targets AFTER INSERT OR UPDATE OR DELETE ON public.user_targets FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_user_roles ON public.user_roles;
 CREATE TRIGGER audit_user_roles AFTER INSERT OR UPDATE OR DELETE ON public.user_roles FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_plan_spiffs ON public.plan_spiffs;
 CREATE TRIGGER audit_plan_spiffs AFTER INSERT OR UPDATE OR DELETE ON public.plan_spiffs FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_support_teams ON public.support_teams;
 CREATE TRIGGER audit_support_teams AFTER INSERT OR UPDATE OR DELETE ON public.support_teams FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_support_team_members ON public.support_team_members;
 CREATE TRIGGER audit_support_team_members AFTER INSERT OR UPDATE OR DELETE ON public.support_team_members FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_sales_functions ON public.sales_functions;
 CREATE TRIGGER audit_sales_functions AFTER INSERT OR UPDATE OR DELETE ON public.sales_functions FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_roles ON public.roles;
 CREATE TRIGGER audit_roles AFTER INSERT OR UPDATE OR DELETE ON public.roles FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_role_permissions ON public.role_permissions;
 CREATE TRIGGER audit_role_permissions AFTER INSERT OR UPDATE OR DELETE ON public.role_permissions FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_plan_commissions ON public.plan_commissions;
 CREATE TRIGGER audit_plan_commissions AFTER INSERT OR UPDATE OR DELETE ON public.plan_commissions FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_commission_structures ON public.commission_structures;
 CREATE TRIGGER audit_commission_structures AFTER INSERT OR UPDATE OR DELETE ON public.commission_structures FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_closing_arr_renewal_multipliers ON public.closing_arr_renewal_multipliers;
 CREATE TRIGGER audit_closing_arr_renewal_multipliers AFTER INSERT OR UPDATE OR DELETE ON public.closing_arr_renewal_multipliers FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_deal_team_spiff_config ON public.deal_team_spiff_config;
 CREATE TRIGGER audit_deal_team_spiff_config AFTER INSERT OR UPDATE OR DELETE ON public.deal_team_spiff_config FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_deal_team_spiff_allocations ON public.deal_team_spiff_allocations;
 CREATE TRIGGER audit_deal_team_spiff_allocations AFTER INSERT OR UPDATE OR DELETE ON public.deal_team_spiff_allocations FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_fnf_settlements ON public.fnf_settlements;
 CREATE TRIGGER audit_fnf_settlements AFTER INSERT OR UPDATE OR DELETE ON public.fnf_settlements FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_fnf_settlement_lines ON public.fnf_settlement_lines;
 CREATE TRIGGER audit_fnf_settlement_lines AFTER INSERT OR UPDATE OR DELETE ON public.fnf_settlement_lines FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_deal_participants ON public.deal_participants;
 CREATE TRIGGER audit_deal_participants AFTER INSERT OR UPDATE OR DELETE ON public.deal_participants FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_closing_arr_targets ON public.closing_arr_targets;
 CREATE TRIGGER audit_closing_arr_targets AFTER INSERT OR UPDATE OR DELETE ON public.closing_arr_targets FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_quarterly_targets ON public.quarterly_targets;
 CREATE TRIGGER audit_quarterly_targets AFTER INSERT OR UPDATE OR DELETE ON public.quarterly_targets FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
+DROP TRIGGER IF EXISTS audit_currencies ON public.currencies;
 CREATE TRIGGER audit_currencies AFTER INSERT OR UPDATE OR DELETE ON public.currencies FOR EACH ROW EXECUTE FUNCTION public.log_system_change();
 
 -- Auto-generate permissions for new roles
+DROP TRIGGER IF EXISTS trigger_auto_generate_role_permissions ON public.roles;
 CREATE TRIGGER trigger_auto_generate_role_permissions AFTER INSERT ON public.roles FOR EACH ROW EXECUTE FUNCTION public.auto_generate_role_permissions();
 
 -- ============================================================
@@ -1204,297 +1264,297 @@ CREATE TRIGGER trigger_auto_generate_role_permissions AFTER INSERT ON public.rol
 -- ============================================================
 
 -- profiles
-CREATE POLICY "prof_own" ON public.profiles FOR SELECT TO authenticated USING (auth.uid() = id);
-CREATE POLICY "prof_admin" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "prof_exec" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "prof_fin" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "prof_gtm" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "prof_mgr" ON public.profiles FOR SELECT TO authenticated USING (manager_id = auth.uid());
-CREATE POLICY "prof_ins" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
-CREATE POLICY "prof_upd" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "prof_own" ON public.profiles; CREATE POLICY "prof_own" ON public.profiles FOR SELECT TO authenticated USING (auth.uid() = id);
+DROP POLICY IF EXISTS "prof_admin" ON public.profiles; CREATE POLICY "prof_admin" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "prof_exec" ON public.profiles; CREATE POLICY "prof_exec" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "prof_fin" ON public.profiles; CREATE POLICY "prof_fin" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "prof_gtm" ON public.profiles; CREATE POLICY "prof_gtm" ON public.profiles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "prof_mgr" ON public.profiles; CREATE POLICY "prof_mgr" ON public.profiles FOR SELECT TO authenticated USING (manager_id = auth.uid());
+DROP POLICY IF EXISTS "prof_ins" ON public.profiles; CREATE POLICY "prof_ins" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "prof_upd" ON public.profiles; CREATE POLICY "prof_upd" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
 -- employees
-CREATE POLICY "emp_admin" ON public.employees FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "emp_view" ON public.employees FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "emp_admin" ON public.employees; CREATE POLICY "emp_admin" ON public.employees FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "emp_view" ON public.employees; CREATE POLICY "emp_view" ON public.employees FOR SELECT TO authenticated USING (true);
 
 -- roles
-CREATE POLICY "Authenticated users can read roles" ON public.roles FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can insert roles" ON public.roles FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Admins can update roles" ON public.roles FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Admins can delete roles" ON public.roles FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "Authenticated users can read roles" ON public.roles; CREATE POLICY "Authenticated users can read roles" ON public.roles FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Admins can insert roles" ON public.roles; CREATE POLICY "Admins can insert roles" ON public.roles FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "Admins can update roles" ON public.roles; CREATE POLICY "Admins can update roles" ON public.roles FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "Admins can delete roles" ON public.roles; CREATE POLICY "Admins can delete roles" ON public.roles FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin'));
 
 -- user_roles
-CREATE POLICY "ur_admin_all" ON public.user_roles FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "ur_admin_view" ON public.user_roles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "ur_own" ON public.user_roles FOR SELECT TO authenticated USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "ur_admin_all" ON public.user_roles; CREATE POLICY "ur_admin_all" ON public.user_roles FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "ur_admin_view" ON public.user_roles; CREATE POLICY "ur_admin_view" ON public.user_roles FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "ur_own" ON public.user_roles; CREATE POLICY "ur_own" ON public.user_roles FOR SELECT TO authenticated USING (user_id = auth.uid());
 
 -- role_permissions
-CREATE POLICY "rp_admin" ON public.role_permissions FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "rp_view" ON public.role_permissions FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "rp_admin" ON public.role_permissions; CREATE POLICY "rp_admin" ON public.role_permissions FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "rp_view" ON public.role_permissions; CREATE POLICY "rp_view" ON public.role_permissions FOR SELECT TO authenticated USING (true);
 
 -- comp_plans
-CREATE POLICY "cp_del" ON public.comp_plans FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "cp_ins" ON public.comp_plans FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "cp_upd" ON public.comp_plans FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "cp_view" ON public.comp_plans FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "cp_del" ON public.comp_plans; CREATE POLICY "cp_del" ON public.comp_plans FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "cp_ins" ON public.comp_plans; CREATE POLICY "cp_ins" ON public.comp_plans FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "cp_upd" ON public.comp_plans; CREATE POLICY "cp_upd" ON public.comp_plans FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "cp_view" ON public.comp_plans; CREATE POLICY "cp_view" ON public.comp_plans FOR SELECT TO authenticated USING (true);
 
 -- plan_metrics
-CREATE POLICY "pm_admin" ON public.plan_metrics FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "pm_view" ON public.plan_metrics FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "pm_admin" ON public.plan_metrics; CREATE POLICY "pm_admin" ON public.plan_metrics FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "pm_view" ON public.plan_metrics; CREATE POLICY "pm_view" ON public.plan_metrics FOR SELECT TO authenticated USING (true);
 
 -- multiplier_grids
-CREATE POLICY "mg_admin" ON public.multiplier_grids FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "mg_view" ON public.multiplier_grids FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "mg_admin" ON public.multiplier_grids; CREATE POLICY "mg_admin" ON public.multiplier_grids FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "mg_view" ON public.multiplier_grids; CREATE POLICY "mg_view" ON public.multiplier_grids FOR SELECT TO authenticated USING (true);
 
 -- plan_commissions
-CREATE POLICY "pc_admin" ON public.plan_commissions FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "pc_view" ON public.plan_commissions FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "pc_admin" ON public.plan_commissions; CREATE POLICY "pc_admin" ON public.plan_commissions FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "pc_view" ON public.plan_commissions; CREATE POLICY "pc_view" ON public.plan_commissions FOR SELECT TO authenticated USING (true);
 
 -- plan_spiffs
-CREATE POLICY "Authenticated users can read plan_spiffs" ON public.plan_spiffs FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admin and GTM Ops can insert plan_spiffs" ON public.plan_spiffs FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "Admin and GTM Ops can update plan_spiffs" ON public.plan_spiffs FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "Admin and GTM Ops can delete plan_spiffs" ON public.plan_spiffs FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "Authenticated users can read plan_spiffs" ON public.plan_spiffs; CREATE POLICY "Authenticated users can read plan_spiffs" ON public.plan_spiffs FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Admin and GTM Ops can insert plan_spiffs" ON public.plan_spiffs; CREATE POLICY "Admin and GTM Ops can insert plan_spiffs" ON public.plan_spiffs FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "Admin and GTM Ops can update plan_spiffs" ON public.plan_spiffs; CREATE POLICY "Admin and GTM Ops can update plan_spiffs" ON public.plan_spiffs FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "Admin and GTM Ops can delete plan_spiffs" ON public.plan_spiffs; CREATE POLICY "Admin and GTM Ops can delete plan_spiffs" ON public.plan_spiffs FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
 
 -- user_targets
-CREATE POLICY "ut_admin_all" ON public.user_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "ut_admin_view" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "ut_exec" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "ut_fin" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "ut_gtm" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "ut_mgr" ON public.user_targets FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = user_targets.user_id AND profiles.manager_id = auth.uid()));
-CREATE POLICY "ut_own" ON public.user_targets FOR SELECT TO authenticated USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "ut_admin_all" ON public.user_targets; CREATE POLICY "ut_admin_all" ON public.user_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "ut_admin_view" ON public.user_targets; CREATE POLICY "ut_admin_view" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "ut_exec" ON public.user_targets; CREATE POLICY "ut_exec" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "ut_fin" ON public.user_targets; CREATE POLICY "ut_fin" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "ut_gtm" ON public.user_targets; CREATE POLICY "ut_gtm" ON public.user_targets FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "ut_mgr" ON public.user_targets; CREATE POLICY "ut_mgr" ON public.user_targets FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = user_targets.user_id AND profiles.manager_id = auth.uid()));
+DROP POLICY IF EXISTS "ut_own" ON public.user_targets; CREATE POLICY "ut_own" ON public.user_targets FOR SELECT TO authenticated USING (user_id = auth.uid());
 
 -- monthly_actuals
-CREATE POLICY "ma_admin" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "ma_exec" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "ma_fin" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "ma_gtm_all" ON public.monthly_actuals FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "ma_gtm_view" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "ma_mgr" ON public.monthly_actuals FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = monthly_actuals.user_id AND profiles.manager_id = auth.uid()));
-CREATE POLICY "ma_own_all" ON public.monthly_actuals FOR ALL TO authenticated USING (user_id = auth.uid());
-CREATE POLICY "ma_own_view" ON public.monthly_actuals FOR SELECT TO authenticated USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "ma_admin" ON public.monthly_actuals; CREATE POLICY "ma_admin" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "ma_exec" ON public.monthly_actuals; CREATE POLICY "ma_exec" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "ma_fin" ON public.monthly_actuals; CREATE POLICY "ma_fin" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "ma_gtm_all" ON public.monthly_actuals; CREATE POLICY "ma_gtm_all" ON public.monthly_actuals FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "ma_gtm_view" ON public.monthly_actuals; CREATE POLICY "ma_gtm_view" ON public.monthly_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "ma_mgr" ON public.monthly_actuals; CREATE POLICY "ma_mgr" ON public.monthly_actuals FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = monthly_actuals.user_id AND profiles.manager_id = auth.uid()));
+DROP POLICY IF EXISTS "ma_own_all" ON public.monthly_actuals; CREATE POLICY "ma_own_all" ON public.monthly_actuals FOR ALL TO authenticated USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "ma_own_view" ON public.monthly_actuals; CREATE POLICY "ma_own_view" ON public.monthly_actuals FOR SELECT TO authenticated USING (user_id = auth.uid());
 
 -- exchange_rates
-CREATE POLICY "er_admin" ON public.exchange_rates FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "er_view" ON public.exchange_rates FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "er_admin" ON public.exchange_rates; CREATE POLICY "er_admin" ON public.exchange_rates FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "er_view" ON public.exchange_rates; CREATE POLICY "er_view" ON public.exchange_rates FOR SELECT TO authenticated USING (true);
 
 -- currencies
-CREATE POLICY "cur_admin" ON public.currencies FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "cur_view" ON public.currencies FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "cur_admin" ON public.currencies; CREATE POLICY "cur_admin" ON public.currencies FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "cur_view" ON public.currencies; CREATE POLICY "cur_view" ON public.currencies FOR SELECT TO authenticated USING (true);
 
 -- performance_targets
-CREATE POLICY "pt_admin" ON public.performance_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "pt_view" ON public.performance_targets FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "pt_admin" ON public.performance_targets; CREATE POLICY "pt_admin" ON public.performance_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "pt_view" ON public.performance_targets; CREATE POLICY "pt_view" ON public.performance_targets FOR SELECT TO authenticated USING (true);
 
 -- quarterly_targets
-CREATE POLICY "qt_admin" ON public.quarterly_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "qt_view" ON public.quarterly_targets FOR SELECT TO authenticated USING (true);
-CREATE POLICY "qt_gtm" ON public.quarterly_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "qt_admin" ON public.quarterly_targets; CREATE POLICY "qt_admin" ON public.quarterly_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "qt_view" ON public.quarterly_targets; CREATE POLICY "qt_view" ON public.quarterly_targets FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "qt_gtm" ON public.quarterly_targets; CREATE POLICY "qt_gtm" ON public.quarterly_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
 
 -- closing_arr_targets
-CREATE POLICY "cat_admin" ON public.closing_arr_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "cat_view" ON public.closing_arr_targets FOR SELECT TO authenticated USING (true);
-CREATE POLICY "cat_gtm" ON public.closing_arr_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "cat_admin" ON public.closing_arr_targets; CREATE POLICY "cat_admin" ON public.closing_arr_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "cat_view" ON public.closing_arr_targets; CREATE POLICY "cat_view" ON public.closing_arr_targets FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "cat_gtm" ON public.closing_arr_targets; CREATE POLICY "cat_gtm" ON public.closing_arr_targets FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
 
 -- commission_structures
-CREATE POLICY "cs_admin" ON public.commission_structures FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "cs_view" ON public.commission_structures FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "cs_admin" ON public.commission_structures; CREATE POLICY "cs_admin" ON public.commission_structures FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "cs_view" ON public.commission_structures; CREATE POLICY "cs_view" ON public.commission_structures FOR SELECT TO authenticated USING (true);
 
 -- monthly_bookings
-CREATE POLICY "mb_admin" ON public.monthly_bookings FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "mb_view" ON public.monthly_bookings FOR SELECT TO authenticated USING (true);
-CREATE POLICY "mb_fin" ON public.monthly_bookings FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "mb_gtm" ON public.monthly_bookings FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "mb_admin" ON public.monthly_bookings; CREATE POLICY "mb_admin" ON public.monthly_bookings FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "mb_view" ON public.monthly_bookings; CREATE POLICY "mb_view" ON public.monthly_bookings FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "mb_fin" ON public.monthly_bookings; CREATE POLICY "mb_fin" ON public.monthly_bookings FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "mb_gtm" ON public.monthly_bookings; CREATE POLICY "mb_gtm" ON public.monthly_bookings FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
 
 -- monthly_payouts
-CREATE POLICY "mp_admin" ON public.monthly_payouts FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "mp_view" ON public.monthly_payouts FOR SELECT TO authenticated USING (true);
-CREATE POLICY "mp_fin" ON public.monthly_payouts FOR ALL TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "mp_gtm" ON public.monthly_payouts FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "mp_admin" ON public.monthly_payouts; CREATE POLICY "mp_admin" ON public.monthly_payouts FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "mp_view" ON public.monthly_payouts; CREATE POLICY "mp_view" ON public.monthly_payouts FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "mp_fin" ON public.monthly_payouts; CREATE POLICY "mp_fin" ON public.monthly_payouts FOR ALL TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "mp_gtm" ON public.monthly_payouts; CREATE POLICY "mp_gtm" ON public.monthly_payouts FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
 
 -- support_teams
-CREATE POLICY "st_view" ON public.support_teams FOR SELECT TO authenticated USING (true);
-CREATE POLICY "st_admin" ON public.support_teams FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "st_gtm" ON public.support_teams FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "st_view" ON public.support_teams; CREATE POLICY "st_view" ON public.support_teams FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "st_admin" ON public.support_teams; CREATE POLICY "st_admin" ON public.support_teams FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "st_gtm" ON public.support_teams; CREATE POLICY "st_gtm" ON public.support_teams FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
 
 -- support_team_members
-CREATE POLICY "stm_view" ON public.support_team_members FOR SELECT TO authenticated USING (true);
-CREATE POLICY "stm_admin" ON public.support_team_members FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "stm_gtm" ON public.support_team_members FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "stm_view" ON public.support_team_members; CREATE POLICY "stm_view" ON public.support_team_members FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "stm_admin" ON public.support_team_members; CREATE POLICY "stm_admin" ON public.support_team_members FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "stm_gtm" ON public.support_team_members; CREATE POLICY "stm_gtm" ON public.support_team_members FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
 
 -- sales_functions
-CREATE POLICY "Authenticated users can read sales_functions" ON public.sales_functions FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can insert sales_functions" ON public.sales_functions FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Admins can update sales_functions" ON public.sales_functions FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Admins can delete sales_functions" ON public.sales_functions FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "Authenticated users can read sales_functions" ON public.sales_functions; CREATE POLICY "Authenticated users can read sales_functions" ON public.sales_functions FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Admins can insert sales_functions" ON public.sales_functions; CREATE POLICY "Admins can insert sales_functions" ON public.sales_functions FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "Admins can update sales_functions" ON public.sales_functions; CREATE POLICY "Admins can update sales_functions" ON public.sales_functions FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "Admins can delete sales_functions" ON public.sales_functions; CREATE POLICY "Admins can delete sales_functions" ON public.sales_functions FOR DELETE TO authenticated USING (has_role(auth.uid(), 'admin'));
 
 -- closing_arr_actuals
-CREATE POLICY "ca_admin" ON public.closing_arr_actuals FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "ca_exec" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "ca_fin" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "ca_gtm" ON public.closing_arr_actuals FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "ca_sh" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
-CREATE POLICY "ca_sr" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND (closing_arr_actuals.sales_rep_employee_id = p.employee_id OR closing_arr_actuals.sales_head_employee_id = p.employee_id)));
+DROP POLICY IF EXISTS "ca_admin" ON public.closing_arr_actuals; CREATE POLICY "ca_admin" ON public.closing_arr_actuals FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "ca_exec" ON public.closing_arr_actuals; CREATE POLICY "ca_exec" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "ca_fin" ON public.closing_arr_actuals; CREATE POLICY "ca_fin" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "ca_gtm" ON public.closing_arr_actuals; CREATE POLICY "ca_gtm" ON public.closing_arr_actuals FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "ca_sh" ON public.closing_arr_actuals; CREATE POLICY "ca_sh" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
+DROP POLICY IF EXISTS "ca_sr" ON public.closing_arr_actuals; CREATE POLICY "ca_sr" ON public.closing_arr_actuals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND (closing_arr_actuals.sales_rep_employee_id = p.employee_id OR closing_arr_actuals.sales_head_employee_id = p.employee_id)));
 
 -- closing_arr_renewal_multipliers
-CREATE POLICY "Authenticated users can read renewal multipliers" ON public.closing_arr_renewal_multipliers FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Authenticated users can insert renewal multipliers" ON public.closing_arr_renewal_multipliers FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Authenticated users can update renewal multipliers" ON public.closing_arr_renewal_multipliers FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Authenticated users can delete renewal multipliers" ON public.closing_arr_renewal_multipliers FOR DELETE TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated users can read renewal multipliers" ON public.closing_arr_renewal_multipliers; CREATE POLICY "Authenticated users can read renewal multipliers" ON public.closing_arr_renewal_multipliers FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated users can insert renewal multipliers" ON public.closing_arr_renewal_multipliers; CREATE POLICY "Authenticated users can insert renewal multipliers" ON public.closing_arr_renewal_multipliers FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Authenticated users can update renewal multipliers" ON public.closing_arr_renewal_multipliers; CREATE POLICY "Authenticated users can update renewal multipliers" ON public.closing_arr_renewal_multipliers FOR UPDATE TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated users can delete renewal multipliers" ON public.closing_arr_renewal_multipliers; CREATE POLICY "Authenticated users can delete renewal multipliers" ON public.closing_arr_renewal_multipliers FOR DELETE TO authenticated USING (true);
 
 -- deals
-CREATE POLICY "d_admin" ON public.deals FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "d_exec" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "d_fin" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "d_gtm" ON public.deals FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "d_sh" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
-CREATE POLICY "d_sr" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND (deals.sales_rep_employee_id = p.employee_id OR deals.sales_head_employee_id = p.employee_id OR deals.sales_engineering_employee_id = p.employee_id OR deals.sales_engineering_head_employee_id = p.employee_id OR deals.product_specialist_employee_id = p.employee_id OR deals.product_specialist_head_employee_id = p.employee_id OR deals.solution_manager_employee_id = p.employee_id OR deals.solution_manager_head_employee_id = p.employee_id)));
+DROP POLICY IF EXISTS "d_admin" ON public.deals; CREATE POLICY "d_admin" ON public.deals FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "d_exec" ON public.deals; CREATE POLICY "d_exec" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "d_fin" ON public.deals; CREATE POLICY "d_fin" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "d_gtm" ON public.deals; CREATE POLICY "d_gtm" ON public.deals FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "d_sh" ON public.deals; CREATE POLICY "d_sh" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
+DROP POLICY IF EXISTS "d_sr" ON public.deals; CREATE POLICY "d_sr" ON public.deals FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND (deals.sales_rep_employee_id = p.employee_id OR deals.sales_head_employee_id = p.employee_id OR deals.sales_engineering_employee_id = p.employee_id OR deals.sales_engineering_head_employee_id = p.employee_id OR deals.product_specialist_employee_id = p.employee_id OR deals.product_specialist_head_employee_id = p.employee_id OR deals.solution_manager_employee_id = p.employee_id OR deals.solution_manager_head_employee_id = p.employee_id)));
 
 -- deal_participants
-CREATE POLICY "dp_admin" ON public.deal_participants FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "dp_exec" ON public.deal_participants FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "dp_fin" ON public.deal_participants FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "dp_gtm" ON public.deal_participants FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "dp_sh" ON public.deal_participants FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
+DROP POLICY IF EXISTS "dp_admin" ON public.deal_participants; CREATE POLICY "dp_admin" ON public.deal_participants FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "dp_exec" ON public.deal_participants; CREATE POLICY "dp_exec" ON public.deal_participants FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "dp_fin" ON public.deal_participants; CREATE POLICY "dp_fin" ON public.deal_participants FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "dp_gtm" ON public.deal_participants; CREATE POLICY "dp_gtm" ON public.deal_participants FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "dp_sh" ON public.deal_participants; CREATE POLICY "dp_sh" ON public.deal_participants FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
 
 -- deal_audit_log
-CREATE POLICY "dal_admin" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "dal_exec" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "dal_fin" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "dal_gtm" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "dal_insert" ON public.deal_audit_log FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "dal_admin" ON public.deal_audit_log; CREATE POLICY "dal_admin" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "dal_exec" ON public.deal_audit_log; CREATE POLICY "dal_exec" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "dal_fin" ON public.deal_audit_log; CREATE POLICY "dal_fin" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "dal_gtm" ON public.deal_audit_log; CREATE POLICY "dal_gtm" ON public.deal_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "dal_insert" ON public.deal_audit_log; CREATE POLICY "dal_insert" ON public.deal_audit_log FOR INSERT TO authenticated WITH CHECK (true);
 
 -- deal_collections
-CREATE POLICY "dc_admin" ON public.deal_collections FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "dc_exec" ON public.deal_collections FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "dc_fin" ON public.deal_collections FOR ALL TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "dc_gtm" ON public.deal_collections FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "dc_sh" ON public.deal_collections FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
-CREATE POLICY "dc_sr" ON public.deal_collections FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM deals d JOIN profiles p ON p.id = auth.uid() WHERE d.id = deal_collections.deal_id AND p.employee_id IS NOT NULL AND (d.sales_rep_employee_id = p.employee_id OR d.sales_head_employee_id = p.employee_id)));
+DROP POLICY IF EXISTS "dc_admin" ON public.deal_collections; CREATE POLICY "dc_admin" ON public.deal_collections FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "dc_exec" ON public.deal_collections; CREATE POLICY "dc_exec" ON public.deal_collections FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "dc_fin" ON public.deal_collections; CREATE POLICY "dc_fin" ON public.deal_collections FOR ALL TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "dc_gtm" ON public.deal_collections; CREATE POLICY "dc_gtm" ON public.deal_collections FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "dc_sh" ON public.deal_collections; CREATE POLICY "dc_sh" ON public.deal_collections FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
+DROP POLICY IF EXISTS "dc_sr" ON public.deal_collections; CREATE POLICY "dc_sr" ON public.deal_collections FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM deals d JOIN profiles p ON p.id = auth.uid() WHERE d.id = deal_collections.deal_id AND p.employee_id IS NOT NULL AND (d.sales_rep_employee_id = p.employee_id OR d.sales_head_employee_id = p.employee_id)));
 
 -- payout_runs
-CREATE POLICY "pr_manage" ON public.payout_runs FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'gtm_ops', 'finance')));
-CREATE POLICY "pr_view_finalized" ON public.payout_runs FOR SELECT TO authenticated USING (run_status IN ('finalized', 'paid'));
+DROP POLICY IF EXISTS "pr_manage" ON public.payout_runs; CREATE POLICY "pr_manage" ON public.payout_runs FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'gtm_ops', 'finance')));
+DROP POLICY IF EXISTS "pr_view_finalized" ON public.payout_runs; CREATE POLICY "pr_view_finalized" ON public.payout_runs FOR SELECT TO authenticated USING (run_status IN ('finalized', 'paid'));
 
 -- payout_audit_log
-CREATE POLICY "pal_admin" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "pal_fin" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "pal_gtm" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "pal_exec" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "pal_insert" ON public.payout_audit_log FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "pal_admin" ON public.payout_audit_log; CREATE POLICY "pal_admin" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "pal_fin" ON public.payout_audit_log; CREATE POLICY "pal_fin" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "pal_gtm" ON public.payout_audit_log; CREATE POLICY "pal_gtm" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "pal_exec" ON public.payout_audit_log; CREATE POLICY "pal_exec" ON public.payout_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "pal_insert" ON public.payout_audit_log; CREATE POLICY "pal_insert" ON public.payout_audit_log FOR INSERT TO authenticated WITH CHECK (true);
 
 -- payout_adjustments
-CREATE POLICY "pa_manage" ON public.payout_adjustments FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'finance', 'gtm_ops')));
+DROP POLICY IF EXISTS "pa_manage" ON public.payout_adjustments; CREATE POLICY "pa_manage" ON public.payout_adjustments FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'finance', 'gtm_ops')));
 
 -- deal_variable_pay_attribution
-CREATE POLICY "dvpa_admin" ON public.deal_variable_pay_attribution FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
-CREATE POLICY "dvpa_exec" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
-CREATE POLICY "dvpa_fin" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
-CREATE POLICY "dvpa_gtm" ON public.deal_variable_pay_attribution FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "dvpa_sh" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
-CREATE POLICY "dvpa_sr" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND deal_variable_pay_attribution.employee_id = p.employee_id));
+DROP POLICY IF EXISTS "dvpa_admin" ON public.deal_variable_pay_attribution; CREATE POLICY "dvpa_admin" ON public.deal_variable_pay_attribution FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "dvpa_exec" ON public.deal_variable_pay_attribution; CREATE POLICY "dvpa_exec" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "dvpa_fin" ON public.deal_variable_pay_attribution; CREATE POLICY "dvpa_fin" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'finance'));
+DROP POLICY IF EXISTS "dvpa_gtm" ON public.deal_variable_pay_attribution; CREATE POLICY "dvpa_gtm" ON public.deal_variable_pay_attribution FOR ALL TO authenticated USING (has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "dvpa_sh" ON public.deal_variable_pay_attribution; CREATE POLICY "dvpa_sh" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_head'));
+DROP POLICY IF EXISTS "dvpa_sr" ON public.deal_variable_pay_attribution; CREATE POLICY "dvpa_sr" ON public.deal_variable_pay_attribution FOR SELECT TO authenticated USING (has_role(auth.uid(), 'sales_rep') AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND deal_variable_pay_attribution.employee_id = p.employee_id));
 
 -- payout_metric_details
-CREATE POLICY "pmd_manage" ON public.payout_metric_details FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "pmd_own_view" ON public.payout_metric_details FOR SELECT TO authenticated USING (employee_id = auth.uid());
+DROP POLICY IF EXISTS "pmd_manage" ON public.payout_metric_details; CREATE POLICY "pmd_manage" ON public.payout_metric_details FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "pmd_own_view" ON public.payout_metric_details; CREATE POLICY "pmd_own_view" ON public.payout_metric_details FOR SELECT TO authenticated USING (employee_id = auth.uid());
 
 -- payout_deal_details
-CREATE POLICY "pdd_manage" ON public.payout_deal_details FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "pdd_own_view" ON public.payout_deal_details FOR SELECT TO authenticated USING (employee_id = auth.uid());
+DROP POLICY IF EXISTS "pdd_manage" ON public.payout_deal_details; CREATE POLICY "pdd_manage" ON public.payout_deal_details FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "pdd_own_view" ON public.payout_deal_details; CREATE POLICY "pdd_own_view" ON public.payout_deal_details FOR SELECT TO authenticated USING (employee_id = auth.uid());
 
 -- closing_arr_payout_details
-CREATE POLICY "capd_manage" ON public.closing_arr_payout_details FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "capd_own_view" ON public.closing_arr_payout_details FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND closing_arr_payout_details.employee_id = p.employee_id));
+DROP POLICY IF EXISTS "capd_manage" ON public.closing_arr_payout_details; CREATE POLICY "capd_manage" ON public.closing_arr_payout_details FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "capd_own_view" ON public.closing_arr_payout_details; CREATE POLICY "capd_own_view" ON public.closing_arr_payout_details FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.employee_id IS NOT NULL AND closing_arr_payout_details.employee_id = p.employee_id));
 
 -- clawback_ledger
-CREATE POLICY "cl_manage" ON public.clawback_ledger FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "cl_own_view" ON public.clawback_ledger FOR SELECT TO authenticated USING (employee_id = auth.uid());
+DROP POLICY IF EXISTS "cl_manage" ON public.clawback_ledger; CREATE POLICY "cl_manage" ON public.clawback_ledger FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "cl_own_view" ON public.clawback_ledger; CREATE POLICY "cl_own_view" ON public.clawback_ledger FOR SELECT TO authenticated USING (employee_id = auth.uid());
 
 -- deal_team_spiff_allocations
-CREATE POLICY "dtsa_manage" ON public.deal_team_spiff_allocations FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
-CREATE POLICY "dtsa_view" ON public.deal_team_spiff_allocations FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive') OR has_role(auth.uid(), 'sales_head'));
+DROP POLICY IF EXISTS "dtsa_manage" ON public.deal_team_spiff_allocations; CREATE POLICY "dtsa_manage" ON public.deal_team_spiff_allocations FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "dtsa_view" ON public.deal_team_spiff_allocations; CREATE POLICY "dtsa_view" ON public.deal_team_spiff_allocations FOR SELECT TO authenticated USING (has_role(auth.uid(), 'executive') OR has_role(auth.uid(), 'sales_head'));
 
 -- deal_team_spiff_config
-CREATE POLICY "dtsc_view" ON public.deal_team_spiff_config FOR SELECT TO authenticated USING (true);
-CREATE POLICY "dtsc_update" ON public.deal_team_spiff_config FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
+DROP POLICY IF EXISTS "dtsc_view" ON public.deal_team_spiff_config; CREATE POLICY "dtsc_view" ON public.deal_team_spiff_config FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "dtsc_update" ON public.deal_team_spiff_config; CREATE POLICY "dtsc_update" ON public.deal_team_spiff_config FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'gtm_ops'));
 
 -- fnf_settlements
-CREATE POLICY "fnf_manage" ON public.fnf_settlements FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role = ANY(ARRAY['admin','finance','gtm_ops'])));
-CREATE POLICY "fnf_view_finalized" ON public.fnf_settlements FOR SELECT TO authenticated USING (tranche1_status = ANY(ARRAY['finalized','paid']));
+DROP POLICY IF EXISTS "fnf_manage" ON public.fnf_settlements; CREATE POLICY "fnf_manage" ON public.fnf_settlements FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role = ANY(ARRAY['admin','finance','gtm_ops'])));
+DROP POLICY IF EXISTS "fnf_view_finalized" ON public.fnf_settlements; CREATE POLICY "fnf_view_finalized" ON public.fnf_settlements FOR SELECT TO authenticated USING (tranche1_status = ANY(ARRAY['finalized','paid']));
 
 -- fnf_settlement_lines
-CREATE POLICY "fnfl_manage" ON public.fnf_settlement_lines FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role = ANY(ARRAY['admin','finance','gtm_ops'])));
-CREATE POLICY "fnfl_view_finalized" ON public.fnf_settlement_lines FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM fnf_settlements s WHERE s.id = fnf_settlement_lines.settlement_id AND s.tranche1_status = ANY(ARRAY['finalized','paid'])));
+DROP POLICY IF EXISTS "fnfl_manage" ON public.fnf_settlement_lines; CREATE POLICY "fnfl_manage" ON public.fnf_settlement_lines FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role = ANY(ARRAY['admin','finance','gtm_ops'])));
+DROP POLICY IF EXISTS "fnfl_view_finalized" ON public.fnf_settlement_lines; CREATE POLICY "fnfl_view_finalized" ON public.fnf_settlement_lines FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM fnf_settlements s WHERE s.id = fnf_settlement_lines.settlement_id AND s.tranche1_status = ANY(ARRAY['finalized','paid'])));
 
 -- system_audit_log
-CREATE POLICY "sal_view" ON public.system_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops') OR has_role(auth.uid(), 'executive'));
-CREATE POLICY "sal_insert" ON public.system_audit_log FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "sal_view" ON public.system_audit_log; CREATE POLICY "sal_view" ON public.system_audit_log FOR SELECT TO authenticated USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'finance') OR has_role(auth.uid(), 'gtm_ops') OR has_role(auth.uid(), 'executive'));
+DROP POLICY IF EXISTS "sal_insert" ON public.system_audit_log; CREATE POLICY "sal_insert" ON public.system_audit_log FOR INSERT TO authenticated WITH CHECK (true);
 
 -- employee_change_log
-CREATE POLICY "Authenticated users can read employee change log" ON public.employee_change_log FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Authenticated users can insert employee change log" ON public.employee_change_log FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Authenticated users can read employee change log" ON public.employee_change_log; CREATE POLICY "Authenticated users can read employee change log" ON public.employee_change_log FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated users can insert employee change log" ON public.employee_change_log; CREATE POLICY "Authenticated users can insert employee change log" ON public.employee_change_log FOR INSERT TO authenticated WITH CHECK (true);
 
 -- ============================================================
 -- PART 12: INDEXES
 -- ============================================================
 
-CREATE INDEX idx_performance_targets_employee ON public.performance_targets(employee_id);
-CREATE INDEX idx_performance_targets_metric ON public.performance_targets(metric_type);
-CREATE INDEX idx_deals_month_year ON public.deals(month_year);
-CREATE INDEX idx_deals_type_of_proposal ON public.deals(type_of_proposal);
-CREATE INDEX idx_deals_status ON public.deals(status);
-CREATE INDEX idx_deals_project_id ON public.deals(project_id);
-CREATE INDEX idx_deals_se_team_id ON public.deals(sales_engineering_team_id);
-CREATE INDEX idx_deals_sm_team_id ON public.deals(solution_manager_team_id);
-CREATE INDEX idx_deal_participants_deal_id ON public.deal_participants(deal_id);
-CREATE INDEX idx_deal_participants_employee_id ON public.deal_participants(employee_id);
-CREATE INDEX idx_deal_audit_log_deal_id ON public.deal_audit_log(deal_id);
-CREATE INDEX idx_deal_audit_log_changed_at ON public.deal_audit_log(changed_at DESC);
-CREATE INDEX idx_closing_arr_actuals_month ON public.closing_arr_actuals(month_year);
-CREATE INDEX idx_closing_arr_actuals_pid ON public.closing_arr_actuals(pid);
-CREATE INDEX idx_closing_arr_actuals_sales_rep ON public.closing_arr_actuals(sales_rep_employee_id);
-CREATE INDEX idx_deal_collections_booking_month ON public.deal_collections(booking_month);
-CREATE INDEX idx_deal_collections_is_collected ON public.deal_collections(is_collected);
-CREATE INDEX idx_deal_collections_is_clawback ON public.deal_collections(is_clawback_triggered);
-CREATE INDEX idx_deal_collections_collection_month ON public.deal_collections(collection_month);
-CREATE INDEX idx_monthly_payouts_deal_id ON public.monthly_payouts(deal_id);
-CREATE INDEX idx_monthly_payouts_plan_id ON public.monthly_payouts(plan_id);
-CREATE INDEX idx_monthly_payouts_approval_status ON public.monthly_payouts(approval_status);
-CREATE INDEX idx_monthly_payouts_payout_run_id ON public.monthly_payouts(payout_run_id);
-CREATE INDEX idx_payout_audit_log_payout_id ON public.payout_audit_log(payout_id);
-CREATE INDEX idx_payout_audit_log_changed_at ON public.payout_audit_log(changed_at);
-CREATE INDEX idx_payout_audit_log_action ON public.payout_audit_log(action);
-CREATE INDEX idx_payout_audit_log_category ON public.payout_audit_log(audit_category);
-CREATE INDEX idx_payout_audit_log_month ON public.payout_audit_log(month_year);
-CREATE INDEX idx_payout_runs_month_year ON public.payout_runs(month_year);
-CREATE INDEX idx_payout_runs_status ON public.payout_runs(run_status);
-CREATE INDEX idx_payout_runs_is_locked ON public.payout_runs(is_locked);
-CREATE INDEX idx_deal_vp_attribution_employee ON public.deal_variable_pay_attribution(employee_id, fiscal_year);
-CREATE INDEX idx_deal_vp_attribution_deal ON public.deal_variable_pay_attribution(deal_id);
-CREATE INDEX idx_deal_vp_attribution_month ON public.deal_variable_pay_attribution(calculation_month);
-CREATE INDEX idx_deal_vp_attribution_payout_run_id ON public.deal_variable_pay_attribution(payout_run_id);
-CREATE INDEX idx_payout_adjustments_payout_run_id ON public.payout_adjustments(payout_run_id);
-CREATE INDEX idx_payout_adjustments_employee_id ON public.payout_adjustments(employee_id);
-CREATE INDEX idx_payout_adjustments_status ON public.payout_adjustments(status);
-CREATE INDEX idx_payout_metric_details_run ON public.payout_metric_details(payout_run_id);
-CREATE INDEX idx_payout_metric_details_employee ON public.payout_metric_details(employee_id);
-CREATE INDEX idx_payout_deal_details_run ON public.payout_deal_details(payout_run_id);
-CREATE INDEX idx_payout_deal_details_employee ON public.payout_deal_details(employee_id);
-CREATE INDEX idx_payout_deal_details_deal ON public.payout_deal_details(deal_id);
-CREATE INDEX idx_capd_payout_run ON public.closing_arr_payout_details(payout_run_id);
-CREATE INDEX idx_capd_employee ON public.closing_arr_payout_details(employee_id);
-CREATE INDEX idx_clawback_ledger_employee_status ON public.clawback_ledger(employee_id, status);
-CREATE INDEX idx_clawback_ledger_deal_collection ON public.clawback_ledger(deal_collection_id);
-CREATE INDEX idx_support_team_members_team_id ON public.support_team_members(team_id);
-CREATE INDEX idx_support_team_members_employee_id ON public.support_team_members(employee_id);
-CREATE INDEX idx_support_teams_role ON public.support_teams(team_role);
-CREATE INDEX idx_system_audit_log_table_changed_at ON public.system_audit_log(table_name, changed_at DESC);
-CREATE INDEX idx_system_audit_log_changed_by ON public.system_audit_log(changed_by);
-CREATE INDEX idx_system_audit_log_record_id ON public.system_audit_log(record_id);
-CREATE INDEX idx_employee_change_log_employee_id ON public.employee_change_log(employee_id);
-CREATE INDEX idx_employee_change_log_effective_date ON public.employee_change_log(effective_date);
-CREATE INDEX idx_comp_plans_effective_year ON public.comp_plans(effective_year);
+CREATE INDEX IF NOT EXISTS idx_performance_targets_employee ON public.performance_targets(employee_id);
+CREATE INDEX IF NOT EXISTS idx_performance_targets_metric ON public.performance_targets(metric_type);
+CREATE INDEX IF NOT EXISTS idx_deals_month_year ON public.deals(month_year);
+CREATE INDEX IF NOT EXISTS idx_deals_type_of_proposal ON public.deals(type_of_proposal);
+CREATE INDEX IF NOT EXISTS idx_deals_status ON public.deals(status);
+CREATE INDEX IF NOT EXISTS idx_deals_project_id ON public.deals(project_id);
+CREATE INDEX IF NOT EXISTS idx_deals_se_team_id ON public.deals(sales_engineering_team_id);
+CREATE INDEX IF NOT EXISTS idx_deals_sm_team_id ON public.deals(solution_manager_team_id);
+CREATE INDEX IF NOT EXISTS idx_deal_participants_deal_id ON public.deal_participants(deal_id);
+CREATE INDEX IF NOT EXISTS idx_deal_participants_employee_id ON public.deal_participants(employee_id);
+CREATE INDEX IF NOT EXISTS idx_deal_audit_log_deal_id ON public.deal_audit_log(deal_id);
+CREATE INDEX IF NOT EXISTS idx_deal_audit_log_changed_at ON public.deal_audit_log(changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_closing_arr_actuals_month ON public.closing_arr_actuals(month_year);
+CREATE INDEX IF NOT EXISTS idx_closing_arr_actuals_pid ON public.closing_arr_actuals(pid);
+CREATE INDEX IF NOT EXISTS idx_closing_arr_actuals_sales_rep ON public.closing_arr_actuals(sales_rep_employee_id);
+CREATE INDEX IF NOT EXISTS idx_deal_collections_booking_month ON public.deal_collections(booking_month);
+CREATE INDEX IF NOT EXISTS idx_deal_collections_is_collected ON public.deal_collections(is_collected);
+CREATE INDEX IF NOT EXISTS idx_deal_collections_is_clawback ON public.deal_collections(is_clawback_triggered);
+CREATE INDEX IF NOT EXISTS idx_deal_collections_collection_month ON public.deal_collections(collection_month);
+CREATE INDEX IF NOT EXISTS idx_monthly_payouts_deal_id ON public.monthly_payouts(deal_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_payouts_plan_id ON public.monthly_payouts(plan_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_payouts_approval_status ON public.monthly_payouts(approval_status);
+CREATE INDEX IF NOT EXISTS idx_monthly_payouts_payout_run_id ON public.monthly_payouts(payout_run_id);
+CREATE INDEX IF NOT EXISTS idx_payout_audit_log_payout_id ON public.payout_audit_log(payout_id);
+CREATE INDEX IF NOT EXISTS idx_payout_audit_log_changed_at ON public.payout_audit_log(changed_at);
+CREATE INDEX IF NOT EXISTS idx_payout_audit_log_action ON public.payout_audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_payout_audit_log_category ON public.payout_audit_log(audit_category);
+CREATE INDEX IF NOT EXISTS idx_payout_audit_log_month ON public.payout_audit_log(month_year);
+CREATE INDEX IF NOT EXISTS idx_payout_runs_month_year ON public.payout_runs(month_year);
+CREATE INDEX IF NOT EXISTS idx_payout_runs_status ON public.payout_runs(run_status);
+CREATE INDEX IF NOT EXISTS idx_payout_runs_is_locked ON public.payout_runs(is_locked);
+CREATE INDEX IF NOT EXISTS idx_deal_vp_attribution_employee ON public.deal_variable_pay_attribution(employee_id, fiscal_year);
+CREATE INDEX IF NOT EXISTS idx_deal_vp_attribution_deal ON public.deal_variable_pay_attribution(deal_id);
+CREATE INDEX IF NOT EXISTS idx_deal_vp_attribution_month ON public.deal_variable_pay_attribution(calculation_month);
+CREATE INDEX IF NOT EXISTS idx_deal_vp_attribution_payout_run_id ON public.deal_variable_pay_attribution(payout_run_id);
+CREATE INDEX IF NOT EXISTS idx_payout_adjustments_payout_run_id ON public.payout_adjustments(payout_run_id);
+CREATE INDEX IF NOT EXISTS idx_payout_adjustments_employee_id ON public.payout_adjustments(employee_id);
+CREATE INDEX IF NOT EXISTS idx_payout_adjustments_status ON public.payout_adjustments(status);
+CREATE INDEX IF NOT EXISTS idx_payout_metric_details_run ON public.payout_metric_details(payout_run_id);
+CREATE INDEX IF NOT EXISTS idx_payout_metric_details_employee ON public.payout_metric_details(employee_id);
+CREATE INDEX IF NOT EXISTS idx_payout_deal_details_run ON public.payout_deal_details(payout_run_id);
+CREATE INDEX IF NOT EXISTS idx_payout_deal_details_employee ON public.payout_deal_details(employee_id);
+CREATE INDEX IF NOT EXISTS idx_payout_deal_details_deal ON public.payout_deal_details(deal_id);
+CREATE INDEX IF NOT EXISTS idx_capd_payout_run ON public.closing_arr_payout_details(payout_run_id);
+CREATE INDEX IF NOT EXISTS idx_capd_employee ON public.closing_arr_payout_details(employee_id);
+CREATE INDEX IF NOT EXISTS idx_clawback_ledger_employee_status ON public.clawback_ledger(employee_id, status);
+CREATE INDEX IF NOT EXISTS idx_clawback_ledger_deal_collection ON public.clawback_ledger(deal_collection_id);
+CREATE INDEX IF NOT EXISTS idx_support_team_members_team_id ON public.support_team_members(team_id);
+CREATE INDEX IF NOT EXISTS idx_support_team_members_employee_id ON public.support_team_members(employee_id);
+CREATE INDEX IF NOT EXISTS idx_support_teams_role ON public.support_teams(team_role);
+CREATE INDEX IF NOT EXISTS idx_system_audit_log_table_changed_at ON public.system_audit_log(table_name, changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_system_audit_log_changed_by ON public.system_audit_log(changed_by);
+CREATE INDEX IF NOT EXISTS idx_system_audit_log_record_id ON public.system_audit_log(record_id);
+CREATE INDEX IF NOT EXISTS idx_employee_change_log_employee_id ON public.employee_change_log(employee_id);
+CREATE INDEX IF NOT EXISTS idx_employee_change_log_effective_date ON public.employee_change_log(effective_date);
+CREATE INDEX IF NOT EXISTS idx_comp_plans_effective_year ON public.comp_plans(effective_year);
 
 -- ============================================================
 -- PART 13: SEED DATA
@@ -1507,7 +1567,8 @@ INSERT INTO public.roles (name, label, description, color, is_system_role) VALUE
   ('finance', 'Finance', 'Financial verification and reporting', 'green', true),
   ('executive', 'Executive', 'View-only dashboards across all teams', 'purple', true),
   ('sales_head', 'Sales Head', 'Own team visibility and management', 'orange', true),
-  ('sales_rep', 'Sales Rep', 'Personal dashboard access', 'slate', true);
+  ('sales_rep', 'Sales Rep', 'Personal dashboard access', 'slate', true)
+ON CONFLICT (name) DO NOTHING;
 
 -- Seed currencies
 INSERT INTO public.currencies (code, name, symbol) VALUES
@@ -1525,7 +1586,8 @@ INSERT INTO public.currencies (code, name, symbol) VALUES
   ('EUR', 'Euro', '€'),
   ('AUD', 'Australian Dollar', 'A$'),
   ('CAD', 'Canadian Dollar', 'C$'),
-  ('PHP', 'Philippine Peso', '₱');
+  ('PHP', 'Philippine Peso', '₱')
+ON CONFLICT (code) DO NOTHING;
 
 -- Seed sales_functions
 INSERT INTO public.sales_functions (name, display_order) VALUES
@@ -1534,7 +1596,8 @@ INSERT INTO public.sales_functions (name, display_order) VALUES
   ('Farmer - Retain', 8), ('IMAL Product SE', 9), ('Insurance Product SE', 10),
   ('APAC Regional SE', 11), ('MEA Regional SE', 12), ('Sales Engineering - Head', 13),
   ('Team Lead', 14), ('Team Lead - Farmer', 15), ('Team Lead - Hunter', 16),
-  ('Overlay', 17), ('Executive', 18);
+  ('Overlay', 17), ('Executive', 18)
+ON CONFLICT (name) DO NOTHING;
 
 -- Seed default deal_team_spiff_config
 INSERT INTO public.deal_team_spiff_config (spiff_pool_amount_usd, min_deal_arr_usd, is_active, exclude_roles)
