@@ -17,6 +17,9 @@ END $$;
 -- PART 2: CORE TABLES (no FK dependencies on other public tables)
 -- ============================================================
 
+-- Safety: ensure columns exist on tables that may already be present from partial runs
+ALTER TABLE IF EXISTS public.profiles ADD COLUMN IF NOT EXISTS employee_id TEXT UNIQUE;
+
 -- profiles
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
