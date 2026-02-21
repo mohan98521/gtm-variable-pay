@@ -8,7 +8,10 @@
 -- PART 1: ENUMS
 -- ============================================================
 
-CREATE TYPE public.logic_type AS ENUM ('Stepped_Accelerator', 'Gated_Threshold', 'Linear');
+DO $$ BEGIN
+  CREATE TYPE public.logic_type AS ENUM ('Stepped_Accelerator', 'Gated_Threshold', 'Linear');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- PART 2: CORE TABLES (no FK dependencies on other public tables)
